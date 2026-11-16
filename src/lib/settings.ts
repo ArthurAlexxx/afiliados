@@ -136,7 +136,7 @@ export function defaults(): Settings {
 
     imageFixEnabled: Boolean(env.OPENAI_API_KEY),
     openaiApiKey: env.OPENAI_API_KEY || "",
-    imageModel: env.IMAGE_MODEL || "gpt-image-1",
+    imageModel: env.IMAGE_MODEL || "",
     imageFixDaily: Number(env.IMAGE_FIX_DAILY || 15),
   };
 }

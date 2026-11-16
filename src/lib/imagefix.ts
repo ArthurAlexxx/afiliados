@@ -82,6 +82,33 @@ function apiSize(w: number, h: number): [number, number] {
   return [1024, 1024];
 }
 
+/** Modelos de edição de imagem, do melhor para o mais simples. */
+const MODEL_PREF = ["gpt-image-2", "gpt-image-1.5", "gpt-image-1", "gpt-image-1-mini", "dall-e-2"];
+
+/** Escolhe um modelo de imagem que a conta da OpenAI tem liberado (guarda a escolha por 6h). */
+async function pickModel(key: string, configured?: string): Promise<string> {
+  const cached = getState("imageModelPicked");
+  if (cached) {
+    const [m, at] = cached.split("|");
+    if (Date.now() - Number(at) < 6 * 3600e3) return m;
+  }
+  let ids: string[] = [];
+  try {
+    const r = await fetch("https://api.openai.com/v1/models", { headers: { authorization: `Bearer ${key}` }, signal: AbortSignal.timeout(20000) });
+    const j = (await r.json()) as { data?: { id: string }[] };
+    ids = (j.data || []).map((d) => d.id);
+  } catch {
+    /* sem lista: usa o configurado */
+  }
+  const imageIds = ids.filter((i) => /image|dall-e/.test(i));
+  const pref = [configured, ...MODEL_PREF].filter(Boolean) as string[];
+  const m = ids.length ? pref.find((p) => ids.includes(p)) || imageIds[0] : configured || "gpt-image-1";
+  if (!m) throw new Error(`a conta da OpenAI não tem modelo de imagem liberado (modelos: ${imageIds.join(", ") || "nenhum de imagem"})`);
+  log("info", `Imagens com IA: usando ${m} (disponíveis: ${imageIds.join(", ") || "?"})`);
+  setState("imageModelPicked", `${m}|${Date.now()}`);
+  return m;
+}
+
 /** Chama a OpenAI e devolve a foto final (já recolada sobre a original). */
 export async function fixImage(srcBuf: Buffer, corner: Corner): Promise<Buffer> {
   const s = getSettings();
@@ -90,7 +117,8 @@ export async function fixImage(srcBuf: Buffer, corner: Corner): Promise<Buffer> 
 
   const orig = sharp(srcBuf, { failOn: "none" });
   const { width: W = 0, height: H = 0 } = await orig.metadata();
-  const [aw, ah] = apiSize(W, H);
+  const model = await pickModel(key, s.imageModel);
+  const [aw, ah] = model === "dall-e-2" ? [1024, 1024] : apiSize(W, H);
 
   // imagem e máscara no tamanho da API (máscara: transparente = pode editar)
   const imgPng = await sharp(srcBuf).resize(aw, ah, { fit: "fill" }).png().toBuffer();
@@ -108,11 +136,12 @@ export async function fixImage(srcBuf: Buffer, corner: Corner): Promise<Buffer> 
     .toBuffer();
 
   const form = new FormData();
-  form.append("model", s.imageModel || "gpt-image-1");
+  form.append("model", model);
   form.append("prompt", FIX_PROMPT);
   form.append("n", "1");
   form.append("size", `${aw}x${ah}`);
-  form.append("quality", "medium");
+  if (model !== "dall-e-2") form.append("quality", "medium");
+  else form.append("response_format", "b64_json");
   form.append("image", new Blob([new Uint8Array(imgPng)], { type: "image/png" }), "image.png");
   form.append("mask", new Blob([new Uint8Array(maskPng)], { type: "image/png" }), "mask.png");
 
@@ -152,6 +181,7 @@ export async function processImageFixes() {
   if (!s.imageFixEnabled || !(s.openaiApiKey || process.env.OPENAI_API_KEY)) return;
   const done = Number(getState(todayKey()) || 0);
   if (done >= (s.imageFixDaily || 15)) return;
+  db().prepare("UPDATE image_fixes SET status = 'queued', error = NULL WHERE status = 'failed' AND error LIKE '%does not exist%'").run();
   const row = db()
     .prepare("SELECT id, src_path, corner FROM image_fixes WHERE status = 'queued' ORDER BY id LIMIT 1")
     .get() as { id: number; src_path: string; corner: Corner } | undefined;
@@ -166,6 +196,7 @@ export async function processImageFixes() {
     log("info", `IA refez a foto #${row.id} (marca d'água). Aguardando aprovação na tela Imagens.`);
   } catch (e) {
     const msg = (e as Error).message;
+    if (/model/i.test(msg)) setState("imageModelPicked", "");
     db().prepare("UPDATE image_fixes SET status = 'failed', error = ?, updated_at = datetime('now') WHERE id = ?").run(msg.slice(0, 300), row.id);
     log("warn", `IA não conseguiu refazer a foto #${row.id}: ${msg}`);
   } finally {
