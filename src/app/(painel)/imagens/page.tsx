@@ -13,6 +13,7 @@ import { cn } from "@/lib/utils";
 type Fix = {
   id: number; product_id: number; name: string | null; group_name: string | null; corner: string;
   status: string; error: string | null; created_at: string; updated_at: string; photos: number;
+  group_jid: string; detected: number; has_ref: number;
 };
 type Data = { rows: Fix[]; counts: Record<string, number>; today: number };
 
@@ -36,7 +37,9 @@ function FixCard({ f, onDone }: { f: Fix; onDone: () => void }) {
     setBusy(action);
     try {
       const r = await api<{ msg?: string }>("/api/imagens", { method: "POST", json: { id: f.id, action, corner } });
-      toast.success(action === "approve" ? `Aprovada: ${r.msg || "foto no banco"}` : action === "reject" ? "Recusada" : "Voltou para a fila da IA");
+      toast.success(
+        action === "approve" ? `Aprovada: ${r.msg || "foto no banco"}` : action === "reject" ? "Recusada" : action === "setref" ? "Marca de referência do grupo atualizada" : "Voltou para a fila da IA",
+      );
       onDone();
     } catch (e) {
       toast.error((e as Error).message);
@@ -99,7 +102,15 @@ function FixCard({ f, onDone }: { f: Fix; onDone: () => void }) {
               </select>
             </>
           )}
-          {f.status === "approved" && <Badge tone="success">No banco de fotos</Badge>}
+          {f.detected ? (
+            <Button size="sm" variant="ghost" loading={busy === "setref"} onClick={() => act("setref")} title="Recorta a marca desta foto e manda para a IA como exemplo nas próximas">
+              Usar como marca de referência
+            </Button>
+          ) : null}
+          {f.has_ref ? (
+            <img src={`/api/imagens/0?ref=${encodeURIComponent(f.group_jid)}`} alt="Marca de referência do grupo" title="Marca de referência do grupo (enviada à IA)" className="h-8 max-w-24 rounded border object-contain" />
+          ) : null}
+          {f.status === "approved" && <Badge tone="success">Usada nos próximos posts</Badge>}
           {f.status === "rejected" && <Badge tone="neutral">Recusada</Badge>}
         </div>
       </div>
@@ -115,7 +126,7 @@ export default function ImagensPage() {
     <>
       <PageHeader
         title="Imagens"
-        description="Fotos de grupos com marca d'água, refeitas pela IA só no canto da marca. Entram aqui quando o perfume tem menos de 2 fotos limpas. Nada vai para o grupo sem a sua aprovação: aprovada, a foto entra no banco do perfume."
+        description="Fotos de grupos com marca d'água, refeitas pela IA só em volta da marca. Primeiro a IA confere se a foto tem mesmo a marca (usando a marca de referência do grupo); sem marca, a foto é ignorada. Aprovada, a foto entra no banco do perfume e já vale para os próximos posts. Recusada, a IA tenta de novo na próxima oferta do perfume."
       />
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {TABS.map((t) => (
@@ -131,7 +142,11 @@ export default function ImagensPage() {
             <span className="tabular-nums opacity-70">{count(t.key)}</span>
           </button>
         ))}
-        {data && <span className="ml-auto text-[12px] text-muted-foreground">{data.today} refeitas pela IA hoje</span>}
+        {data && (
+          <span className="ml-auto text-[12px] text-muted-foreground">
+            {data.today} refeitas pela IA hoje · {data.counts.clean || 0} sem marca (ignoradas)
+          </span>
+        )}
       </div>
       {data ? (
         data.rows.length ? (

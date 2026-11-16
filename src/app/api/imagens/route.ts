@@ -1,4 +1,4 @@
-import { approveFix, listFixes, rejectFix, retryFix, type Corner } from "@/lib/imagefix";
+import { approveFix, listFixes, rejectFix, retryFix, setRefFromFix, type Corner } from "@/lib/imagefix";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +15,7 @@ export async function POST(req: Request) {
     if (action === "approve") return Response.json({ ok: true, msg: await approveFix(Number(id)) });
     if (action === "reject") rejectFix(Number(id));
     else if (action === "retry") retryFix(Number(id), corner);
+    else if (action === "setref") await setRefFromFix(Number(id));
     else return Response.json({ error: "ação inválida" }, { status: 400 });
     return Response.json({ ok: true });
   } catch (e) {
