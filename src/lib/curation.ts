@@ -378,6 +378,11 @@ export function isHistoricLow(productId: number, price: number | null, messageId
  * (foto em pé ou deitada gera bordas laterais no quadrado).
  */
 export function bestImagePath(productId: number): string | null {
+  // foto escolhida como principal na tela Fotos: sempre ela
+  const main = db()
+    .prepare("SELECT i.path FROM products p JOIN images i ON i.id = p.main_image_id WHERE p.id = ? AND i.disabled = 0")
+    .get(productId) as { path: string } | undefined;
+  if (main && fs.existsSync(main.path)) return main.path;
   const rows = db().prepare("SELECT path, score, width, height FROM images WHERE product_id = ? AND disabled = 0").all(productId) as {
     path: string; score: number; width: number; height: number;
   }[];

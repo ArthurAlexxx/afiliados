@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -14,10 +14,13 @@ import { cn } from "@/lib/utils";
 type Prod = { id: number; name: string; n: number; active: number; cover: number | null; last: string };
 type Img = { id: number; width: number; height: number; score: number; disabled: number; created_at: string; message_id: string | null; group_name: string };
 
-function Lightbox({ imgs, index, onIndex, onClose, onToggle }: {
+function Lightbox({ imgs, index, onIndex, onClose, onToggle, mainId, onMain }: {
   imgs: Img[]; index: number; onIndex: (i: number) => void; onClose: () => void; onToggle: (i: Img) => void;
+  mainId: number | null; onMain: (i: Img) => void;
 }) {
   const img = imgs[index];
+  const [zoom, setZoom] = React.useState(false);
+  React.useEffect(() => setZoom(false), [index]);
   React.useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -35,6 +38,9 @@ function Lightbox({ imgs, index, onIndex, onClose, onToggle }: {
         <span className="opacity-90">{img.width}×{img.height}px · nota {img.score}{img.group_name ? ` · ${img.group_name}` : ""}{img.message_id?.startsWith("fix:") ? " · refeita pela IA" : ""}</span>
         {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
         <div className="ml-auto flex items-center gap-2">
+          <button onClick={() => onMain(img)} className={cn("flex h-8 items-center gap-1.5 rounded-[10px] px-3", mainId === img.id ? "bg-accent text-accent-foreground" : "bg-white/10 hover:bg-white/20")}>
+            <Star className="size-4" /> {mainId === img.id ? "Principal (tirar)" : "Definir como principal"}
+          </button>
           <a href={`/api/fotos/${img.id}`} download={`foto-${img.id}.jpg`} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/10 px-3 hover:bg-white/20">
             <Download className="size-4" /> Baixar
           </a>
@@ -46,9 +52,15 @@ function Lightbox({ imgs, index, onIndex, onClose, onToggle }: {
           </button>
         </div>
       </div>
-      <div className="relative flex min-h-0 flex-1 items-center justify-center px-14 pb-4">
+      <div className={cn("relative min-h-0 flex-1 px-14 pb-4", zoom ? "overflow-auto" : "flex items-center justify-center")}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={`/api/fotos/${img.id}`} alt="" className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
+        <img
+          src={`/api/fotos/${img.id}`}
+          alt=""
+          title={zoom ? "Clique para caber na tela" : "Clique para ver em 100% (resolução máxima)"}
+          className={cn(zoom ? "max-w-none cursor-zoom-out" : "max-h-full max-w-full cursor-zoom-in object-contain")}
+          onClick={(e) => { e.stopPropagation(); setZoom((z) => !z); }}
+        />
         {imgs.length > 1 && (
           <>
             <button aria-label="Anterior" onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + imgs.length) % imgs.length); }} className="absolute left-3 flex size-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
@@ -65,7 +77,18 @@ function Lightbox({ imgs, index, onIndex, onClose, onToggle }: {
 }
 
 function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
-  const { data, reload } = useApi<{ product: { id: number; name: string }; images: Img[] }>(`/api/fotos?id=${id}`);
+  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
+  const mainId = data?.product?.main_image_id ?? null;
+  const setMain = async (img: Img) => {
+    const off = mainId === img.id;
+    try {
+      await api("/api/fotos", { method: "PATCH", json: { productId: id, mainImageId: off ? null : img.id } });
+      toast.success(off ? "Voltou para a escolha automática da melhor foto" : "Foto principal definida: os próximos posts desse perfume usam ela");
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
   const [open, setOpen] = React.useState<number | null>(null);
   const toggle = async (img: Img) => {
     try {
@@ -83,26 +106,33 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
         <Button variant="outline" size="sm" onClick={onBack}><ChevronLeft className="size-4" /> Todos os perfumes</Button>
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold">{data?.product?.name || "…"}</div>
-          <div className="text-[12px] text-muted-foreground">{imgs.length} foto(s) · a de nota maior é a usada nos posts</div>
+          <div className="text-[12px] text-muted-foreground">
+            {imgs.length} foto(s) · {mainId ? "você escolheu a foto principal" : "sem principal escolhida: o sistema usa a melhor (quadrada e de nota maior)"}
+          </div>
         </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {imgs.map((img, i) => (
-          <button key={img.id} onClick={() => setOpen(i)} className={cn("group overflow-hidden rounded-xl border bg-card text-left", img.disabled && "opacity-50")}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/fotos/${img.id}?w=900`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain transition-transform group-hover:scale-[1.02]" />
-            <div className="flex items-center gap-2 border-t px-3 py-2 text-[12px] text-muted-foreground">
+          <div key={img.id} className={cn("group overflow-hidden rounded-xl border bg-card text-left", mainId === img.id && "ring-2 ring-accent", img.disabled && "opacity-50")}>
+            <button onClick={() => setOpen(i)} className="block w-full overflow-hidden" title="Abrir em tela cheia">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/fotos/${img.id}?w=900`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain transition-transform group-hover:scale-[1.02]" />
+            </button>
+            <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 text-[12px] text-muted-foreground">
+              <Button size="sm" variant={mainId === img.id ? "accent" : "outline"} onClick={() => setMain(img)}>
+                <Star className="size-3.5" /> {mainId === img.id ? "Principal" : "Tornar principal"}
+              </Button>
               <span className="tabular-nums">{img.width}×{img.height}</span>
               <span>nota {img.score}</span>
-              {i === 0 && !img.disabled ? <Badge tone="success">Usada nos posts</Badge> : null}
+              {data?.used === img.id ? <Badge tone="success">Usada nos posts</Badge> : null}
               {img.message_id?.startsWith("fix:") ? <Badge tone="info">IA</Badge> : null}
               {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
               <span className="ml-auto truncate">{timeAgo(img.created_at)}</span>
             </div>
-          </button>
+          </div>
         ))}
       </div>
-      {open != null && <Lightbox imgs={imgs} index={open} onIndex={setOpen} onClose={() => setOpen(null)} onToggle={toggle} />}
+      {open != null && <Lightbox imgs={imgs} index={open} onIndex={setOpen} onClose={() => setOpen(null)} onToggle={toggle} mainId={mainId} onMain={setMain} />}
     </>
   );
 }
@@ -120,7 +150,7 @@ export default function FotosPage() {
     <>
       <PageHeader
         title="Fotos dos perfumes"
-        description={`O banco de fotos de cada perfume, em resolução original. Clique numa foto para ver em tela cheia (setas do teclado navegam). ${data ? `${data.total} fotos ativas.` : ""}`}
+        description={`O banco de fotos de cada perfume, em resolução original. Clique numa foto para ver em tela cheia e clique de novo para ver em 100% (setas do teclado navegam). Escolha a foto principal de cada perfume: os posts dele sempre saem com ela. ${data ? `${data.total} fotos ativas.` : ""}`}
       />
       {sel ? (
         <ProductPhotos id={sel} onBack={() => setSel(null)} />

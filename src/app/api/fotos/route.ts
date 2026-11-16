@@ -1,4 +1,5 @@
 import { db } from "@/lib/db";
+import { bestImagePath } from "@/lib/curation";
 
 export const dynamic = "force-dynamic";
 
@@ -7,20 +8,24 @@ export async function GET(req: Request) {
   const u = new URL(req.url);
   const id = Number(u.searchParams.get("id") || 0);
   if (id) {
-    const product = db().prepare("SELECT id, name FROM products WHERE id = ?").get(id);
+    const product = db().prepare("SELECT id, name, main_image_id FROM products WHERE id = ?").get(id);
     const images = db()
       .prepare(
-        `SELECT i.id, i.width, i.height, i.score, i.disabled, i.created_at, i.message_id, COALESCE(g.name, '') group_name
+        `SELECT i.id, i.path, i.width, i.height, i.score, i.disabled, i.created_at, i.message_id, COALESCE(g.name, '') group_name
          FROM images i LEFT JOIN groups g ON g.jid = i.group_jid WHERE i.product_id = ? ORDER BY i.disabled, i.score DESC`,
       )
-      .all(id);
-    return Response.json({ product, images });
+      .all(id) as { id: number; path?: string }[];
+    const usedPath = bestImagePath(id);
+    const used = images.find((i) => i.path === usedPath)?.id ?? null;
+    for (const i of images) delete i.path;
+    return Response.json({ product, images, used });
   }
   const q = `%${(u.searchParams.get("q") || "").trim()}%`;
   const rows = db()
     .prepare(
       `SELECT p.id, p.name, COUNT(i.id) n, SUM(i.disabled = 0) active,
-              (SELECT i2.id FROM images i2 WHERE i2.product_id = p.id AND i2.disabled = 0 ORDER BY i2.score DESC LIMIT 1) cover,
+              COALESCE(p.main_image_id, (SELECT i2.id FROM images i2 WHERE i2.product_id = p.id AND i2.disabled = 0 ORDER BY i2.score DESC LIMIT 1)) cover,
+              p.main_image_id main,
               MAX(i.created_at) last
        FROM products p JOIN images i ON i.product_id = p.id
        WHERE p.name LIKE ? GROUP BY p.id ORDER BY last DESC LIMIT 300`,
@@ -30,9 +35,18 @@ export async function GET(req: Request) {
   return Response.json({ rows, total: total.n });
 }
 
-/** { id, disabled } liga ou desliga uma foto (desligada não é usada nos posts). */
+/**
+ * { id, disabled }: liga ou desliga uma foto (desligada não é usada nos posts).
+ * { productId, mainImageId }: define a foto principal do perfume (null volta para a escolha automática).
+ */
 export async function PATCH(req: Request) {
-  const { id, disabled } = (await req.json()) as { id: number; disabled: boolean };
-  db().prepare("UPDATE images SET disabled = ? WHERE id = ?").run(disabled ? 1 : 0, id);
+  const b = (await req.json()) as { id?: number; disabled?: boolean; productId?: number; mainImageId?: number | null };
+  if (b.productId) {
+    db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(b.mainImageId ?? null, b.productId);
+    if (b.mainImageId) db().prepare("UPDATE images SET disabled = 0 WHERE id = ?").run(b.mainImageId);
+    return Response.json({ ok: true });
+  }
+  db().prepare("UPDATE images SET disabled = ? WHERE id = ?").run(b.disabled ? 1 : 0, b.id!);
+  if (b.disabled) db().prepare("UPDATE products SET main_image_id = NULL WHERE main_image_id = ?").run(b.id!);
   return Response.json({ ok: true });
 }
