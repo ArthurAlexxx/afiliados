@@ -68,6 +68,19 @@ export class Evolution {
     );
   }
 
+  /** Mensagens guardadas pela Evolution para um chat (mais recentes primeiro). */
+  async findMessages(remoteJid: string, limit = 50) {
+    const r = await this.call<unknown>("POST", `/chat/findMessages/${this.inst}`, {
+      where: { key: { remoteJid } },
+      limit,
+      offset: limit,
+      page: 1,
+    });
+    const any = r as { messages?: { records?: unknown[] } | unknown[] };
+    const list = Array.isArray(r) ? r : Array.isArray(any.messages) ? any.messages : any.messages?.records || [];
+    return list as Record<string, unknown>[];
+  }
+
   sendText(number: string, text: string) {
     return this.call("POST", `/message/sendText/${this.inst}`, { number, text, linkPreview: true });
   }
