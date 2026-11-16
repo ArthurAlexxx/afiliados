@@ -24,6 +24,7 @@ import {
   Sun,
   X,
   Sparkles,
+  BadgeDollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -33,6 +34,7 @@ const NAV = [
     items: [
       { href: "/", label: "Visão geral", icon: LayoutDashboard },
       { href: "/curadoria", label: "Curadoria", icon: Sparkles },
+      { href: "/precos", label: "Preços", icon: BadgeDollarSign },
       { href: "/fila", label: "Posts", icon: ListOrdered },
       { href: "/grupos", label: "Grupos", icon: Users },
       { href: "/conexao", label: "Conectar WhatsApp", icon: QrCode },

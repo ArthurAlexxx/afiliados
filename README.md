@@ -38,6 +38,14 @@ Não existe fila de aprovação: cada post escolhido pela curadoria passa pelo *
 - Com `ANTHROPIC_API_KEY` (ou a chave em Integrações → Agente), o Claude dá a palavra final com base nessas informações e nos últimos posts do nosso grupo.
 - Perfume descartado espera 30 min antes de ser avaliado de novo.
 
+## Preço real
+
+Cada perfume tem um **preço real**: a mediana do "POR" que os grupos postam nos últimos 30 dias (mínimo 5 preços de 2 grupos). O "DE" dos grupos não entra (vários inflam).
+- Desconto real = quanto a oferta está abaixo do preço real. Normal (< 8%), boa (≥ 8%), ótima (≥ 20%).
+- Só oferta boa ou melhor (ou menor preço histórico) chega ao agente. A melhor oferta do momento entre os grupos é a usada.
+- Pode repostar o perfume em outro dia mesmo sem bater o recorde; no mesmo dia, só se não for mais caro do que já postamos.
+- Página **Preços**: preço real, melhor oferta de hoje, gráfico por dia e quais grupos inflam o "DE".
+
 ## Vendas do ML (RadarHub)
 
 `POST /api/vendas` com cabeçalho `x-api-key` (`VENDAS_TOKEN` ou o token do webhook) e corpo `{ "tipo": "mais_vendidos" | "em_alta", "dados": <resposta da API do RadarHub> }`.

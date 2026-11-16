@@ -28,6 +28,12 @@ export type AgentInput = {
   text: string;
   origin?: "arabe" | "importado" | "nacional" | null;
   discountPct?: number | null;
+  /** preço real (mediana do "POR" nos grupos) e quanto esta oferta está abaixo dele */
+  realPrice?: number | null;
+  realDiscount?: number | null;
+  inflated?: boolean;
+  /** menor preço que já postamos hoje desse perfume */
+  ourBestToday?: number | null;
 };
 
 export type AgentDecision = { approve: boolean; reason: string; checks: { ok: boolean; label: string }[]; by: "regras" | "claude" };
@@ -64,16 +70,27 @@ function rules(i: AgentInput, s: Settings): AgentDecision {
   if (i.offerAgeMin != null && !add(i.offerAgeMin <= Math.max(5, s.curationLookbackMinutes), `Oferta de ${Math.round(i.offerAgeMin)} min atrás`))
     fail("a oferta já ficou velha, o preço pode ter mudado");
 
-  // preço contra o que os grupos costumam anunciar
-  if (i.price && i.medianPrice) {
-    const ratio = i.price / i.medianPrice;
-    if (!add(ratio <= 1.15, ratio <= 1.15 ? "Preço na média dos grupos ou abaixo" : `Preço ${Math.round((ratio - 1) * 100)}% acima do normal nos grupos`))
-      fail("o preço está acima do que os grupos costumam anunciar");
-    if (ratio < 0.35) {
-      add(false, "Preço baixo demais (provável erro de leitura: kit, miniatura)");
+  // preço real: a oferta precisa estar abaixo do que o perfume custa de verdade nos grupos
+  const fmt = (n: number) => `R$ ${n.toFixed(2).replace(".", ",")}`;
+  if (i.price && i.realPrice && i.realDiscount != null) {
+    const pct = Math.round(i.realDiscount * 100);
+    const good = i.realDiscount >= 0.08 || i.historicLow;
+    add(good, `Preço real ${fmt(i.realPrice)} · esta oferta está ${pct >= 0 ? `${pct}% abaixo` : `${-pct}% acima`}${pct >= 20 ? " (ótima)" : pct >= 8 ? " (boa)" : " (normal)"}`);
+    if (!good) fail(pct >= 0 ? `só ${pct}% abaixo do preço real (${fmt(i.realPrice)}), não é promoção de verdade` : `acima do preço real (${fmt(i.realPrice)})`);
+    if (i.inflated) add(true, "O grupo inflou o \"DE\" (bem acima do preço real); a decisão usa o preço real");
+    if (i.realDiscount < -0.5 || i.price < i.realPrice * 0.35) {
+      add(false, "Preço fora da realidade (provável erro de leitura: kit, miniatura)");
       fail("preço suspeito, provavelmente lido errado");
     }
+  } else if (i.price && i.medianPrice) {
+    // ainda sem preço real confiável: compara com o que os grupos anunciaram na semana
+    const ratio = i.price / i.medianPrice;
+    if (!add(ratio <= 1.05, `Sem preço real ainda · ${ratio <= 1 ? "na média da semana ou abaixo" : `${Math.round((ratio - 1) * 100)}% acima da média da semana`}`))
+      fail("o preço está acima do que os grupos costumam anunciar");
   }
+  // mesmo dia: não postar o mesmo perfume mais caro do que já postamos hoje
+  if (i.price && i.ourBestToday && !add(i.price <= i.ourBestToday, `Já postamos hoje por ${fmt(i.ourBestToday)}`))
+    fail(`hoje já postamos esse perfume mais barato (${fmt(i.ourBestToday)})`);
 
   if (!add(i.hasImage || i.score >= 70, i.hasImage ? "Tem foto boa" : "Sem foto")) fail("sem foto boa e o perfume não está tão em alta");
 
@@ -94,6 +111,7 @@ function rules(i: AgentInput, s: Settings): AgentDecision {
 
   const pluses = [
     i.historicLow && "menor preço histórico",
+    i.realDiscount != null && i.realDiscount >= 0.08 && `${Math.round(i.realDiscount * 100)}% abaixo do preço real`,
     i.recentGroups >= 2 && `${i.recentGroups} grupos postando agora`,
     i.groups >= 4 && `${i.groups} grupos na semana`,
     i.salesNote,
@@ -111,7 +129,8 @@ Decida se esta oferta deve ser postada AGORA. Objetivo: postar o que está em al
 
 Oferta:
 - Perfume: ${i.name}
-- Preço: R$ ${i.price ?? "?"} | mediana nos grupos: R$ ${i.medianPrice ?? "?"} | menor já visto: R$ ${i.minPrice ?? "?"}
+- Preço: R$ ${i.price ?? "?"} | preço real (mediana do "POR" nos grupos, 30 dias): R$ ${i.realPrice ?? "?"} | desconto real: ${i.realDiscount != null ? Math.round(i.realDiscount * 100) + "%" : "?"} | menor já visto: R$ ${i.minPrice ?? "?"}
+- Não confie no "DE" dos grupos (alguns inflam). Oferta boa = abaixo do preço real; não precisa ser a melhor de todas, só valer a pena.
 - Menor preço histórico: ${i.historicLow ? "sim" : "não"}
 - Grupos que postaram na semana: ${i.groups} | grupos postando agora: ${i.recentGroups} | nota de hype: ${i.score}
 - Vendas no ML: ${i.salesNote || "sem dado"}

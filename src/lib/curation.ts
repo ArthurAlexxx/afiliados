@@ -10,6 +10,7 @@ import { brandImage, standardImage } from "./branding.ts";
 import { Evolution } from "./evolution.ts";
 import { pullRadarHub, salesBoostFor } from "./sales.ts";
 import { judge } from "./agent.ts";
+import { inflatedOldPrice, ourBestToday, priceLabel, realDiscount, realPrice, type PriceLabel } from "./prices.ts";
 
 const BANK_DIR = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "bank");
 const sqlNow = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
@@ -167,6 +168,8 @@ export type RankItem = {
   sales: { boost: number; note: string } | null;
   /** árabe e importado têm prioridade; nacional só quando a oferta é muito boa */
   origin: Origin | null;
+  /** preço real (mediana do "POR" nos grupos, 30 dias) e quanto a melhor oferta está abaixo dele */
+  real: { ref: number; samples: number; groups: number; discount: number | null; label: PriceLabel | null; inflated: boolean } | null;
   score: number;
 };
 
@@ -223,6 +226,7 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     const pctVsMedian = best && med ? (med - best.price!) / med : null;
     const declaredPct = best?.pct ?? (best?.old_price && best.price ? Math.round((1 - best.price / best.old_price) * 100) : null);
     const pimgs = imgBy.get(pid) || [];
+    const rp = realPrice(pid);
     const coolingDown = Boolean(p.last_posted_at && ts(p.last_posted_at) >= coolSince);
 
     // nota: popularidade (quantos grupos postam), preço contra o histórico e se está bombando agora
@@ -250,6 +254,8 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
     else if (rejected.has(pid)) why = "descartado pelo agente há pouco";
+    else if (rp && best?.price && 1 - best.price / rp.ref < 0.08)
+      why = `preço normal: R$ ${formatPrice(best.price)} contra R$ ${formatPrice(rp.ref)} de preço real`;
     out.push({
       productId: pid,
       name: p.name,
@@ -271,6 +277,7 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
       why,
       sales: sales ? { boost: sales.boost, note: sales.note } : null,
       origin,
+      real: rp ? { ref: rp.ref, samples: rp.samples, groups: rp.groups, discount: realDiscount(best?.price ?? null, rp), label: priceLabel(realDiscount(best?.price ?? null, rp)), inflated: inflatedOldPrice(best?.old_price ?? null, rp) } : null,
       score,
     });
   }
@@ -414,6 +421,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
           groups: item.groups, recentGroups: item.recentGroups, score: item.score, link: data.link, hasImage: Boolean(mediaPath),
           historicLow: Boolean(data.historico), salesNote: item.sales?.note, offerAgeMin, text: item.best.text,
           origin: item.origin, discountPct: discount,
+          realPrice: item.real?.ref ?? null, realDiscount: item.real?.discount ?? null, inflated: item.real?.inflated ?? false,
+          ourBestToday: ourBestToday(item.productId),
         },
         s,
       );
@@ -437,7 +446,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
         conversions: built.conversions,
         curation: {
           score: item.score, groups: item.groups, posts: item.posts, bestPrice: item.bestPrice,
-          medianPrice: item.medianPrice, discount, origin: item.origin, image: bankPath ? "banco" : mediaPath ? "anúncio" : "sem foto",
+          medianPrice: item.medianPrice, discount, origin: item.origin, real: item.real, image: bankPath ? "banco" : mediaPath ? "anúncio" : "sem foto",
         },
         agent: decision,
       }),
