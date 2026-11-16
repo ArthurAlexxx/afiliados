@@ -460,6 +460,23 @@ export function startWorker() {
     setState("groupsSetupV1", "1");
     log("info", `Grupos: ${groups.filter((g) => has(g.name, /rp promos|heroi do perfume|clube do perfume/)).length} de promoção, o resto só fotos`);
   });
+  // Fotos limpas (teste de marca d'água) que entraram no banco antes da tela de aprovação: voltam para a aprovação.
+  import("./settings.ts").then(({ getState, setState }) => {
+    if (getState("unwmGateV1")) return;
+    const rows = db().prepare("SELECT id, product_id, path, message_id FROM images WHERE message_id LIKE 'lama:%'").all() as {
+      id: number; product_id: number; path: string; message_id: string;
+    }[];
+    for (const r of rows) {
+      const fixId = Number(r.message_id.slice(5));
+      const f = db().prepare("SELECT out_path FROM image_fixes WHERE id = ?").get(fixId) as { out_path: string | null } | undefined;
+      db().prepare("UPDATE products SET main_image_id = NULL WHERE main_image_id = ?").run(r.id);
+      db().prepare("DELETE FROM images WHERE id = ?").run(r.id);
+      if (r.path !== f?.out_path) fs.rmSync(r.path, { force: true });
+      db().prepare("UPDATE image_fixes SET status = 'wm_ready', updated_at = datetime('now') WHERE id = ?").run(fixId);
+    }
+    setState("unwmGateV1", "1");
+    if (rows.length) log("info", `Marca d'água: ${rows.length} foto(s) limpas tiradas dos posts e voltaram para a sua aprovação`);
+  });
   // volume de postagens de cada grupo (ontem e hoje) nos logs, 1 min depois de subir
   setTimeout(() => import("./volume.ts").then((m) => m.logGroupVolume()).catch((e) => log("warn", `Volume: ${(e as Error).message}`)), 60e3);
 }
