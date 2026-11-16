@@ -192,7 +192,7 @@ async function ingestMessage(d: UpsertData): Promise<string> {
   // curadoria: toda promoção vira dado (preço, grupo, foto); quem decide o que postar é o ranking
   {
     let image: Buffer | null = null;
-    if (hasImage && (!group.watermark || s.imageFixEnabled)) {
+    if (hasImage && !group.watermark) {
       try {
         let b64 = d.message?.base64 || "";
         if (!b64 && messageId) b64 = (await new Evolution(s).getBase64FromMediaMessage(messageId)).base64 || "";
@@ -425,13 +425,9 @@ export function startWorker() {
       setState("envPerHour", perHour);
       log("info", `Ritmo ajustado para ${perHour} posts por hora`);
     }
-    if (process.env.OPENAI_API_KEY && !getState("envImageFix")) {
-      saveSettings({ imageFixEnabled: true });
-      setState("envImageFix", "1");
-      log("info", "Imagens com IA ligadas (chave da OpenAI encontrada)");
-    }
     // IA desligada a pedido (sem chave no Railway): desliga e apaga a chave salva no painel
-    if (!process.env.OPENAI_API_KEY && getState("envImageFix") === "1") {
+    // geração de imagem por IA fica desligada (pedido do Arthur; o código fica em imagefix.ts para outro momento)
+    if (getState("envImageFix") !== "off") {
       saveSettings({ imageFixEnabled: false, openaiApiKey: "", aiEnabled: false });
       setState("envImageFix", "off");
       log("info", "IA desligada: imagens com IA e leitura com IA desativadas, chave da OpenAI removida");
