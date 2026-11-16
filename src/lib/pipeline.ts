@@ -430,6 +430,12 @@ export function startWorker() {
       setState("envImageFix", "1");
       log("info", "Imagens com IA ligadas (chave da OpenAI encontrada)");
     }
+    // IA desligada a pedido (sem chave no Railway): desliga e apaga a chave salva no painel
+    if (!process.env.OPENAI_API_KEY && getState("envImageFix") === "1") {
+      saveSettings({ imageFixEnabled: false, openaiApiKey: "", aiEnabled: false });
+      setState("envImageFix", "off");
+      log("info", "IA desligada: imagens com IA e leitura com IA desativadas, chave da OpenAI removida");
+    }
   });
   // volume de postagens de cada grupo (ontem e hoje) nos logs, 1 min depois de subir
   setTimeout(() => import("./volume.ts").then((m) => m.logGroupVolume()).catch((e) => log("warn", `Volume: ${(e as Error).message}`)), 60e3);
