@@ -103,25 +103,36 @@ async function textWidth(text: string, size: number, weight: number) {
  * - canto inferior esquerdo: etiqueta de vidro com o desconto (-32%)
  * - canto superior direito: etiqueta de vidro com foto do grupo, nome e @ do Instagram
  */
-/** Só padroniza (quadrado 1080) sem etiquetas. */
-export async function standardImage(input: Buffer, size = 1080) {
-  return sharp(input, { failOn: "none" })
-    .rotate()
-    .resize(size, size, { fit: "cover", position: sharp.strategy.attention })
-    .flatten({ background: "#ffffff" })
-    .jpeg({ quality: 90, mozjpeg: true })
+/**
+ * Formato padrão de todos os posts: quadrado, SEM cortar nada da foto.
+ * A foto inteira fica centralizada; as sobras são preenchidas com a própria foto ampliada e desfocada.
+ */
+export async function squareCanvas(input: Buffer, size = 1080): Promise<Buffer> {
+  const img = sharp(input, { failOn: "none" }).rotate().flatten({ background: "#ffffff" });
+  const src = await img.png().toBuffer();
+  const meta = await sharp(src).metadata();
+  const w = meta.width || size, h = meta.height || size;
+  const ratio = w / h;
+  // quase quadrada: só redimensiona
+  if (ratio > 0.97 && ratio < 1.03) return sharp(src).resize(size, size, { fit: "fill" }).png().toBuffer();
+  const bg = await sharp(src).resize(size, size, { fit: "cover" }).blur(40).modulate({ brightness: 0.85, saturation: 1.1 }).png().toBuffer();
+  const fg = await sharp(src).resize(size, size, { fit: "inside" }).png().toBuffer();
+  const fm = await sharp(fg).metadata();
+  return sharp(bg)
+    .composite([{ input: fg, left: Math.round((size - (fm.width || size)) / 2), top: Math.round((size - (fm.height || size)) / 2) }])
+    .png()
     .toBuffer();
+}
+
+/** Só padroniza (quadrado 1080, foto inteira) sem etiquetas. */
+export async function standardImage(input: Buffer, size = 1080) {
+  return sharp(await squareCanvas(input, size)).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
 export async function brandImage(input: Buffer, o: BrandOptions): Promise<Buffer> {
   const maxSize = o.maxSize || 1080;
-  const base = await sharp(input, { failOn: "none" })
-    .rotate()
-    // formato padrão: quadrado, recorte centrado no que mais chama atenção (o frasco)
-    .resize(maxSize, maxSize, { fit: "cover", position: sharp.strategy.attention })
-    .flatten({ background: "#ffffff" })
-    .png()
-    .toBuffer();
+  // formato padrão: quadrado com a foto inteira (nada do perfume é cortado)
+  const base = await squareCanvas(input, maxSize);
   const { width: W = 1080, height: H = 1080 } = await sharp(base).metadata();
   const s = Math.min(W, H) / 1080; // escala relativa a uma imagem de 1080px
   const margin = Math.round(36 * s);
