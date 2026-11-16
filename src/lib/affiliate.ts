@@ -53,16 +53,19 @@ export async function convertMeliLink(url: string, s: Settings, opts: { wantImag
       result.title = findOgTitle(html);
     }
 
-    let longUrl: string;
-    if (s.meliStrategy === "generator") {
-      const short = await generatorLink(result.canonical, s);
-      result.affiliateUrl = short;
-      result.ok = true;
-      return result;
-    } else {
-      longUrl = paramsLink(result.canonical, s);
+    // com cookie da sessão: link curto oficial (meli.la); se falhar, cai para etiqueta + encurtador
+    if (s.meliCookie || s.meliStrategy === "generator") {
+      try {
+        result.affiliateUrl = await generatorLink(result.canonical, s);
+        result.ok = true;
+        return result;
+      } catch (e) {
+        if (!s.meliTag) throw e;
+        result.error = `meli.la indisponível (${(e as Error).message.slice(0, 120)}), usei o link com etiqueta`;
+      }
     }
-    result.affiliateUrl = await shorten(longUrl, s);
+    const longUrl = paramsLink(result.canonical, s);
+    result.affiliateUrl = await shorten(longUrl, s.shortener === "none" ? { ...s, shortener: "tinyurl" } : s);
     result.ok = true;
     return result;
   } catch (e) {
