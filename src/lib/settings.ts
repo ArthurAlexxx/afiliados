@@ -107,7 +107,7 @@ export function defaults(): Settings {
     mode: (env.MODE as Settings["mode"]) || "curated",
     curationIntervalMinutes: Number(env.CURATION_INTERVAL_MINUTES || 0),
     curationInstantScore: Number(env.CURATION_INSTANT_SCORE || 60),
-    curationCooldownHours: 48,
+    curationCooldownHours: 5,
     curationLookbackMinutes: 45,
     curationRequireImage: false,
 
