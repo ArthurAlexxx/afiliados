@@ -331,7 +331,7 @@ export default function CuradoriaPage() {
                     <Input type="number" min={1} value={String(s.curationCooldownHours)} onChange={(e) => set("curationCooldownHours")(e.target.value)} />
                   </Field>
                 </div>
-                <Field label="Posts por hora (ritmo médio)" hint="A média dos grupos é ~5 por hora. Promoção boa que chega antes da vaga espera alguns minutos; sai a melhor.">
+                <Field label="Posts por hora (ritmo médio)" hint="Média dos grupos: ~5 por hora. A cada vaga sai a melhor promoção que estiver valendo.">
                   <Input type="number" min={0} value={String(s.curationPerHour)} onChange={(e) => set("curationPerHour")(e.target.value)} />
                 </Field>
                 <Field label="Postar o melhor a cada (min)" hint="Opcional. 0 = sem rodada fixa, só posta quando chega promoção boa.">

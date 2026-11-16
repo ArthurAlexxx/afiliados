@@ -398,12 +398,14 @@ export async function pickAndQueue(opts: { productId?: number; force?: boolean }
  * agora (nota >= curationInstantScore) e não foi postado recentemente, posta na hora.
  */
 /** Respeita o ritmo médio: no máximo curationPerHour posts por hora, espaçados. */
-export function slotOpen(s: Settings) {
-  if (!s.curationPerHour || s.curationPerHour <= 0) return true;
-  const gapMs = (60 / s.curationPerHour) * 60e3;
+function sinceLastCuratedMs() {
   const last = db().prepare("SELECT MAX(created_at) t FROM posts WHERE origin = 'curated' AND status IN ('queued','sending','sent','pending')").get() as { t: string | null };
-  if (!last.t) return true;
-  return Date.now() - new Date(last.t.replace(" ", "T") + "Z").getTime() >= gapMs;
+  return last.t ? Date.now() - new Date(last.t.replace(" ", "T") + "Z").getTime() : Infinity;
+}
+const gapMs = (s: Settings) => (s.curationPerHour > 0 ? (60 / s.curationPerHour) * 60e3 : 0);
+
+export function slotOpen(s: Settings) {
+  return sinceLastCuratedMs() >= gapMs(s);
 }
 
 export async function evaluateInstant(productId: number): Promise<string> {
@@ -513,9 +515,12 @@ export function startCuration() {
       const { inActiveWindow } = await import("./pipeline.ts");
       if (!inActiveWindow(s)) return;
       // quando abre a vaga do ritmo, posta a melhor promoção boa que estiver valendo
-      if (slotOpen(s)) {
+      // garante o ritmo mínimo: se a vaga abriu e em 2 min não chegou nada com nota alta,
+      // posta a melhor promoção que estiver valendo
+      const since = sinceLastCuratedMs();
+      if (s.curationPerHour > 0 && since >= gapMs(s)) {
         const top = ranking(s).find((i) => i.eligible);
-        if (top && top.score >= s.curationInstantScore) {
+        if (top && (top.score >= s.curationInstantScore || since >= gapMs(s) + 2 * 60e3)) {
           await pickAndQueue({ productId: top.productId });
           return;
         }
