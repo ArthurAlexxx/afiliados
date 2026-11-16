@@ -97,8 +97,18 @@ export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
     const loose = new Set(["colonia", "edt"]);
     if (!(loose.has(a.conc) && loose.has(b.conc))) return false;
   }
+  // palavras que mudam o perfume (212 Men ≠ 212 VIP Wins, Sauvage ≠ Sauvage Elixir): têm que bater dos dois lados
+  const ta = new Set(a.tokens), tb = new Set(b.tokens);
+  for (const f of FLANKERS) if (ta.has(f) !== tb.has(f)) return false;
   return jaccard(a.tokens, b.tokens) >= 0.75;
 }
+
+const FLANKERS = [
+  "vip", "wins", "heroes", "black", "white", "gold", "silver", "rose", "red", "blue", "noir", "night", "nyc", "sexy",
+  "elixir", "intense", "intensely", "absolu", "absolute", "extreme", "sport", "fresh", "aqua", "legend", "royal", "lucky",
+  "party", "kiss", "privee", "oud", "tobacco", "leather", "fusion", "pure", "platinum", "onyx", "ruby", "sapphire", "bourbon",
+  "ice", "cool", "wild", "lover", "addict", "bloom", "collector", "edition", "limited", "summer", "winter", "candy",
+];
 
 
 /* ------------------------------------------------------------------ */
