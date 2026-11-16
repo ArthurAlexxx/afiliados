@@ -31,6 +31,7 @@ type Row = {
   eligible: boolean;
   why: string;
   sales?: { boost: number; note: string } | null;
+  origin?: "arabe" | "importado" | "nacional" | null;
   score: number;
   lastPostedAt: string | null;
   best: { group: string; price: number; old: number | null; coupon: string | null; at: string; title: string } | null;
@@ -104,6 +105,7 @@ function RankRow({ r, i, onPost, posting, onToggleImg }: { r: Row; i: number; on
             )}
             {r.declaredPct ? <Badge tone="accent">-{r.declaredPct}%</Badge> : null}
             {r.recentGroups >= 2 && <Badge tone="warning"><Flame className="size-3" />{r.recentGroups} grupos agora</Badge>}
+            {r.origin && <Badge tone={r.origin === "nacional" ? "neutral" : "accent"}>{r.origin === "arabe" ? "Árabe" : r.origin === "importado" ? "Importado" : "Nacional"}</Badge>}
             {r.sales && <Badge tone="success"><TrendingUp className="size-3" />{r.sales.note} · +{r.sales.boost}</Badge>}
             {!r.eligible && <span className="text-[11.5px] text-muted-foreground">{r.why}</span>}
           </div>

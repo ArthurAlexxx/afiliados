@@ -99,3 +99,40 @@ export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
   }
   return jaccard(a.tokens, b.tokens) >= 0.75;
 }
+
+
+/* ------------------------------------------------------------------ */
+/* Origem: árabe, importado ou nacional                                 */
+/* ------------------------------------------------------------------ */
+
+export type Origin = "arabe" | "importado" | "nacional";
+
+// marcas e linhas conhecidas (frases separadas por vírgula, comparadas sem acento)
+const ARABE = `lattafa, rasasi, armaf, al wataniah, wataniah, maison alhambra, afnan, french avenue, fragrance world, khadlaj,
+zimaya, riiffs, orientica, emper, ard al zaafaran, asdaaf, nusuk, swiss arabian, ajmal, al haramain, ahmed al maghribi, mawwal,
+paris corner, arabiyat, khamrah, asad, yara, club de nuit, fakhar, badee al oud, hawas, odyssey, 9pm, qaed al fursan,
+ameerat al arab, sheikh al shuyukh, ana abiyedh, attar al wesal, shaghaf, bharara, al noble, noble safeer, fahad, oud, arabe, arabes`;
+const IMPORTADO = `dior, chanel, yves saint laurent, ysl, paco rabanne, rabanne, giorgio armani, armani, versace, carolina herrera,
+jean paul gaultier, jpg, azzaro, calvin klein, hugo boss, prada, montblanc, mont blanc, givenchy, lancome, kenzo, issey miyake,
+diesel, dolce gabbana, tommy hilfiger, lacoste, nautica, ferrari, antonio banderas, mancera, montale, creed, tom ford, valentino,
+burberry, gucci, bvlgari, mugler, nina ricci, benetton, shakira, jacques bogart, ralph lauren, ellis, 212, good girl, sauvage,
+bleu de chanel, one million, 1 million, invictus, stronger with you, acqua di gio, la vie est belle, le male, boss bottled,
+ck one, olympea, phantom, idole, importado, importados`;
+const NACIONAL = `boticario, natura, eudora, avon, jequiti, quem disse berenice, granado, phebo, mahogany, lacqua di fiori, ciclo,
+malbec, egeo, lily, kaiak, floratta, quasar, zaad, uomini, arbo, glamour, nativa spa, biografia, ekos, portinari, make b,
+connexion, thaty, wepink, vult, phytoderm, fiorucci, hinode, mary kay, contratipo, inspiracao, inspirado`;
+
+const toRe = (list: string) =>
+  new RegExp(`\\b(${list.split(",").map((w) => norm(w)).filter(Boolean).join("|")})\\b`);
+const ARABE_RE = toRe(ARABE);
+const IMPORTADO_RE = toRe(IMPORTADO);
+const NACIONAL_RE = toRe(NACIONAL);
+
+/** Classifica pelo nome e pelo texto da oferta. null = não deu para saber. */
+export function perfumeOrigin(text: string): Origin | null {
+  const n = norm(text);
+  if (NACIONAL_RE.test(n)) return "nacional";
+  if (ARABE_RE.test(n)) return "arabe";
+  if (IMPORTADO_RE.test(n)) return "importado";
+  return null;
+}

@@ -26,11 +26,22 @@ export type AgentInput = {
   salesNote?: string | null;
   offerAgeMin: number | null;
   text: string;
+  origin?: "arabe" | "importado" | "nacional" | null;
+  discountPct?: number | null;
 };
 
 export type AgentDecision = { approve: boolean; reason: string; checks: { ok: boolean; label: string }[]; by: "regras" | "claude" };
 
 const brandOf = (name: string) => nameTokens(name)[0] || "";
+
+function originOf(postId: number): string {
+  const r = db().prepare("SELECT data_json FROM posts WHERE id = ?").get(postId) as { data_json: string } | undefined;
+  try {
+    return String(JSON.parse(r?.data_json || "{}").curation?.origin || "");
+  } catch {
+    return "";
+  }
+}
 
 function ourRecentPosts(hours: number) {
   return db()
@@ -73,6 +84,14 @@ function rules(i: AgentInput, s: Settings): AgentDecision {
   if (!add(sameBrand < 2 || i.historicLow, sameBrand ? `${sameBrand} post(s) da mesma linha nas últimas 3h` : "Variado em relação aos últimos posts"))
     fail("já saíram 2 posts parecidos nas últimas 3h");
 
+  // foco em árabes e importados; nacional só quando a oferta é muito boa, e no máximo 1 a cada 2h
+  if (i.origin === "nacional") {
+    const great = i.historicLow || i.recentGroups >= 3 || (i.discountPct || 0) >= 40;
+    const nacionais = ourRecentPosts(2).filter((p) => /nacional/.test(originOf(p.id))).length;
+    if (!add(great && nacionais === 0, great ? (nacionais ? "Já saiu um nacional nas últimas 2h" : "Nacional com oferta muito boa") : "Nacional sem oferta fora de série"))
+      fail(great ? "já saiu um nacional nas últimas 2h (foco em árabes e importados)" : "nacional sem oferta fora de série (foco em árabes e importados)");
+  } else if (i.origin) add(true, i.origin === "arabe" ? "Árabe (foco do grupo)" : "Importado (foco do grupo)");
+
   const pluses = [
     i.historicLow && "menor preço histórico",
     i.recentGroups >= 2 && `${i.recentGroups} grupos postando agora`,
@@ -97,6 +116,7 @@ Oferta:
 - Grupos que postaram na semana: ${i.groups} | grupos postando agora: ${i.recentGroups} | nota de hype: ${i.score}
 - Vendas no ML: ${i.salesNote || "sem dado"}
 - Tem foto: ${i.hasImage ? "sim" : "não"}
+- Origem: ${i.origin || "desconhecida"} (o grupo foca em árabes e importados; nacional só com oferta muito boa)
 
 Checagens automáticas:
 ${base.checks.map((c) => `${c.ok ? "✔" : "✘"} ${c.label}`).join("\n")}

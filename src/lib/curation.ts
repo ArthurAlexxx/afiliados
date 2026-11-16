@@ -4,7 +4,7 @@ import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { parsePromo, renderTemplate, formatPrice } from "./parser.ts";
-import { perfumeInfo, samePerfume, type PerfumeInfo } from "./perfume.ts";
+import { perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { brandImage, standardImage } from "./branding.ts";
 import { Evolution } from "./evolution.ts";
@@ -145,6 +145,8 @@ export type RankItem = {
   why: string;
   /** bônus por estar vendendo cada vez mais no ML (RadarHub) */
   sales: { boost: number; note: string } | null;
+  /** árabe e importado têm prioridade; nacional só quando a oferta é muito boa */
+  origin: Origin | null;
   score: number;
 };
 
@@ -216,6 +218,11 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     // vendendo cada vez mais no Mercado Livre: sai na frente
     const sales = salesBoostFor(p.name, p.ml);
     if (sales) score += sales.boost;
+    // foco do grupo: árabes e importados (é o que mais vende); nacional fica atrás
+    const origin = perfumeOrigin(`${p.name}\n${(best || list[0]).text.slice(0, 400)}`);
+    if (origin === "arabe") score += 15;
+    else if (origin === "importado") score += 12;
+    else if (origin === "nacional") score -= 15;
     score = Math.round(Math.max(0, score));
 
     let why = "";
@@ -243,6 +250,7 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
       eligible: !why,
       why,
       sales: sales ? { boost: sales.boost, note: sales.note } : null,
+      origin,
       score,
     });
   }
@@ -385,6 +393,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
           productId: item.productId, name: item.name, price: item.bestPrice, medianPrice: item.medianPrice, minPrice: item.minPrice,
           groups: item.groups, recentGroups: item.recentGroups, score: item.score, link: data.link, hasImage: Boolean(mediaPath),
           historicLow: Boolean(data.historico), salesNote: item.sales?.note, offerAgeMin, text: item.best.text,
+          origin: item.origin, discountPct: discount,
         },
         s,
       );
@@ -408,7 +417,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
         conversions: built.conversions,
         curation: {
           score: item.score, groups: item.groups, posts: item.posts, bestPrice: item.bestPrice,
-          medianPrice: item.medianPrice, discount, image: bankPath ? "banco" : mediaPath ? "anúncio" : "sem foto",
+          medianPrice: item.medianPrice, discount, origin: item.origin, image: bankPath ? "banco" : mediaPath ? "anúncio" : "sem foto",
         },
         agent: decision,
       }),
@@ -458,6 +467,17 @@ function sinceLastCuratedMs() {
 }
 const gapMs = (s: Settings) => (s.curationPerHour > 0 ? (60 / s.curationPerHour) * 60e3 : 0);
 
+/**
+ * Promoção fora de série pode furar o ritmo de N/h: nota muito alta, menor preço histórico ou vendas disparando.
+ * Mesmo assim, sem spam: no máximo N+3 posts na última hora e pelo menos 4 min entre posts.
+ */
+export function exceptional(item: RankItem, s: Settings) {
+  const special = item.score >= 85 || (item.sales?.boost || 0) >= 15 || isHistoricLow(item.productId, item.bestPrice, (item.best as { message_id?: string } | null)?.message_id);
+  if (!special) return false;
+  const lastHour = (db().prepare("SELECT COUNT(*) n FROM posts WHERE origin='curated' AND status IN ('queued','sending','sent') AND created_at >= datetime('now','-60 minutes')").get() as { n: number }).n;
+  return lastHour < s.curationPerHour + 3 && sinceLastCuratedMs() >= 4 * 60e3;
+}
+
 export function slotOpen(s: Settings) {
   return sinceLastCuratedMs() >= gapMs(s);
 }
@@ -470,7 +490,7 @@ export async function evaluateInstant(productId: number): Promise<string> {
   const item = ranking(s).find((r) => r.productId === productId);
   if (!item || !item.eligible) return item?.why || "";
   if (item.score < s.curationInstantScore) return `nota ${item.score} < ${s.curationInstantScore}`;
-  if (!slotOpen(s)) return `nota ${item.score}, aguardando o ritmo de ${s.curationPerHour}/h`;
+  if (!slotOpen(s) && !exceptional(item, s)) return `nota ${item.score}, aguardando o ritmo de ${s.curationPerHour}/h`;
   // evita duas escolhas simultâneas do mesmo perfume (várias mensagens chegando juntas)
   const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now','-10 minutes')").get(productId);
   if (busy) return "já escolhido";
