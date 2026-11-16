@@ -33,9 +33,9 @@ Produção local: `npm run build && npm start`.
 
 ## Passo a passo de configuração (no painel)
 
-1. **Integrações e regras → Evolution API**: URL, API key e nome da instância. Clique em *Testar conexão* (deve ficar "Conectado").
+1. Defina `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e `EVOLUTION_INSTANCE` no `.env` (ou nas variáveis da Railway). Instância e webhook são criados sozinhos.
 2. **Conectar WhatsApp**: gere o QR code (ou o código de pareamento com o seu número) e leia no WhatsApp Business em *Dispositivos conectados → Conectar dispositivo*. Se a instância ainda não existir na Evolution, o painel cria. O QR se renova sozinho até conectar.
-3. Preencha **URL pública** e **Token do webhook** e clique em **Configurar webhook automaticamente** (registra `MESSAGES_UPSERT` com base64 na sua instância).
+3. Para receber mensagens rodando no seu PC, defina `PUBLIC_URL` com a URL de um túnel. Na Railway isso é automático.
 4. **Mercado Livre Afiliados**: escolha a estratégia.
    - *Gerador oficial*: logado em mercadolivre.com.br/afiliados, abra o DevTools (F12) → aba Rede → gere um link qualquer → clique na requisição `createLink` → copie o cabeçalho **Cookie** (e o `x-csrf-token`, se houver) e cole no painel. Quando o cookie expirar, os links começam a falhar e as promoções vão para *Aprovar*. É só colar um cookie novo.
    - *Parâmetros*: informe sua etiqueta (`matt_word`) e o `matt_tool` (aparecem nos links que você gera no portal) e escolha um encurtador.
@@ -60,7 +60,23 @@ Tudo que é salvo no painel tem prioridade sobre o `.env`.
 
 `{var}` remove a linha inteira quando vazia; `{var?}` some só ela e mantém a linha.
 
-## Deploy (sugestão)
+## Deploy na Railway (recomendado)
+
+O painel roda no mesmo projeto da Railway que a Evolution API e se configura sozinho:
+
+1. Crie um serviço a partir deste repositório (a Railway usa o `Dockerfile`).
+2. Anexe um volume em `/app/data` (banco e imagens).
+3. Variáveis do serviço:
+   - `EVOLUTION_API_URL` = `https://${{Evolution API.RAILWAY_PUBLIC_DOMAIN}}`
+   - `EVOLUTION_API_KEY` = `${{Evolution API.AUTHENTICATION_API_KEY}}`
+   - `EVOLUTION_INSTANCE` = nome da instância (ex: `Celular1`)
+   - `ADMIN_PASSWORD` = senha do painel
+   - `DATA_DIR` = `/app/data`
+4. Gere um domínio público para o serviço (porta 3000).
+
+Na inicialização (e a cada 10 min) o painel cria a instância na Evolution se ela não existir e aponta o webhook para o próprio domínio (`RAILWAY_PUBLIC_DOMAIN`), com token gerado automaticamente. Só falta abrir **Conectar WhatsApp** e ler o QR code.
+
+## Deploy em outro lugar
 
 O painel precisa ficar **sempre ligado** (recebe webhook e tem um worker que envia a fila a cada 15s) e com **disco persistente** para o SQLite. Bons lugares: uma VPS (a mesma da Evolution API), Railway ou Render com volume. Vercel/serverless **não** serve.
 

@@ -1,5 +1,6 @@
 import { Evolution } from "@/lib/evolution";
-import { getSettings, webhookUrl } from "@/lib/settings";
+import { getSettings, webhookUrl, evolutionManagedByEnv } from "@/lib/settings";
+import { ensureEvolution } from "@/lib/bootstrap";
 
 export const dynamic = "force-dynamic";
 
@@ -7,13 +8,16 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const s = getSettings();
   const evo = new Evolution(s);
-  if (!evo.configured) return Response.json({ configured: false, webhookUrl: webhookUrl(s) });
-  const out: Record<string, unknown> = { configured: true, webhookUrl: webhookUrl(s) };
+  const managed = evolutionManagedByEnv();
+  if (!evo.configured) return Response.json({ configured: false, managed, webhookUrl: webhookUrl(s) });
+  const out: Record<string, unknown> = { configured: true, managed, instance: s.evolutionInstance, webhookUrl: webhookUrl(s) };
   try {
     const st = await evo.connectionState();
     out.state = st?.instance?.state || "desconhecido";
   } catch (e) {
-    out.error = (e as Error).message;
+    const msg = (e as Error).message;
+    if (/404|not exist/i.test(msg)) out.state = "close"; // instância ainda não criada: o botão de QR cria
+    else out.error = msg;
   }
   try {
     const wh = await evo.findWebhook();
@@ -41,8 +45,12 @@ export async function POST(req: Request) {
           }
         } else throw e;
       }
+      void ensureEvolution().catch(() => {});
       const r = await evo.connect(number);
       return Response.json({ ok: true, base64: r.base64, code: r.code, pairingCode: r.pairingCode, state: r.instance?.state });
+    }
+    if (action === "bootstrap") {
+      return Response.json({ ok: true, result: await ensureEvolution() });
     }
     if (action === "logout") {
       await evo.logout();

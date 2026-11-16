@@ -61,9 +61,9 @@ export function defaults(): Settings {
   return {
     evolutionUrl: env.EVOLUTION_API_URL || "",
     evolutionApiKey: env.EVOLUTION_API_KEY || "",
-    evolutionInstance: env.EVOLUTION_INSTANCE || "",
+    evolutionInstance: env.EVOLUTION_INSTANCE || "afiliados",
     webhookToken: env.WEBHOOK_TOKEN || "",
-    publicUrl: env.PUBLIC_URL || "",
+    publicUrl: env.PUBLIC_URL || (env.RAILWAY_PUBLIC_DOMAIN ? `https://${env.RAILWAY_PUBLIC_DOMAIN}` : ""),
 
     meliStrategy: (env.MELI_STRATEGY as Settings["meliStrategy"]) || "generator",
     meliTag: env.MELI_AFFILIATE_TAG || "",
@@ -97,12 +97,21 @@ export function defaults(): Settings {
   };
 }
 
+/** Configurações da Evolution que vêm do ambiente (deploy) e não aparecem no painel. */
+export const ENV_MANAGED: (keyof Settings)[] = ["evolutionUrl", "evolutionApiKey", "evolutionInstance", "publicUrl", "webhookToken"];
+
+export function evolutionManagedByEnv() {
+  return Boolean(env.EVOLUTION_API_URL && env.EVOLUTION_API_KEY);
+}
+
 export function getSettings(): Settings {
   const base = defaults();
   const rows = db().prepare("SELECT key, value FROM settings").all() as { key: string; value: string }[];
   const out = { ...base } as Record<string, unknown>;
   for (const r of rows) {
     if (!(r.key in base)) continue;
+    // quando a Evolution vem do ambiente, o ambiente sempre manda
+    if (evolutionManagedByEnv() && ENV_MANAGED.includes(r.key as keyof Settings) && r.key !== "webhookToken") continue;
     try {
       const v = JSON.parse(r.value);
       // valor vazio no banco não sobrescreve a variável de ambiente
@@ -112,7 +121,17 @@ export function getSettings(): Settings {
       /* ignora */
     }
   }
-  return out as Settings;
+  const result = out as Settings;
+  if (!result.webhookToken) {
+    // token do webhook gerado automaticamente na primeira execução
+    let t = getState("webhookToken");
+    if (!t) {
+      t = crypto.randomUUID().replace(/-/g, "");
+      setState("webhookToken", t);
+    }
+    result.webhookToken = t;
+  }
+  return result;
 }
 
 export function saveSettings(patch: Partial<Settings>) {

@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { toast } from "sonner";
 import { Save, Plug, Webhook, Copy, ShoppingBag, Link2, ShieldCheck, Sparkles, Info } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
@@ -34,8 +35,6 @@ function Section({ icon: Icon, title, description, children, action }: { icon: R
     </Card>
   );
 }
-
-const SHOW_EVOLUTION_SETTINGS = false;
 
 export default function ConfigPage() {
   const { data, setData } = useApi<S>("/api/settings");
@@ -101,66 +100,25 @@ export default function ConfigPage() {
       />
 
       <div className="flex flex-col gap-4 pb-20">
-        {/* Evolution API já vem configurada (Railway). Mude SHOW_EVOLUTION_SETTINGS para true para editar pelo painel. */}
-        {SHOW_EVOLUTION_SETTINGS && (
-        <Section
-          icon={Plug}
-          title="Evolution API"
-          description="Instância do WhatsApp Business que lê os grupos e posta no seu grupo."
-          action={
-            evo?.configured ? (
-              <Badge tone={connected ? "success" : "danger"} dot>
-                {connected ? "Conectado" : evo.error ? "Erro" : evo.state || "Desconectado"}
+        <Card className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center">
+          <span className="flex size-9 items-center justify-center rounded-[10px] bg-muted">
+            <Plug className="size-4 text-muted-foreground" />
+          </span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2 text-[14px] font-semibold">
+              WhatsApp (Evolution API)
+              <Badge tone={connected ? "success" : evo?.configured ? "warning" : "danger"} dot>
+                {connected ? "Conectado" : evo?.configured ? "Aguardando QR code" : "Não configurado"}
               </Badge>
-            ) : (
-              <Badge tone="warning" dot>Não configurado</Badge>
-            )
-          }
-        >
-          <Field label="URL da Evolution API" hint="Ex: https://evolution.seudominio.com">
-            <Input value={str("evolutionUrl")} onChange={(e) => set("evolutionUrl")(e.target.value)} placeholder="https://..." />
-          </Field>
-          <Field label="Nome da instância">
-            <Input value={str("evolutionInstance")} onChange={(e) => set("evolutionInstance")(e.target.value)} placeholder="minha-instancia" />
-          </Field>
-          <Field label="API key" hint="Global ou da instância. Fica salva só no servidor.">
-            <Input type="password" value={str("evolutionApiKey")} onChange={(e) => set("evolutionApiKey")(e.target.value)} placeholder="••••" />
-          </Field>
-          <Field label="URL pública deste painel" hint="Usada para montar o webhook. Ex: https://afiliados.seudominio.com">
-            <Input value={str("publicUrl")} onChange={(e) => set("publicUrl")(e.target.value)} placeholder="https://..." />
-          </Field>
-          <Field label="Token do webhook" hint="Qualquer texto secreto. Impede que outras pessoas chamem seu webhook.">
-            <Input value={str("webhookToken")} onChange={(e) => set("webhookToken")(e.target.value)} />
-          </Field>
-          <div className="flex flex-col gap-1.5">
-            <span className="text-[13px] font-medium">URL do webhook</span>
-            <div className="flex gap-2">
-              <Input readOnly value={evo?.webhookUrl || "Preencha a URL pública"} className="font-mono text-[12px]" />
-              <Button
-                size="icon"
-                variant="outline"
-                className="size-9"
-                title="Copiar"
-                onClick={() => evo?.webhookUrl && navigator.clipboard.writeText(evo.webhookUrl).then(() => toast.success("Copiado"))}
-              >
-                <Copy className="size-3.5" />
-              </Button>
             </div>
-            <span className="text-[12px] text-muted-foreground">
-              {evo?.webhook?.url ? (evo.webhook.url === evo.webhookUrl ? "✓ Webhook já aponta para cá" : `Webhook atual: ${evo.webhook.url}`) : "Evento necessário: MESSAGES_UPSERT"}
-            </span>
+            <p className="mt-0.5 text-[12.5px] text-muted-foreground">
+              Configurado automaticamente: instância, credenciais e webhook já ficam prontos.
+            </p>
           </div>
-          <div className="flex flex-wrap gap-2 sm:col-span-2">
-            <Button size="sm" variant="outline" onClick={() => reloadEvo()}>
-              <Plug className="size-3.5" /> Testar conexão
-            </Button>
-            <Button size="sm" variant="outline" onClick={() => evoAction("setWebhook")} loading={busy === "setWebhook"}>
-              {busy !== "setWebhook" && <Webhook className="size-3.5" />} Configurar webhook automaticamente
-            </Button>
-            {evo?.error && <span className="self-center text-[12px] text-danger">{evo.error}</span>}
-          </div>
-        </Section>
-        )}
+          <Link href="/conexao">
+            <Button size="sm" variant="outline">{connected ? "Ver conexão" : "Conectar WhatsApp"}</Button>
+          </Link>
+        </Card>
 
         <Section icon={ShoppingBag} title="Mercado Livre Afiliados" description="Como transformar os links das promoções no SEU link de afiliado.">
           <Field

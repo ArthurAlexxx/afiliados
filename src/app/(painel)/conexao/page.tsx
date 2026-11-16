@@ -41,8 +41,16 @@ export default function ConexaoPage() {
     }
   }, []);
 
+  // abre a tela já com o QR code pronto
+  const auto = React.useRef(false);
   React.useEffect(() => {
-    loadStatus();
+    loadStatus().then((s) => {
+      if (!auto.current && s?.configured && s.state !== "open") {
+        auto.current = true;
+        generate();
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loadStatus]);
 
   // enquanto há QR na tela: checa a conexão a cada 3s e renova o QR a cada 40s
@@ -108,9 +116,10 @@ export default function ConexaoPage() {
         <div className="h-96 animate-pulse rounded-2xl bg-muted" />
       ) : !status.configured ? (
         <Card className="px-6 py-12 text-center">
-          <div className="text-[14px] font-medium">Configure a Evolution API primeiro</div>
-          <p className="mt-1 text-[13px] text-muted-foreground">Informe URL, API key e o nome da instância (se ela não existir, eu crio).</p>
-          <Link href="/configuracoes"><Button size="sm" className="mt-4">Ir para Integrações</Button></Link>
+          <div className="text-[14px] font-medium">Evolution API não encontrada</div>
+          <p className="mt-1 text-[13px] text-muted-foreground">
+            Defina <code>EVOLUTION_API_URL</code> e <code>EVOLUTION_API_KEY</code> nas variáveis de ambiente do painel.
+          </p>
         </Card>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
