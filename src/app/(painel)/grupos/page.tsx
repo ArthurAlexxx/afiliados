@@ -102,17 +102,6 @@ export default function GruposPage() {
     }
   };
 
-  const setCorner = async (g: Group, wmCorner: string) => {
-    setData((d) => (d ? { rows: d.rows.map((x) => (x.jid === g.jid ? { ...x, wm_corner: wmCorner } : x)) } : d));
-    try {
-      await api("/api/groups", { method: "PATCH", json: { jid: g.jid, wmCorner } });
-      toast.success("Canto da marca d'água salvo");
-    } catch (e) {
-      toast.error((e as Error).message);
-      reload();
-    }
-  };
-
   const addManual = async () => {
     const jid = manual.trim();
     if (!/@g\.us$/.test(jid)) return toast.error("O ID do grupo termina com @g.us");
@@ -200,20 +189,6 @@ export default function GruposPage() {
                       {g.watermark ? "Marca d'água: não usar fotos" : "Fotos liberadas"}
                     </button>
                   )}
-                  {g.role === "source" && g.watermark ? (
-                    <select
-                      aria-label="Onde fica a marca d'água"
-                      title="Onde fica a marca d'água (a IA mexe só nesse canto)"
-                      value={g.wm_corner || "top-right"}
-                      onChange={(e) => setCorner(g, e.target.value)}
-                      className="h-8 rounded-[10px] border bg-background px-2 text-[12px]"
-                    >
-                      <option value="top-right">Marca: sup. direito</option>
-                      <option value="top-left">Marca: sup. esquerdo</option>
-                      <option value="bottom-right">Marca: inf. direito</option>
-                      <option value="bottom-left">Marca: inf. esquerdo</option>
-                    </select>
-                  ) : null}
                   <RoleSwitch jid={g.jid} value={g.role} onChange={(r) => setRole(g, r)} />
                 </li>
               ))}
