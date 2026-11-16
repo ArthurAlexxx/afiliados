@@ -7,6 +7,7 @@ import { convertMeliLink, type ConvertResult } from "./affiliate.ts";
 import { parsePromo, renderTemplate, type PromoData } from "./parser.ts";
 import { aiExtract } from "./ai.ts";
 import { Evolution } from "./evolution.ts";
+import { recordOffer } from "./curation.ts";
 
 export type PostStatus = "pending" | "queued" | "sending" | "sent" | "failed" | "skipped" | "duplicate";
 
@@ -58,7 +59,7 @@ export async function buildPost(
   const parsed = parsePromo(text);
   const ai = await aiExtract(text, s);
   if (ai) {
-    for (const [k, v] of Object.entries(ai)) if (v) (parsed as Record<string, string>)[k] = v;
+    for (const [k, v] of Object.entries(ai)) if (v) (parsed as unknown as Record<string, string>)[k] = v;
     if (ai.preco && ai.preco_antigo) {
       const n = (x: string) => Number(x.replace(/\./g, "").replace(",", "."));
       const p = n(ai.preco), o = n(ai.preco_antigo);
@@ -154,8 +155,8 @@ async function ingestMessage(d: UpsertData): Promise<string> {
   if (!jid.endsWith("@g.us")) return "ignorado: não é grupo";
   if (d.key?.fromMe && s.ignoreFromMe) return "ignorado: fromMe";
 
-  const group = db().prepare("SELECT name, role FROM groups WHERE jid = ?").get(jid) as
-    | { name: string; role: string }
+  const group = db().prepare("SELECT name, role, watermark FROM groups WHERE jid = ?").get(jid) as
+    | { name: string; role: string; watermark: number }
     | undefined;
   if (!group || group.role !== "source") return "ignorado: grupo não é de origem";
 
@@ -168,6 +169,25 @@ async function ingestMessage(d: UpsertData): Promise<string> {
   if (!text) return "ignorado: sem texto";
 
   const hasImage = Boolean(d.message?.imageMessage);
+
+  // curadoria: toda promoção vira dado (preço, grupo, foto); quem decide o que postar é o ranking
+  {
+    let image: Buffer | null = null;
+    if (hasImage && !group.watermark) {
+      try {
+        let b64 = d.message?.base64 || "";
+        if (!b64 && messageId) b64 = (await new Evolution(s).getBase64FromMediaMessage(messageId)).base64 || "";
+        if (b64) image = Buffer.from(b64.replace(/^data:[^,]+,/, ""), "base64");
+      } catch (e) {
+        log("warn", `Não consegui baixar a foto de "${group.name}": ${(e as Error).message}`);
+      }
+    }
+    const r = await recordOffer({ messageId, groupJid: jid, groupName: group.name, text, image, watermark: Boolean(group.watermark) }).catch(
+      (e) => `erro: ${(e as Error).message}`,
+    );
+    if (s.mode === "curated") return `curadoria: ${r}`;
+  }
+
   const built = await buildPost(text, s, {
     groupName: group.name,
     wantImage: s.sendImage && s.fetchProductImage && !hasImage,
@@ -350,6 +370,7 @@ type W = typeof globalThis & { __afiliadosWorker?: NodeJS.Timeout };
 export function startWorker() {
   const w = globalThis as W;
   if (w.__afiliadosWorker) return;
+  import("./curation.ts").then((m) => m.startCuration());
   w.__afiliadosWorker = setInterval(() => {
     processQueue().catch((e) => log("error", `Worker: ${(e as Error).message}`));
   }, 15000);

@@ -51,6 +51,54 @@ function migrate(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status, id);
     CREATE INDEX IF NOT EXISTS idx_posts_product ON posts(product_key, created_at);
 
+    -- curadoria: cada perfume identificado entre os grupos
+    CREATE TABLE IF NOT EXISTS products (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      pkey           TEXT NOT NULL,
+      name           TEXT NOT NULL,
+      ml             INTEGER NOT NULL,
+      conc           TEXT,
+      tokens         TEXT NOT NULL,
+      created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+      last_posted_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_products_ml ON products(ml);
+
+    -- cada promoção vista em um grupo de origem
+    CREATE TABLE IF NOT EXISTS offers (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      message_id   TEXT UNIQUE,
+      product_id   INTEGER NOT NULL,
+      group_jid    TEXT NOT NULL,
+      group_name   TEXT NOT NULL DEFAULT '',
+      title        TEXT NOT NULL DEFAULT '',
+      price        REAL,
+      old_price    REAL,
+      pct          INTEGER,
+      coupon       TEXT,
+      url          TEXT,
+      text         TEXT NOT NULL DEFAULT '',
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_offers_product ON offers(product_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_offers_created ON offers(created_at);
+
+    -- banco de fotos por perfume (só de grupos sem marca d'água)
+    CREATE TABLE IF NOT EXISTS images (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id  INTEGER NOT NULL,
+      message_id  TEXT,
+      group_jid   TEXT,
+      path        TEXT NOT NULL,
+      width       INTEGER NOT NULL,
+      height      INTEGER NOT NULL,
+      hash        TEXT NOT NULL,
+      score       INTEGER NOT NULL,
+      disabled    INTEGER NOT NULL DEFAULT 0,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_images_product ON images(product_id, score);
+
     CREATE TABLE IF NOT EXISTS logs (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       level      TEXT NOT NULL,
@@ -58,6 +106,18 @@ function migrate(db: DatabaseSync) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+  // colunas novas em tabelas antigas
+  for (const sql of [
+    "ALTER TABLE groups ADD COLUMN watermark INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE posts ADD COLUMN product_id INTEGER",
+    "ALTER TABLE posts ADD COLUMN origin TEXT NOT NULL DEFAULT 'repost'",
+  ]) {
+    try {
+      db.exec(sql);
+    } catch {
+      /* coluna já existe */
+    }
+  }
 }
 
 export function db(): DatabaseSync {

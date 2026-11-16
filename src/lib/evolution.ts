@@ -69,12 +69,12 @@ export class Evolution {
   }
 
   /** Mensagens guardadas pela Evolution para um chat (mais recentes primeiro). */
-  async findMessages(remoteJid: string, limit = 50) {
+  async findMessages(remoteJid: string, limit = 50, page = 1) {
     const r = await this.call<unknown>("POST", `/chat/findMessages/${this.inst}`, {
       where: { key: { remoteJid } },
       limit,
       offset: limit,
-      page: 1,
+      page,
     });
     const any = r as { messages?: { records?: unknown[] } | unknown[] };
     const list = Array.isArray(r) ? r : Array.isArray(any.messages) ? any.messages : any.messages?.records || [];
@@ -101,6 +101,12 @@ export class Evolution {
       message: { key: { id: messageId } },
       convertToMp4: false,
     });
+  }
+
+  /** URL da foto de perfil de um contato ou grupo (jid). */
+  async profilePictureUrl(jid: string): Promise<string | null> {
+    const r = await this.call<{ profilePictureUrl?: string | null }>("POST", `/chat/fetchProfilePictureUrl/${this.inst}`, { number: jid });
+    return r.profilePictureUrl || null;
   }
 
   setWebhook(url: string) {

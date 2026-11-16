@@ -56,16 +56,41 @@ export function formatPrice(n: number): string {
 function clean(line: string) {
   return line
     .replace(/[*_~`]/g, "")
-    .replace(/^[\s\p{Extended_Pictographic}️‍•\-–—>:|]+/u, "")
-    .replace(/[\s\p{Extended_Pictographic}️‍]+$/u, "")
+    .replace(/^[\s\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}️‍•\-–—>:|]+/u, "")
+    .replace(/[\s\p{Extended_Pictographic}\u{1F3FB}-\u{1F3FF}️‍]+$/u, "")
     .replace(/\s+/g, " ")
     .trim();
 }
 
 const NOISE =
-  /(https?:\/\/|www\.|meli\.la|R\$|cupom|frete|parcel|sem juros|\bx\s*de\b|link|compre|clique|aproveite|corre|promo(ção|cao)?\s*(rel[aâ]mpago)?$|oferta\s*(rel[aâ]mpago)?$|achadinho|^de\s|^por\s|grupo|entre no|chama|vendido por|estoque|pre[çc]o pode)/i;
+  /(https?:\/\/|www\.|meli\.la|R\$|cupom|frete|parcel|sem juros|\bx\s*de\b|link|compre|clique|aproveite|corre|promo(ção|cao)?\s*(rel[aâ]mpago)?$|oferta\s*(rel[aâ]mpago)?$|achadinho|^de\s|^por\s|^de:|^por:|grupo|entre no|entre em|chama|vendido por|selecione a loja|^loja\b|estoque|pre[çc]o pode|baixou\s*\d|v[íi]deo review)/i;
 
-export function parsePromo(text: string): Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja"> {
+/** Linha "gancho" em CAPS (ex: "*OS ÁRABES NÃO SABEM BRINCAR*"): não é título nem preço. */
+export function isHookLine(raw: string) {
+  const c = clean(raw);
+  const letters = c.replace(/[^\p{L}]/gu, "");
+  if (letters.length < 6) return false;
+  if (/\d+\s*ml\b/i.test(c)) return false;
+  return letters === letters.toUpperCase() && /\p{Lu}/u.test(letters);
+}
+
+/** Número em formato brasileiro ("1.234,56", "750", "634,23"). */
+const NUM = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)`;
+const DE_RE = new RegExp(String.raw`(?:^|[\s❌✖️:(])(?:de|era|antes)\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
+const POR_RE = new RegExp(String.raw`(?:^|[\s✅✔️:)~])(?:por|apenas|agora|s[óo]|hoje)\s*(?:apenas)?\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
+
+export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja"> & {
+  /** preços numéricos (NaN quando não achou) */
+  precoNum: number;
+  precoAntigoNum: number;
+  /** % informado pelo grupo ("Baixou 29%") ou calculado De→Por */
+  descontoPct: number | null;
+  /** post só de cupom/aviso, sem produto */
+  cupomOnly: boolean;
+  loja_vendedor: string;
+};
+
+export function parsePromo(text: string): ParsedPromo {
   const lines = text.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
 
   // ---- preços
@@ -73,18 +98,24 @@ export function parsePromo(text: string): Omit<PromoData, "link" | "links" | "te
   let precoAntigo = NaN;
   const all: number[] = [];
   for (const raw of lines) {
-    const line = raw.toLowerCase();
-    const matches = [...raw.matchAll(PRICE_RE)].map((m) => parsePrice(m[1])).filter((n) => n > 0);
+    if (isHookLine(raw)) continue; // "MENOS DE 80 CONTO" não é preço
+    if (/parcel|\d+\s*x\s*(de)?\s*R\$/i.test(raw) && !/\bpor\b/i.test(raw)) continue; // parcelas
+    const plain = raw.replace(/[*_`]/g, "");
+    const de = plain.match(DE_RE);
+    const por = plain.match(POR_RE);
+    if (de && Number.isNaN(precoAntigo)) precoAntigo = parsePrice(de[1]);
+    if (por && Number.isNaN(preco)) preco = parsePrice(por[1]);
+    const matches = [...plain.matchAll(PRICE_RE)].map((m) => parsePrice(m[1])).filter((n) => n > 0);
     if (!matches.length) continue;
-    if (/parcel|\d+\s*x\s*(de)?\s*r\$/i.test(raw)) continue; // ignora parcelas
     all.push(...matches);
+    if (de || por) continue;
     const struck = /~[^~]*R\$[^~]*~/.test(raw);
-    if (struck || /(^|\s)(de|era|antes)[:\s]/.test(line) || /pre[çc]o\s*(antigo|original|normal)/.test(line)) {
+    if (struck || /pre[çc]o\s*(antigo|original|normal)/i.test(raw)) {
       if (matches.length >= 2) {
-        precoAntigo = matches[0];
-        preco = matches[1];
-      } else precoAntigo = matches[0];
-    } else if (/(^|\s)(por|apenas|agora|só|hoje)[:\s]|pre[çc]o/.test(line) || /💰|🔥|✅/.test(raw)) {
+        if (Number.isNaN(precoAntigo)) precoAntigo = matches[0];
+        if (Number.isNaN(preco)) preco = matches[1];
+      } else if (Number.isNaN(precoAntigo)) precoAntigo = matches[0];
+    } else if (/pre[çc]o|💰|🔥|✅/i.test(raw)) {
       if (Number.isNaN(preco)) preco = matches[matches.length - 1];
     }
   }
@@ -95,20 +126,21 @@ export function parsePromo(text: string): Omit<PromoData, "link" | "links" | "te
   }
   if (!Number.isNaN(precoAntigo) && !Number.isNaN(preco) && precoAntigo <= preco) precoAntigo = NaN;
 
-  let desconto = "";
+  let descontoPct: number | null = null;
+  const baixou = text.match(/baixou\s*(\d{1,2})\s*%/i);
   const pct = text.match(/(\d{1,2})\s*%\s*(off|de desconto|desc)/i);
-  if (!Number.isNaN(precoAntigo) && !Number.isNaN(preco)) {
-    desconto = `(-${Math.round((1 - preco / precoAntigo) * 100)}%)`;
-  } else if (pct) desconto = `(-${pct[1]}%)`;
+  if (baixou) descontoPct = Number(baixou[1]);
+  else if (!Number.isNaN(precoAntigo) && !Number.isNaN(preco)) descontoPct = Math.round((1 - preco / precoAntigo) * 100);
+  else if (pct) descontoPct = Number(pct[1]);
+  const desconto = descontoPct ? `(-${descontoPct}%)` : "";
 
   // ---- cupom
   let cupom = "";
+  const BAD = /^(de|do|da|no|na|para|off|desconto|aplicado|automatico|automático|resgate|ative|ativar|esgotado|surpresa|hoje|pegue|use|dispon[ií]vel|link|abaixo|exclusivo)$/i;
   const cm =
-    text.match(/cupom(?:\s+de\s+desconto)?\s*[:\-–]?\s*[*_`"']*([A-Z0-9][A-Z0-9_-]{2,24})/i) ||
+    text.match(/cupom(?:\s+de\s+desconto)?\s*[:\-–]?\s*[*_`"']*([A-Z0-9][A-Z0-9_-]{2,24})[*_`"']*/i) ||
     text.match(/(?:use|c[óo]digo)\s*[:\-–]?\s*[*_`"']*([A-Z0-9][A-Z0-9_-]{3,24})/i);
-  if (cm && !/^(de|do|da|no|na|para|off|desconto|aplicado|automatico|automático)$/i.test(cm[1])) {
-    cupom = cm[1].toUpperCase();
-  }
+  if (cm && !BAD.test(cm[1]) && /\d|^[A-Z0-9_-]+$/.test(cm[1])) cupom = cm[1].toUpperCase();
 
   // ---- frete
   let frete = "";
@@ -119,17 +151,24 @@ export function parsePromo(text: string): Omit<PromoData, "link" | "links" | "te
   let parcelamento = "";
   const pm = text.match(/(\d{1,2})\s*x\s*(?:de\s*)?R\$\s*([\d.]+,\d{2})\s*(sem juros)?/i);
   if (pm) parcelamento = `${pm[1]}x de R$ ${pm[2]}${pm[3] ? " sem juros" : ""}`;
+  else if (/parcelado sem juros/i.test(text)) parcelamento = "Parcelado sem juros";
 
-  // ---- título: primeira linha "de conteúdo"
-  let titulo = "";
-  for (const raw of lines) {
-    const c = clean(raw.replace(/\bhttps?:\/\/\S+/gi, "").replace(/R\$\s*[\d.,]+/gi, ""));
-    if (c.length < 6) continue;
-    if (NOISE.test(c)) continue;
-    if (/^\d+([.,]\d+)?%?$/.test(c)) continue;
-    titulo = c;
-    break;
-  }
+  // ---- título: de preferência a 1ª linha com "ml" que não é preço/cupom/link; senão a 1ª linha de conteúdo
+  const candidates = lines
+    .filter((raw) => !isHookLine(raw))
+    .map((raw) => clean(raw.replace(/\bhttps?:\/\/\S+/gi, "").replace(/R\$\s*[\d.,]+/gi, "")))
+    .filter((c) => c.length >= 6 && !NOISE.test(c) && !/^\d+([.,]\d+)?%?$/.test(c));
+  const titulo = candidates.find((c) => /\d+\s*ml\b/i.test(c)) || candidates[0] || "";
+
+  // ---- loja / vendedor
+  const lm =
+    text.match(/LOJA:\s*\*?([^*\n]+)\*?/i) ||
+    text.match(/Selecione a loja\s*\*?([^*\n.]+)/i) ||
+    text.match(/Loja Oficial\s*\*?([^*_\n]+?)\*?_?\s*(?:no (?:Mercado Livre|ML|MELI)|$)/im) ||
+    text.match(/Vendido por\s*_?\*?([^*_\n(]+)/i);
+  const loja_vendedor = lm ? lm[1].replace(/[*_]/g, "").trim() : "";
+
+  const cupomOnly = Number.isNaN(preco) || (!/\d+\s*ml\b/i.test(text) && !POR_RE.test(text.replace(/[*_`~]/g, "")));
 
   return {
     titulo,
@@ -139,6 +178,11 @@ export function parsePromo(text: string): Omit<PromoData, "link" | "links" | "te
     cupom,
     frete,
     parcelamento,
+    precoNum: preco,
+    precoAntigoNum: precoAntigo,
+    descontoPct,
+    cupomOnly,
+    loja_vendedor,
   };
 }
 

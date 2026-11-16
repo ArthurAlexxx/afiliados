@@ -1,6 +1,68 @@
-import { log } from "./db.ts";
+import { db, log } from "./db.ts";
 import { Evolution } from "./evolution.ts";
-import { getSettings, webhookUrl } from "./settings.ts";
+import { getSettings, getState, setState, webhookUrl, type Settings } from "./settings.ts";
+
+/** Atualiza a lista de grupos da instância. */
+export async function syncGroups(s: Settings = getSettings()) {
+  const list = await new Evolution(s).fetchAllGroups();
+  const stmt = db().prepare(
+    `INSERT INTO groups (jid, name, size, updated_at) VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(jid) DO UPDATE SET name = excluded.name, size = excluded.size, updated_at = excluded.updated_at`,
+  );
+  for (const g of Array.isArray(list) ? list : []) stmt.run(g.id, g.subject || g.id, g.size || 0);
+  return Array.isArray(list) ? list.length : 0;
+}
+
+function re(v?: string) {
+  if (!v) return null;
+  try {
+    return new RegExp(v, "i");
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Configuração inicial dos grupos pelo nome (variáveis AUTO_SOURCE_GROUPS, AUTO_DEST_GROUP, AUTO_WATERMARK_GROUPS,
+ * todas regex). Aplicada uma vez e só em grupos sem papel definido, para não desfazer o que for mudado no painel.
+ * Depois importa o histórico dos grupos de origem para o banco de ofertas e fotos.
+ */
+async function autoSetupGroups(s: Settings) {
+  const src = re(process.env.AUTO_SOURCE_GROUPS);
+  const dest = re(process.env.AUTO_DEST_GROUP);
+  const wm = re(process.env.AUTO_WATERMARK_GROUPS);
+  if (!src && !dest && !wm) return;
+  const sig = [src, dest, wm].map(String).join("|");
+  if (getState("autoGroups") === sig) return;
+
+  const state = await new Evolution(s).connectionState().catch(() => null);
+  if (state?.instance?.state !== "open") return;
+  const n = await syncGroups(s);
+  if (!n) return;
+  const rows = db().prepare("SELECT jid, name, role FROM groups").all() as { jid: string; name: string; role: string }[];
+  const setRole = db().prepare("UPDATE groups SET role = ? WHERE jid = ?");
+  const setWm = db().prepare("UPDATE groups SET watermark = 1 WHERE jid = ?");
+  const done: string[] = [];
+  for (const g of rows) {
+    if (g.role === "none" && dest?.test(g.name)) {
+      setRole.run("destination", g.jid);
+      done.push(`${g.name} → destino`);
+    } else if (g.role === "none" && src?.test(g.name)) {
+      setRole.run("source", g.jid);
+      done.push(`${g.name} → origem`);
+    }
+    if (wm?.test(g.name)) setWm.run(g.jid);
+  }
+  setState("autoGroups", sig);
+  if (done.length) log("info", `Grupos configurados automaticamente: ${done.join(", ")}`);
+
+  if (!getState("historyImported")) {
+    const { importHistory } = await import("./curation.ts");
+    const r = await importHistory();
+    setState("historyImported", new Date().toISOString());
+    return r;
+  }
+}
 
 /**
  * Deixa a Evolution pronta sem nenhuma configuração manual:
@@ -37,6 +99,7 @@ export async function ensureEvolution(): Promise<string> {
     log("warn", `Não consegui configurar o webhook: ${(e as Error).message}`);
     return "falha no webhook";
   }
+  await autoSetupGroups(s).catch((e) => log("warn", `Configuração automática dos grupos: ${(e as Error).message}`));
   return "ok";
 }
 

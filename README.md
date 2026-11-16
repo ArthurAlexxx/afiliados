@@ -17,6 +17,18 @@ Grupos de origem ──(webhook MESSAGES_UPSERT)──▶ Painel ──▶ conve
 - **Envio**: posta no(s) grupo(s) *Destino* com a imagem original (ou a foto do anúncio).
 - **Painel**: conexão do WhatsApp por QR code ou código de pareamento, visão geral, fila (aprovar, editar, enviar agora, descartar), grupos, template com pré-visualização estilo WhatsApp, integrações e logs. Tema claro/escuro, mobile.
 
+## Curadoria (modo padrão)
+
+Em vez de repostar tudo, o robô transforma os grupos de origem numa base de preços e fotos e posta só o melhor:
+
+- **Mesmo perfume entre grupos**: cada grupo usa o próprio link de afiliado, então o perfume é identificado pelo nome normalizado (linha + ml + concentração, sem marca e palavras genéricas). Ex: "Perfume Jean Paul Gaultier Le Male Elixir Parfum 75 ml Masculino" = "JPG Le Male Elixir Parfum 75ml".
+- **Ranking**: nota por quantos grupos postam o perfume, preço "Por" contra a média do próprio perfume (o "De" costuma ser inflado), se está bombando agora e o desconto informado. Não repete o mesmo perfume dentro do intervalo configurado.
+- **Banco de fotos**: guarda as fotos dos grupos **sem marca d'água** (alta resolução, fundo produzido ganha nota maior, fotos repetidas ficam só na melhor versão). Grupos marcados com marca d'água contribuem só com a promoção.
+- **Etiquetas**: a foto escolhida recebe duas etiquetas de vidro (glassmorphism): o desconto embaixo à esquerda e o grupo (foto, nome, @ do Instagram) em cima à direita.
+- **Link**: o link da melhor oferta é trocado pelo seu link de afiliado. Se não der para converter, o post fica em *Aprovar* e nada é enviado.
+
+Configuração inicial automática por variáveis (regex no nome do grupo, aplicada uma vez): `AUTO_SOURCE_GROUPS`, `AUTO_DEST_GROUP`, `AUTO_WATERMARK_GROUPS`. Depois disso o histórico dos grupos de origem é importado sozinho. Tudo pode ser ajustado nas telas **Curadoria** e **Grupos**.
+
 ## Rodando no seu computador
 
 Requisitos: **Node.js 22.13+** (usa o SQLite embutido do Node, sem instalar banco).

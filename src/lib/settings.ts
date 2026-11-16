@@ -41,6 +41,18 @@ export type Settings = {
   // Template
   template: string;
 
+  // Curadoria: em vez de repostar tudo, escolhe a melhor promoção entre os grupos
+  mode: "curated" | "repost";
+  curationIntervalMinutes: number;
+  curationCooldownHours: number;
+  curationLookbackHours: number;
+  curationRequireImage: boolean;
+
+  // Identidade visual (etiquetas na foto)
+  brandEnabled: boolean;
+  brandName: string; // vazio = nome do grupo de destino
+  brandInstagram: string;
+
   // IA opcional
   aiEnabled: boolean;
   anthropicApiKey: string;
@@ -90,6 +102,16 @@ export function defaults(): Settings {
     ignoreFromMe: true,
 
     template: DEFAULT_TEMPLATE,
+
+    mode: (env.MODE as Settings["mode"]) || "curated",
+    curationIntervalMinutes: Number(env.CURATION_INTERVAL_MINUTES || 30),
+    curationCooldownHours: 48,
+    curationLookbackHours: 6,
+    curationRequireImage: false,
+
+    brandEnabled: true,
+    brandName: env.BRAND_NAME || "",
+    brandInstagram: env.BRAND_INSTAGRAM || "",
 
     aiEnabled: false,
     anthropicApiKey: env.ANTHROPIC_API_KEY || "",

@@ -3,7 +3,7 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
-import { RefreshCw, Search, Plus, Users, Send, Radio } from "lucide-react";
+import { RefreshCw, Search, Plus, Users, Send, Radio, Droplet } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,10 @@ import { Input } from "@/components/ui/input";
 import { api, useApi } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
-type Group = { jid: string; name: string; size: number; role: "none" | "source" | "destination"; captured: number; sent: number };
+type Group = {
+  jid: string; name: string; size: number; role: "none" | "source" | "destination"; captured: number; sent: number;
+  watermark: number; offers: number; photos: number;
+};
 
 const ROLES = [
   { key: "none", label: "Ignorar" },
@@ -88,6 +91,17 @@ export default function GruposPage() {
     }
   };
 
+  const setWatermark = async (g: Group, watermark: boolean) => {
+    setData((d) => (d ? { rows: d.rows.map((x) => (x.jid === g.jid ? { ...x, watermark: watermark ? 1 : 0 } : x)) } : d));
+    try {
+      await api("/api/groups", { method: "PATCH", json: { jid: g.jid, watermark } });
+      toast.success(watermark ? "Fotos desse grupo não serão usadas" : "Fotos desse grupo liberadas para o banco");
+    } catch (e) {
+      toast.error((e as Error).message);
+      reload();
+    }
+  };
+
   const addManual = async () => {
     const jid = manual.trim();
     if (!/@g\.us$/.test(jid)) return toast.error("O ID do grupo termina com @g.us");
@@ -158,10 +172,23 @@ export default function GruposPage() {
                       <div className="truncate text-[13.5px] font-medium">{g.name}</div>
                       <div className="truncate text-[12px] text-muted-foreground">
                         {g.size ? `${g.size} membros · ` : ""}
-                        {g.role === "source" ? `${g.captured} capturadas · ${g.sent} enviadas` : g.jid}
+                        {g.role === "source" ? `${g.offers} ofertas · ${g.photos} fotos no banco` : g.jid}
                       </div>
                     </div>
                   </div>
+                  {g.role === "source" && (
+                    <button
+                      onClick={() => setWatermark(g, !g.watermark)}
+                      title="Grupos com marca d'água: usamos só a promoção, a foto vem do banco dos outros grupos"
+                      className={cn(
+                        "flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[12px] font-medium transition-colors",
+                        g.watermark ? "border-warning/30 bg-warning/10 text-warning" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      <Droplet className="size-3.5" />
+                      {g.watermark ? "Marca d'água: não usar fotos" : "Fotos liberadas"}
+                    </button>
+                  )}
                   <RoleSwitch jid={g.jid} value={g.role} onChange={(r) => setRole(g, r)} />
                 </li>
               ))}
