@@ -294,11 +294,41 @@ export async function brand(buf: Buffer, discountPct: number | null, s: Settings
   });
 }
 
+/**
+ * Menor preço histórico: o preço é o menor já visto nos grupos (90 dias),
+ * ou fica até 5% acima do recorde antigo (de mais de 7 dias atrás) e é o menor da última semana.
+ * Ex: R$500 → R$400 (recorde) → semanas depois R$420 também ganha o selo; quem viu o de R$400 provavelmente não vê este.
+ */
+export function isHistoricLow(productId: number, price: number | null, messageId?: string | null): boolean {
+  if (!price || price <= 0) return false;
+  const rows = db()
+    .prepare("SELECT price, created_at FROM offers WHERE product_id = ? AND price > 0 AND created_at >= datetime('now','-90 days') AND created_at < datetime('now','-15 minutes') AND message_id IS NOT ? ORDER BY created_at")
+    .all(productId, messageId ?? null) as { price: number; created_at: string }[];
+  if (rows.length < 5) return false;
+  const ts = (d: string) => new Date(d.replace(" ", "T") + "Z").getTime();
+  const span = ts(rows[rows.length - 1].created_at) - ts(rows[0].created_at);
+  if (Math.abs(span) < 2 * 86400e3) return false; // pouco histórico ainda
+  const med = median(rows.map((r) => r.price))!;
+  const valid = rows.filter((r) => r.price >= med * 0.5); // ignora preço lido errado (kit, miniatura)
+  if (!valid.length) return false;
+  const low = valid.reduce((a, b) => (b.price < a.price ? b : a));
+  if (price <= low.price) return true;
+  const weekAgo = Date.now() - 7 * 86400e3;
+  const lastWeek = valid.filter((r) => ts(r.created_at) >= weekAgo).map((r) => r.price);
+  return ts(low.created_at) < weekAgo && price <= low.price * 1.05 && (!lastWeek.length || price <= Math.min(...lastWeek));
+}
+
+/**
+ * Melhor foto do perfume para o post: nota da foto, mas quadrada vale mais
+ * (foto em pé ou deitada gera bordas laterais no quadrado).
+ */
 export function bestImagePath(productId: number): string | null {
-  const r = db().prepare("SELECT path FROM images WHERE product_id = ? AND disabled = 0 ORDER BY score DESC LIMIT 1").get(productId) as
-    | { path: string }
-    | undefined;
-  return r && fs.existsSync(r.path) ? r.path : null;
+  const rows = db().prepare("SELECT path, score, width, height FROM images WHERE product_id = ? AND disabled = 0").all(productId) as {
+    path: string; score: number; width: number; height: number;
+  }[];
+  const fit = (r: (typeof rows)[number]) => r.score - 70 * Math.abs(Math.log(r.width / Math.max(1, r.height)));
+  const best = rows.filter((r) => fs.existsSync(r.path)).sort((a, b) => fit(b) - fit(a))[0];
+  return best ? best.path : null;
 }
 
 /**
@@ -319,6 +349,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     desconto: discount ? `(-${discount}%)` : built.data.desconto,
     desconto_pct: discount ? String(discount) : built.data.desconto_pct,
     grupo_origem: item.best.group_name,
+    historico: isHistoricLow(item.productId, item.best.price, (item.best as { message_id?: string }).message_id) ? "MENOR PREÇO HISTÓRICO" : "",
   };
   const formatted = renderTemplate(s.template, data);
 

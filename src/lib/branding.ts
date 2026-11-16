@@ -107,14 +107,55 @@ async function textWidth(text: string, size: number, weight: number) {
  * Formato padrão de todos os posts: quadrado, SEM cortar nada da foto.
  * A foto inteira fica centralizada; as sobras são preenchidas com a própria foto ampliada e desfocada.
  */
+/** Cor do fundo quando as bordas da foto são lisas (fundo de estúdio); null se o fundo tem cenário. */
+async function plainEdgeColor(src: Buffer): Promise<{ r: number; g: number; b: number } | null> {
+  const N = 96;
+  const { data } = await sharp(src).resize(N, N, { fit: "fill" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const px: number[][] = [];
+  for (let y = 0; y < N; y++)
+    for (let x = 0; x < N; x++)
+      if (x < 2 || y < 2 || x >= N - 2 || y >= N - 2) {
+        const i = (y * N + x) * 3;
+        px.push([data[i], data[i + 1], data[i + 2]]);
+      }
+  const med = [0, 1, 2].map((c) => px.map((p) => p[c]).sort((a, b) => a - b)[px.length >> 1]);
+  const close = px.filter((p) => Math.abs(p[0] - med[0]) + Math.abs(p[1] - med[1]) + Math.abs(p[2] - med[2]) < 24).length;
+  return close / px.length >= 0.92 ? { r: med[0], g: med[1], b: med[2] } : null;
+}
+
+/**
+ * Deixa a foto quadrada SEM cortar o perfume.
+ * - quase quadrada: só redimensiona;
+ * - fundo liso (estúdio): recorta o excesso de fundo e completa com a mesma cor → sem bordas aparentes;
+ * - fundo com cenário: foto inteira no centro e as sobras com a própria foto desfocada (último recurso;
+ *   a curadoria já prefere fotos quadradas para isso quase não acontecer).
+ */
 export async function squareCanvas(input: Buffer, size = 1080): Promise<Buffer> {
   const img = sharp(input, { failOn: "none" }).rotate().flatten({ background: "#ffffff" });
   const src = await img.png().toBuffer();
   const meta = await sharp(src).metadata();
   const w = meta.width || size, h = meta.height || size;
   const ratio = w / h;
-  // quase quadrada: só redimensiona
   if (ratio > 0.97 && ratio < 1.03) return sharp(src).resize(size, size, { fit: "fill" }).png().toBuffer();
+
+  const plain = await plainEdgeColor(src);
+  if (plain) {
+    // tira o fundo sobrando em volta do produto e recoloca centralizado com respiro de 10%
+    let core = src;
+    try {
+      core = await sharp(src).trim({ background: plain, threshold: 18 }).png().toBuffer();
+    } catch {
+      /* nada para recortar */
+    }
+    const inner = Math.round(size * 0.8);
+    const fg = await sharp(core).resize(inner, inner, { fit: "inside" }).png().toBuffer();
+    const fm = await sharp(fg).metadata();
+    return sharp({ create: { width: size, height: size, channels: 3, background: plain } })
+      .composite([{ input: fg, left: Math.round((size - (fm.width || inner)) / 2), top: Math.round((size - (fm.height || inner)) / 2) }])
+      .png()
+      .toBuffer();
+  }
+
   const bg = await sharp(src).resize(size, size, { fit: "cover" }).blur(40).modulate({ brightness: 0.85, saturation: 1.1 }).png().toBuffer();
   const fg = await sharp(src).resize(size, size, { fit: "inside" }).png().toBuffer();
   const fm = await sharp(fg).metadata();

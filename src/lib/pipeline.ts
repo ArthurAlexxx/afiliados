@@ -71,6 +71,7 @@ export async function buildPost(
 
   const data: PromoData = {
     ...parsed,
+    historico: "",
     link: first?.affiliateUrl || "",
     links: ok.map((c) => c.affiliateUrl).join("\n"),
     texto,
