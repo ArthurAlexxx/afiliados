@@ -136,3 +136,25 @@ export function perfumeOrigin(text: string): Origin | null {
   if (IMPORTADO_RE.test(n)) return "importado";
   return null;
 }
+
+const GENERIC_BRAND = new Set(["perfume", "lab", "fragrance", "fragrances", "world", "ard", "ch", "ck", "jpg"]);
+
+/**
+ * Nota do nome para exibição: queremos o nome completo como os grupos escrevem
+ * (marca + linha + concentração + ml), ex: "O Boticário Clash 100ml", não só "Clash 100ml".
+ */
+export function nameQuality(title: string): number {
+  const n = norm(title);
+  const words = n.split(" ");
+  const brand = words.some((w) => BRAND_WORDS.has(w) && !GENERIC_BRAND.has(w)) || perfumeOrigin(title) !== null;
+  let q = 0;
+  if (brand) q += 40;
+  if (/\b(eau de parfum|eau de toilette|edp|edt|parfum|extrait|colonia|elixir|intense)\b/.test(n)) q += 10;
+  if (/\b\d{2,4}\s*ml\b/.test(n)) q += 10;
+  const len = title.length;
+  if (len > 70) q -= (len - 70) * 0.8; // título de anúncio enorme
+  if (len < 12) q -= 10;
+  if (/[\u{1F300}-\u{1FAFF}]/u.test(title)) q -= 15;
+  q += Math.min(10, words.length); // um pouco mais de informação ajuda
+  return q;
+}

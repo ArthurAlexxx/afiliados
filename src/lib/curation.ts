@@ -4,7 +4,7 @@ import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { parsePromo, renderTemplate, formatPrice } from "./parser.ts";
-import { perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
+import { nameQuality, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { brandImage, standardImage } from "./branding.ts";
 import { Evolution } from "./evolution.ts";
@@ -24,9 +24,9 @@ function findOrCreateProduct(info: PerfumeInfo, title: string): number {
   const rows = db().prepare("SELECT * FROM products WHERE ml = ?").all(info.ml) as ProductRow[];
   for (const r of rows) {
     if (r.pkey === info.key || samePerfume(info, { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens), key: r.pkey })) {
-      // guarda o nome mais curto e limpo como nome de exibição
+      // guarda o nome mais completo (marca + linha + ml), como os grupos escrevem
       const clean = displayName(title);
-      if (clean.length >= 8 && clean.length < r.name.length) db().prepare("UPDATE products SET name = ? WHERE id = ?").run(clean, r.id);
+      if (nameQuality(clean) > nameQuality(r.name)) db().prepare("UPDATE products SET name = ? WHERE id = ?").run(clean, r.id);
       return r.id;
     }
   }
@@ -36,8 +36,28 @@ function findOrCreateProduct(info: PerfumeInfo, title: string): number {
   return Number(res.lastInsertRowid);
 }
 
+/** Revisa o nome de todos os perfumes com todos os títulos já vistos nos grupos (roda uma vez). */
+export function refreshProductNames(): number {
+  const rows = db().prepare("SELECT o.product_id, o.title, p.name FROM offers o JOIN products p ON p.id = o.product_id WHERE o.title IS NOT NULL").all() as {
+    product_id: number; title: string; name: string;
+  }[];
+  const best = new Map<number, { name: string; q: number; cur: string }>();
+  for (const r of rows) {
+    const clean = displayName(r.title);
+    const q = nameQuality(clean);
+    const b = best.get(r.product_id);
+    if (!b) best.set(r.product_id, { name: clean, q, cur: r.name });
+    else if (q > b.q) best.set(r.product_id, { ...b, name: clean, q });
+  }
+  let n = 0;
+  const up = db().prepare("UPDATE products SET name = ? WHERE id = ?");
+  for (const [id, b] of best) if (b.name !== b.cur && b.q > nameQuality(b.cur)) (up.run(b.name, id), n++);
+  return n;
+}
+
 function displayName(title: string) {
   return title
+    .replace(/[*_~]/g, "")
     .replace(/^perfume\s+(árabe\s+)?/i, "")
     .replace(/\s+(masculino|feminino|unissex)$/i, "")
     .replace(/\s+/g, " ")
@@ -578,6 +598,15 @@ type W = typeof globalThis & { __afiliadosCuration?: NodeJS.Timeout; __afiliados
 export function startCuration() {
   const w = globalThis as W;
   if (w.__afiliadosCuration) return;
+  if (getState("namesV2") !== "1") {
+    try {
+      const n = refreshProductNames();
+      setState("namesV2", "1");
+      log("info", `Nomes dos perfumes revisados: ${n} ficaram com o nome completo`);
+    } catch (e) {
+      log("warn", `Revisão de nomes: ${(e as Error).message}`);
+    }
+  }
   w.__afiliadosCuration = setInterval(async () => {
     if (w.__afiliadosCurationBusy) return;
     w.__afiliadosCurationBusy = true;
