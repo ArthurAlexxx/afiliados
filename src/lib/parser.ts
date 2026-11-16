@@ -1,6 +1,22 @@
 /** Extração heurística dos campos de uma mensagem de promoção. */
 
-export const DEFAULT_TEMPLATE = `📉 *BAIXOU {desconto_pct}%* · R$ {economia} a menos
+export const DEFAULT_TEMPLATE = `📉 *Baixou {desconto_pct}%*
+
+*{titulo}*
+
+❌ ~DE: R\${preco_antigo}~
+✅ POR: R\${preco} {frete_tag?}
+
+🏷️ Cupom: \`{cupom}\` ✅
+
+🛒 LOJA: *{loja_nome}*
+
+📎 LINK DO PRODUTO ➡️
+{link}`;
+
+/** Modelos padrão antigos: quem ainda usa um deles passa para o novo automaticamente. */
+export const OLD_DEFAULT_TEMPLATES = [
+  `📉 *BAIXOU {desconto_pct}%* · R$ {economia} a menos
 
 ✨ *{titulo}*
 
@@ -9,8 +25,8 @@ De ~R$ {preco_antigo}~
 🎟️ Cupom: *{cupom}*
 ✅ {loja_info}
 
-🛒 {link}`;
-
+🛒 {link}`,
+];
 
 export type PromoData = {
   titulo: string;
@@ -28,6 +44,8 @@ export type PromoData = {
   desconto_pct: string;
   economia: string;
   loja_info: string;
+  loja_nome: string;
+  frete_tag: string;
 };
 
 export const TEMPLATE_VARS: { key: keyof PromoData; label: string }[] = [
@@ -46,6 +64,8 @@ export const TEMPLATE_VARS: { key: keyof PromoData; label: string }[] = [
   { key: "desconto_pct", label: "Só o número do desconto, ex: 40" },
   { key: "economia", label: "Quanto baixou em R$, ex: 131,00" },
   { key: "loja_info", label: "Loja oficial X / Vendido por X" },
+  { key: "loja_nome", label: "Só o nome da loja" },
+  { key: "frete_tag", label: "(frete grátis) quando tiver" },
 ];
 
 const PRICE_RE = /R\$\s*([\d.]+(?:,\d{1,2})?)/gi;
@@ -85,10 +105,12 @@ const NUM = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)`;
 const DE_RE = new RegExp(String.raw`(?:^|[\s❌✖️:(])(?:de|era|antes)\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
 const POR_RE = new RegExp(String.raw`(?:^|[\s✅✔️:)~])(?:por|apenas|agora|s[óo]|hoje)\s*(?:apenas)?\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
 
-export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja" | "desconto_pct" | "economia" | "loja_info"> & {
+export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja" | "desconto_pct" | "economia" | "loja_info" | "loja_nome" | "frete_tag"> & {
   desconto_pct: string;
   economia: string;
   loja_info: string;
+  loja_nome: string;
+  frete_tag: string;
   /** preços numéricos (NaN quando não achou) */
   precoNum: number;
   precoAntigoNum: number;
@@ -199,6 +221,8 @@ export function parsePromo(text: string): ParsedPromo {
     desconto_pct: descontoPct ? String(descontoPct) : "",
     economia,
     loja_info,
+    loja_nome: /^loja\s*\d+$/i.test(nomeLoja) || /^(no|do)\b/i.test(nomeLoja) ? "" : nomeLoja,
+    frete_tag: /frete\s*gr[áa]tis/i.test(text) ? "(frete grátis)" : /\bfull\b/i.test(text) ? "(Full)" : "",
     precoNum: preco,
     precoAntigoNum: precoAntigo,
     descontoPct,

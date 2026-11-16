@@ -1,6 +1,6 @@
 import { db } from "./db.ts";
 
-import { DEFAULT_TEMPLATE } from "./parser.ts";
+import { DEFAULT_TEMPLATE, OLD_DEFAULT_TEMPLATES } from "./parser.ts";
 export { DEFAULT_TEMPLATE };
 
 export type Settings = {
@@ -148,6 +148,8 @@ export function getSettings(): Settings {
     }
   }
   const result = out as Settings;
+  // quem ainda usa um modelo padrão antigo recebe o novo padrão
+  if (OLD_DEFAULT_TEMPLATES.includes(result.template)) result.template = DEFAULT_TEMPLATE;
   if (!result.webhookToken) {
     // token do webhook gerado automaticamente na primeira execução
     let t = getState("webhookToken");
