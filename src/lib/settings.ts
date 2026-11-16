@@ -51,6 +51,8 @@ export type Settings = {
   curationRequireImage: boolean;
   /** post único às 21h com as 5 melhores ofertas do dia */
   top5Enabled: boolean;
+  /** "me avisa quando baixar": chamada 2x por dia e avisos no privado */
+  wishesEnabled: boolean;
 
   // Identidade visual (etiquetas na foto)
   brandEnabled: boolean;
@@ -115,6 +117,7 @@ export function defaults(): Settings {
     curationLookbackMinutes: 45,
     curationRequireImage: false,
     top5Enabled: true,
+    wishesEnabled: true,
 
     brandEnabled: true,
     brandName: env.BRAND_NAME || "",

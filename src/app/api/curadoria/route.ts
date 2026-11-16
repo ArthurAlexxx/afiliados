@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { getSettings, getState } from "@/lib/settings";
+import { wishStats } from "@/lib/wishes";
 import { brandName, importHistory, pickAndQueue, ranking } from "@/lib/curation";
 
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ export function GET(req: Request) {
     brand: { name: brandName(s), instagram: s.brandInstagram, enabled: s.brandEnabled },
     lastPickAt: Number(getState("lastCurationAt") || 0) || null,
     historyImported: getState("historyImported"),
+    wishes: wishStats(),
     totals: {
       offers: count("SELECT COUNT(*) n FROM offers"),
       offers24h: count("SELECT COUNT(*) n FROM offers WHERE created_at >= datetime('now','-1 day')"),

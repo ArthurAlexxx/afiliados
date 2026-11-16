@@ -31,7 +31,7 @@ const STOP = new Set(
   pour femme woman women al el ml lacrada caixa selo novo nova contratipo inspiracao`.split(/\s+/).filter(Boolean),
 );
 
-function norm(s: string) {
+export function norm(s: string) {
   return s
     .normalize("NFD")
     .replace(/[̀-ͯ]/g, "")

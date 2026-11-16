@@ -635,6 +635,11 @@ export function startCuration() {
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
       if (s.mode !== "curated") return;
+      // "me avisa quando baixar": chamada no grupo 2x por dia
+      {
+        const { maybeSendWishCall } = await import("./wishes.ts");
+        if (await maybeSendWishCall()) return;
+      }
       // Top 5 do dia às 21h (um post só)
       if (s.top5Enabled) {
         const { runTop5 } = await import("./top5.ts");

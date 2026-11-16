@@ -117,6 +117,26 @@ function migrate(db: DatabaseSync) {
     );
     CREATE INDEX IF NOT EXISTS idx_sales_kind ON sales(kind, updated_at);
 
+    -- "me avisa quando baixar": pedidos dos membros do nosso grupo
+    CREATE TABLE IF NOT EXISTS wishes (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      member_jid   TEXT NOT NULL,
+      member_name  TEXT,
+      text         TEXT NOT NULL,
+      query        TEXT NOT NULL,
+      tokens       TEXT NOT NULL,
+      product_id   INTEGER,
+      active       INTEGER NOT NULL DEFAULT 1,
+      notified_at  TEXT,
+      notify_count INTEGER NOT NULL DEFAULT 0,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_wishes_active ON wishes(active, created_at);
+    CREATE TABLE IF NOT EXISTS wish_calls (
+      message_id TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS logs (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       level      TEXT NOT NULL,

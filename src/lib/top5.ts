@@ -69,62 +69,104 @@ export function top5Picks(): Top5Pick[] {
 
 const FONT = `font-family="Inter, DejaVu Sans, sans-serif"`;
 
-async function tile(p: Top5Pick, n: number, w: number, h: number): Promise<Buffer> {
-  let base: Buffer;
+const MEDAL: Record<number, [string, string]> = { 1: ["#f7d774", "#c99a2e"], 2: ["#e6e8ec", "#9aa1ab"], 3: ["#e8b48a", "#a5653a"] };
+
+function roundedMask(w: number, h: number, r: number, onlyTop = false) {
+  const path = onlyTop
+    ? `<path d="M0 ${r} Q0 0 ${r} 0 H${w - r} Q${w} 0 ${w} ${r} V${h} H0 Z" fill="#fff"/>`
+    : `<rect width="${w}" height="${h}" rx="${r}" ry="${r}" fill="#fff"/>`;
+  return Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">${path}</svg>`);
+}
+
+/** Foto do perfume inteira (nunca corta), no tamanho w x h, com o fundo completado. */
+async function photo(p: Top5Pick, w: number, h: number): Promise<Buffer> {
   try {
-    // nunca corta o perfume: foto quadrada inteira no centro; sobras com a própria foto desfocada (fundo liso fica liso)
     const side = Math.min(w, h);
     const sq = await squareCanvas(fs.readFileSync(p.img!), side);
     const plain = await plainEdgeColor(sq);
     const bg = plain
       ? await sharp({ create: { width: w, height: h, channels: 3, background: plain } }).png().toBuffer()
       : await sharp(sq).resize(w, h, { fit: "cover" }).blur(30).png().toBuffer();
-    base = await sharp(bg)
+    return await sharp(bg)
       .composite([{ input: sq, left: Math.round((w - side) / 2), top: Math.round((h - side) / 2) }])
       .png()
       .toBuffer();
   } catch {
-    base = await sharp({ create: { width: w, height: h, channels: 3, background: "#e9e5df" } }).png().toBuffer();
+    return sharp({ create: { width: w, height: h, channels: 3, background: "#ece8e2" } }).png().toBuffer();
   }
-  const price = `R$ ${p.preco}`;
-  const priceW = price.length * 16.5;
-  const pill = Math.round(priceW + (p.pct ? 86 : 0) + 36);
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
-    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0.6" stop-color="#000" stop-opacity="0"/><stop offset="1" stop-color="#000" stop-opacity="0.5"/></linearGradient></defs>
-    <rect width="${w}" height="${h}" fill="url(#g)"/>
-    <circle cx="46" cy="46" r="28" fill="#111" fill-opacity="0.88"/>
-    <text x="46" y="56" text-anchor="middle" ${FONT} font-size="30" font-weight="800" fill="#fff">${n}</text>
-    <rect x="16" y="${h - 66}" width="${pill}" height="48" rx="24" fill="#fff" fill-opacity="0.96"/>
-    <text x="34" y="${h - 33}" ${FONT} font-size="28" font-weight="800" fill="#111">${esc(price)}</text>
-    ${p.pct ? `<text x="${Math.round(34 + priceW + 14)}" y="${h - 33}" ${FONT} font-size="24" font-weight="800" fill="#16a34a">-${esc(p.pct)}%</text>` : ""}
-  </svg>`;
-  return sharp(base).composite([{ input: Buffer.from(svg) }]).png().toBuffer();
 }
 
-/** Imagem 1080x1080: faixa do título + 3 perfumes em cima e 2 embaixo. */
+const clip = (t: string, max: number) => (t.length > max ? t.slice(0, max - 1).trimEnd() + "…" : t);
+
+/** Card: foto com cantos arredondados em cima, faixa branca com nome, preço e desconto; medalha com a posição. */
+async function card(p: Top5Pick, n: number, w: number, h: number): Promise<Buffer> {
+  const R = 26, info = 116, imgH = h - info;
+  const img = await sharp(await photo(p, w, imgH)).composite([{ input: roundedMask(w, imgH, R, true), blend: "dest-in" }]).png().toBuffer();
+  const [c1, c2] = MEDAL[n] || ["#2b2b2b", "#111"];
+  const numColor = MEDAL[n] ? "#2a1d05" : "#fff";
+  const name = clip(p.titulo.replace(/\s+\d{2,4}\s*ml$/i, (m) => m), Math.floor(w / 13.6));
+  const price = `R$ ${p.preco}`;
+  const priceW = price.length * 18.6;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <defs>
+      <linearGradient id="m" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>
+    </defs>
+    <rect y="${imgH - R}" width="${w}" height="${info + R}" rx="${R}" fill="#ffffff"/>
+    <rect y="${imgH - 1}" width="${w}" height="${R}" fill="#ffffff"/>
+    <circle cx="44" cy="44" r="27" fill="url(#m)" stroke="#fff" stroke-opacity="0.85" stroke-width="3"/>
+    <text x="44" y="54.5" text-anchor="middle" ${FONT} font-size="29" font-weight="800" fill="${numColor}">${n}</text>
+    <text x="20" y="${imgH + 40}" ${FONT} font-size="22" font-weight="700" fill="#1a1a1a">${esc(name)}</text>
+    <text x="20" y="${imgH + 88}" ${FONT} font-size="32" font-weight="800" fill="#111">${esc(price)}</text>
+    ${p.pct ? `<rect x="${Math.round(20 + priceW + 12)}" y="${imgH + 60}" width="${p.pct.length * 15 + 46}" height="36" rx="18" fill="#16a34a"/>
+    <text x="${Math.round(20 + priceW + 12 + (p.pct.length * 15 + 46) / 2)}" y="${imgH + 85}" text-anchor="middle" ${FONT} font-size="21" font-weight="800" fill="#fff">-${esc(p.pct)}%</text>` : ""}
+  </svg>`;
+  const body = await sharp({ create: { width: w, height: h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: img, left: 0, top: 0 }, { input: Buffer.from(svg) }])
+    .png()
+    .toBuffer();
+  return sharp(body).composite([{ input: roundedMask(w, h, R), blend: "dest-in" }]).png().toBuffer();
+}
+
+async function shadow(w: number, h: number) {
+  const pad = 30;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w + pad * 2}" height="${h + pad * 2}"><rect x="${pad}" y="${pad + 8}" width="${w}" height="${h}" rx="26" fill="#000" fill-opacity="0.55"/></svg>`;
+  return { buf: await sharp(Buffer.from(svg)).blur(14).png().toBuffer(), pad };
+}
+
+/** Imagem 1080x1350 (formato retrato do WhatsApp): título + 3 cards em cima e 2 embaixo, cantos arredondados. */
 export async function top5Image(picks: Top5Pick[], groupName: string): Promise<Buffer> {
-  const W = 1080, H = 1080, head = 150, gap = 8;
+  const W = 1080, H = 1350, M = 36, head = 176, gap = 20;
   const tz = getSettings().timezone || "America/Sao_Paulo";
   const date = new Intl.DateTimeFormat("pt-BR", { timeZone: tz, day: "2-digit", month: "2-digit" }).format(new Date());
-  const header = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${head}">
-    <rect width="${W}" height="${head}" fill="#111"/>
-    <text x="40" y="82" ${FONT} font-size="54" font-weight="800" fill="#fff">TOP ${picks.length} DO DIA</text>
-    <text x="40" y="124" ${FONT} font-size="26" font-weight="500" fill="#bbb">${esc(groupName)} · ${date} · as melhores ofertas de hoje</text>
+  const bg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}">
+    <defs>
+      <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#1c1917"/><stop offset="1" stop-color="#0c0a09"/></linearGradient>
+      <radialGradient id="glow" cx="0.85" cy="0.05" r="0.6"><stop offset="0" stop-color="#c99a2e" stop-opacity="0.28"/><stop offset="1" stop-color="#c99a2e" stop-opacity="0"/></radialGradient>
+      <linearGradient id="gold" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#f7d774"/><stop offset="1" stop-color="#c99a2e"/></linearGradient>
+    </defs>
+    <rect width="${W}" height="${H}" fill="url(#bg)"/>
+    <rect width="${W}" height="${H}" fill="url(#glow)"/>
+    <text x="${M + 4}" y="96" ${FONT} font-size="64" font-weight="800" fill="#fff" letter-spacing="-1">TOP ${picks.length} <tspan fill="url(#gold)">DO DIA</tspan></text>
+    <rect x="${M + 4}" y="118" width="64" height="5" rx="2.5" fill="url(#gold)"/>
+    <text x="${M + 84}" y="125" ${FONT} font-size="24" font-weight="500" fill="#a8a29e">${esc(groupName)} · ${date} · as melhores ofertas de hoje</text>
   </svg>`);
   const top = picks.slice(0, 3);
   const bottom = picks.slice(3);
-  const rowH = bottom.length ? Math.floor((H - head - gap) / 2) : H - head;
-  const layers: OverlayOptions[] = [{ input: header, left: 0, top: 0 }];
+  const areaH = H - head - M;
+  const rowH = bottom.length ? Math.floor((areaH - gap) / 2) : areaH;
+  const layers: OverlayOptions[] = [];
   const place = async (row: Top5Pick[], y: number, offset: number) => {
-    const tw = Math.floor((W - gap * (row.length - 1)) / row.length);
-    for (let i = 0; i < row.length; i++) layers.push({ input: await tile(row[i], offset + i + 1, tw, rowH), left: i * (tw + gap), top: y });
+    const cw = Math.floor((W - 2 * M - gap * (row.length - 1)) / row.length);
+    const sh = await shadow(cw, rowH);
+    for (let i = 0; i < row.length; i++) {
+      const x = M + i * (cw + gap);
+      layers.push({ input: sh.buf, left: x - sh.pad, top: y - sh.pad });
+      layers.push({ input: await card(row[i], offset + i + 1, cw, rowH), left: x, top: y });
+    }
   };
   await place(top, head, 0);
   if (bottom.length) await place(bottom, head + rowH + gap, 3);
-  return sharp({ create: { width: W, height: H, channels: 3, background: "#111" } })
-    .composite(layers)
-    .jpeg({ quality: 90, mozjpeg: true })
-    .toBuffer();
+  return sharp(bg).composite(layers).jpeg({ quality: 90, mozjpeg: true }).toBuffer();
 }
 
 const NUMS = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣"];

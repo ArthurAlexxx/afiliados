@@ -8,6 +8,7 @@ import { manchete, parsePromo, renderTemplate, type PromoData } from "./parser.t
 import { aiExtract } from "./ai.ts";
 import { Evolution } from "./evolution.ts";
 import { evaluateInstant, recordOffer } from "./curation.ts";
+import { handlePrivateMessage, handleWishMessage, notifyWishes } from "./wishes.ts";
 
 export type PostStatus = "pending" | "queued" | "sending" | "sent" | "failed" | "skipped" | "duplicate";
 
@@ -115,14 +116,14 @@ export async function buildPost(
 
 type WAMessage = {
   conversation?: string;
-  extendedTextMessage?: { text?: string };
+  extendedTextMessage?: { text?: string; contextInfo?: { stanzaId?: string } };
   imageMessage?: { caption?: string; mimetype?: string };
   videoMessage?: { caption?: string };
   base64?: string;
 };
 
 type UpsertData = {
-  key?: { remoteJid?: string; fromMe?: boolean; id?: string; participant?: string };
+  key?: { remoteJid?: string; fromMe?: boolean; id?: string; participant?: string; participantAlt?: string; remoteJidAlt?: string };
   pushName?: string;
   message?: WAMessage;
   messageType?: string;
@@ -155,12 +156,27 @@ async function ingestMessage(d: UpsertData): Promise<string> {
   const s = getSettings();
   const jid = d.key?.remoteJid || "";
   const messageId = d.key?.id || "";
-  if (!jid.endsWith("@g.us")) return "ignorado: não é grupo";
   if (d.key?.fromMe && s.ignoreFromMe) return "ignorado: fromMe";
+  if (!jid.endsWith("@g.us")) {
+    // privado: só serve para "parar" os avisos do "me avisa quando baixar"
+    const who = [jid, d.key?.remoteJidAlt].find((x) => x && x.endsWith("@s.whatsapp.net")) || jid;
+    return handlePrivateMessage(who, extractText(d.message));
+  }
 
   const group = db().prepare("SELECT name, role, watermark FROM groups WHERE jid = ?").get(jid) as
     | { name: string; role: string; watermark: number }
     | undefined;
+  if (group?.role === "destination") {
+    // nosso grupo: pedidos do "me avisa quando baixar"
+    const member = [d.key?.participantAlt, d.key?.participant].find((x) => x && x.endsWith("@s.whatsapp.net")) || d.key?.participant || "";
+    return handleWishMessage({
+      messageId,
+      memberJid: member,
+      memberName: d.pushName,
+      text: extractText(d.message),
+      replyTo: d.message?.extendedTextMessage?.contextInfo?.stanzaId || null,
+    }).catch((e) => `erro no pedido: ${(e as Error).message}`);
+  }
   if (!group || group.role !== "source") return "ignorado: grupo não é de origem";
 
   if (messageId) {
@@ -331,7 +347,7 @@ export async function processQueue(): Promise<string> {
 export async function sendPost(id: number): Promise<string> {
   const s = getSettings();
   const post = db().prepare("SELECT * FROM posts WHERE id = ?").get(id) as
-    | { id: number; formatted_text: string; media_path: string | null; media_mime: string | null; attempts: number }
+    | { id: number; formatted_text: string; media_path: string | null; media_mime: string | null; attempts: number; origin: string; product_id: number | null; data_json: string }
     | undefined;
   if (!post) throw new Error("Post não encontrado");
 
@@ -373,6 +389,15 @@ export async function sendPost(id: number): Promise<string> {
     .prepare("UPDATE posts SET status='sent', sent_at=datetime('now'), reason=? WHERE id=?")
     .run(errors.length ? errors.join(" | ") : null, id);
   log("info", `Post #${id} enviado para ${dests.length - errors.length} grupo(s)`);
+  // "me avisa quando baixar": avisa no privado quem pediu esse perfume (em segundo plano)
+  if (post.origin === "curated" && post.product_id) {
+    try {
+      const d = JSON.parse(post.data_json).data || {};
+      if (d.link) void notifyWishes({ productId: post.product_id, titulo: d.titulo || "", preco: d.preco || "", link: d.link }).catch(() => {});
+    } catch {
+      /* ignora */
+    }
+  }
   return "enviado";
 }
 
