@@ -45,7 +45,7 @@ export type Settings = {
   mode: "curated" | "repost";
   curationIntervalMinutes: number;
   curationCooldownHours: number;
-  curationLookbackHours: number;
+  curationLookbackMinutes: number;
   curationRequireImage: boolean;
 
   // Identidade visual (etiquetas na foto)
@@ -104,9 +104,9 @@ export function defaults(): Settings {
     template: DEFAULT_TEMPLATE,
 
     mode: (env.MODE as Settings["mode"]) || "curated",
-    curationIntervalMinutes: Number(env.CURATION_INTERVAL_MINUTES || 30),
+    curationIntervalMinutes: Number(env.CURATION_INTERVAL_MINUTES || 15),
     curationCooldownHours: 48,
-    curationLookbackHours: 6,
+    curationLookbackMinutes: 45,
     curationRequireImage: false,
 
     brandEnabled: true,

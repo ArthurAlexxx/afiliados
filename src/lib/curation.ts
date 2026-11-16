@@ -174,7 +174,8 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
   const imgBy = new Map<number, typeof imgs>();
   for (const i of imgs) imgBy.set(i.product_id, [...(imgBy.get(i.product_id) || []), i]);
 
-  const recentSince = Date.now() - s.curationLookbackHours * 3600e3;
+  const lookbackMs = Math.max(5, s.curationLookbackMinutes) * 60e3;
+  const recentSince = Date.now() - lookbackMs;
   const coolSince = Date.now() - s.curationCooldownHours * 3600e3;
   const ts = (d: string) => new Date(d.replace(" ", "T") + "Z").getTime();
 
@@ -199,12 +200,14 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
       10 * Math.min(1, list.length / 20) +
       20 * Math.min(1, recentGroups / 3) +
       30 * Math.max(0, Math.min(1, (pctVsMedian ?? 0) / 0.2)) +
-      10 * Math.min(1, Math.max(0, (declaredPct ?? 0) - 20) / 30);
+      10 * Math.min(1, Math.max(0, (declaredPct ?? 0) - 20) / 30) +
+      // quanto mais nova a oferta, melhor (preço ainda deve estar valendo)
+      (best ? 15 * Math.max(0, 1 - (Date.now() - ts(best.created_at)) / lookbackMs) : 0);
     if (!pimgs.length) score -= 20;
     score = Math.round(Math.max(0, score));
 
     let why = "";
-    if (!best) why = `sem oferta nas últimas ${s.curationLookbackHours}h`;
+    if (!best) why = `sem oferta nos últimos ${s.curationLookbackMinutes} min`;
     else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
     out.push({

@@ -194,7 +194,7 @@ export default function CuradoriaPage() {
           brandInstagram: String(s.brandInstagram || "").trim(),
           curationIntervalMinutes: Number(s.curationIntervalMinutes),
           curationCooldownHours: Number(s.curationCooldownHours),
-          curationLookbackHours: Number(s.curationLookbackHours),
+          curationLookbackMinutes: Number(s.curationLookbackMinutes),
           curationRequireImage: Boolean(s.curationRequireImage),
         },
       });
@@ -329,8 +329,8 @@ export default function CuradoriaPage() {
                     <Input type="number" min={1} value={String(s.curationCooldownHours)} onChange={(e) => set("curationCooldownHours")(e.target.value)} />
                   </Field>
                 </div>
-                <Field label="Oferta vale por (h)" hint="Só considera promoções postadas nos grupos nesse intervalo.">
-                  <Input type="number" min={1} value={String(s.curationLookbackHours)} onChange={(e) => set("curationLookbackHours")(e.target.value)} />
+                <Field label="Oferta vale por (min)" hint="Só posta promoções que os grupos publicaram nesse intervalo, para o preço ainda estar valendo.">
+                  <Input type="number" min={5} value={String(s.curationLookbackMinutes)} onChange={(e) => set("curationLookbackMinutes")(e.target.value)} />
                 </Field>
                 <Switch checked={Boolean(s.curationRequireImage)} onChange={set("curationRequireImage")} label="Só postar com foto do banco" description="Sem isso, usa a foto do anúncio quando o perfume não tem foto boa." />
                 <Button onClick={save} loading={busy === "save"} disabled={!dirty}>
