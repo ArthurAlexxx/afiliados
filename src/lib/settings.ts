@@ -45,6 +45,7 @@ export type Settings = {
   mode: "curated" | "repost";
   curationIntervalMinutes: number; // 0 = sem rodada fixa
   curationInstantScore: number; // nota mínima para postar na hora em que a promoção chega
+  curationPerHour: number; // ritmo médio de posts por hora (média dos grupos de origem)
   curationCooldownHours: number;
   curationLookbackMinutes: number;
   curationRequireImage: boolean;
@@ -107,6 +108,7 @@ export function defaults(): Settings {
     mode: (env.MODE as Settings["mode"]) || "curated",
     curationIntervalMinutes: Number(env.CURATION_INTERVAL_MINUTES || 0),
     curationInstantScore: Number(env.CURATION_INSTANT_SCORE || 60),
+    curationPerHour: Number(env.CURATION_PER_HOUR || 5),
     curationCooldownHours: 5,
     curationLookbackMinutes: 45,
     curationRequireImage: false,

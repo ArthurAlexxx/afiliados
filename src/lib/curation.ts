@@ -397,6 +397,15 @@ export async function pickAndQueue(opts: { productId?: number; force?: boolean }
  * Avaliação imediata: chamada a cada promoção que chega. Se o perfume dela está entre os melhores
  * agora (nota >= curationInstantScore) e não foi postado recentemente, posta na hora.
  */
+/** Respeita o ritmo médio: no máximo curationPerHour posts por hora, espaçados. */
+export function slotOpen(s: Settings) {
+  if (!s.curationPerHour || s.curationPerHour <= 0) return true;
+  const gapMs = (60 / s.curationPerHour) * 60e3;
+  const last = db().prepare("SELECT MAX(created_at) t FROM posts WHERE origin = 'curated' AND status IN ('queued','sending','sent','pending')").get() as { t: string | null };
+  if (!last.t) return true;
+  return Date.now() - new Date(last.t.replace(" ", "T") + "Z").getTime() >= gapMs;
+}
+
 export async function evaluateInstant(productId: number): Promise<string> {
   const s = getSettings();
   if (s.mode !== "curated" || !s.curationInstantScore) return "";
@@ -405,6 +414,7 @@ export async function evaluateInstant(productId: number): Promise<string> {
   const item = ranking(s).find((r) => r.productId === productId);
   if (!item || !item.eligible) return item?.why || "";
   if (item.score < s.curationInstantScore) return `nota ${item.score} < ${s.curationInstantScore}`;
+  if (!slotOpen(s)) return `nota ${item.score}, aguardando o ritmo de ${s.curationPerHour}/h`;
   // evita duas escolhas simultâneas do mesmo perfume (várias mensagens chegando juntas)
   const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now','-10 minutes')").get(productId);
   if (busy) return "já escolhido";
@@ -502,6 +512,14 @@ export function startCuration() {
       if (process.env.AUTO_SOURCE_GROUPS && !getState("historyImported")) return;
       const { inActiveWindow } = await import("./pipeline.ts");
       if (!inActiveWindow(s)) return;
+      // quando abre a vaga do ritmo, posta a melhor promoção boa que estiver valendo
+      if (slotOpen(s)) {
+        const top = ranking(s).find((i) => i.eligible);
+        if (top && top.score >= s.curationInstantScore) {
+          await pickAndQueue({ productId: top.productId });
+          return;
+        }
+      }
       // rodada fixa opcional (0 = desligada): só serve para não ficar parado quando nada bom chega
       if (!s.curationIntervalMinutes) return;
       const last = Number(getState("lastCurationAt") || 0);
