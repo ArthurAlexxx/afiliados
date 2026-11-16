@@ -43,7 +43,8 @@ export type Settings = {
 
   // Curadoria: em vez de repostar tudo, escolhe a melhor promoção entre os grupos
   mode: "curated" | "repost";
-  curationIntervalMinutes: number;
+  curationIntervalMinutes: number; // 0 = sem rodada fixa
+  curationInstantScore: number; // nota mínima para postar na hora em que a promoção chega
   curationCooldownHours: number;
   curationLookbackMinutes: number;
   curationRequireImage: boolean;
@@ -104,7 +105,8 @@ export function defaults(): Settings {
     template: DEFAULT_TEMPLATE,
 
     mode: (env.MODE as Settings["mode"]) || "curated",
-    curationIntervalMinutes: Number(env.CURATION_INTERVAL_MINUTES || 15),
+    curationIntervalMinutes: Number(env.CURATION_INTERVAL_MINUTES || 0),
+    curationInstantScore: Number(env.CURATION_INSTANT_SCORE || 60),
     curationCooldownHours: 48,
     curationLookbackMinutes: 45,
     curationRequireImage: false,

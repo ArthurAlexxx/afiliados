@@ -7,7 +7,7 @@ import { convertMeliLink, type ConvertResult } from "./affiliate.ts";
 import { parsePromo, renderTemplate, type PromoData } from "./parser.ts";
 import { aiExtract } from "./ai.ts";
 import { Evolution } from "./evolution.ts";
-import { recordOffer } from "./curation.ts";
+import { evaluateInstant, recordOffer } from "./curation.ts";
 
 export type PostStatus = "pending" | "queued" | "sending" | "sent" | "failed" | "skipped" | "duplicate";
 
@@ -185,7 +185,11 @@ async function ingestMessage(d: UpsertData): Promise<string> {
     const r = await recordOffer({ messageId, groupJid: jid, groupName: group.name, text, image, watermark: Boolean(group.watermark) }).catch(
       (e) => `erro: ${(e as Error).message}`,
     );
-    if (s.mode === "curated") return `curadoria: ${r}`;
+    if (s.mode === "curated") {
+      const pid = r.match(/produto #(\d+)/)?.[1];
+      const now = pid ? await evaluateInstant(Number(pid)).catch((e) => `erro: ${(e as Error).message}`) : "";
+      return `curadoria: ${r}${now ? ` · ${now}` : ""}`;
+    }
   }
 
   const built = await buildPost(text, s, {
@@ -304,6 +308,13 @@ export async function processQueue(): Promise<string> {
     if (!inActiveWindow(s)) return "fora do horário";
     const last = Number(getState("lastSentAt") || 0);
     if (Date.now() - last < s.minIntervalSeconds * 1000) return "aguardando intervalo";
+    // post da curadoria que ficou tempo demais na fila: o preço pode ter mudado, descarta
+    db()
+      .prepare(
+        `UPDATE posts SET status='skipped', reason='Oferta ficou velha na fila' WHERE status='queued' AND origin='curated'
+         AND created_at < datetime('now', ?)`,
+      )
+      .run(`-${Math.max(5, s.curationLookbackMinutes)} minutes`);
     const next = db().prepare("SELECT id FROM posts WHERE status = 'queued' ORDER BY id LIMIT 1").get() as
       | { id: number }
       | undefined;

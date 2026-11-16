@@ -193,6 +193,7 @@ export default function CuradoriaPage() {
           brandName: String(s.brandName || ""),
           brandInstagram: String(s.brandInstagram || "").trim(),
           curationIntervalMinutes: Number(s.curationIntervalMinutes),
+          curationInstantScore: Number(s.curationInstantScore),
           curationCooldownHours: Number(s.curationCooldownHours),
           curationLookbackMinutes: Number(s.curationLookbackMinutes),
           curationRequireImage: Boolean(s.curationRequireImage),
@@ -221,7 +222,7 @@ export default function CuradoriaPage() {
     <>
       <PageHeader
         title="Curadoria"
-        description="Os grupos de origem viram uma base de preços e fotos. A cada rodada, o robô escolhe o perfume com a melhor oferta e posta com a melhor foto."
+        description="Cada promoção que chega dos grupos é avaliada na hora. Se for boa, sai no seu grupo em segundos, com a melhor foto e o seu link."
         actions={
           <>
             <Button size="sm" variant="outline" onClick={() => act("import", { action: "import" }, (r) => r.result || "Importado")} loading={busy === "import"}>
@@ -241,7 +242,7 @@ export default function CuradoriaPage() {
         <Kpi
           title="Postados pela curadoria"
           value={t?.curatedSent ?? "—"}
-          hint={data?.lastPickAt ? `última escolha ${timeAgo(new Date(data.lastPickAt).toISOString().slice(0, 19).replace("T", " "))}` : data?.mode === "curated" ? `a cada ${data.interval} min` : "curadoria desligada"}
+          hint={data?.lastPickAt ? `última escolha ${timeAgo(new Date(data.lastPickAt).toISOString().slice(0, 19).replace("T", " "))}` : data?.mode === "curated" ? "posta assim que chega promoção boa" : "curadoria desligada"}
           icon={Send}
         />
       </div>
@@ -322,13 +323,16 @@ export default function CuradoriaPage() {
                   />
                 </Field>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Postar a cada (min)">
-                    <Input type="number" min={5} value={String(s.curationIntervalMinutes)} onChange={(e) => set("curationIntervalMinutes")(e.target.value)} />
+                  <Field label="Nota para postar na hora" hint="Promoção que chega com essa nota ou mais sai na mesma hora.">
+                    <Input type="number" min={1} max={100} value={String(s.curationInstantScore)} onChange={(e) => set("curationInstantScore")(e.target.value)} />
                   </Field>
                   <Field label="Não repetir por (h)">
                     <Input type="number" min={1} value={String(s.curationCooldownHours)} onChange={(e) => set("curationCooldownHours")(e.target.value)} />
                   </Field>
                 </div>
+                <Field label="Postar o melhor a cada (min)" hint="Opcional. 0 = sem rodada fixa, só posta quando chega promoção boa.">
+                  <Input type="number" min={0} value={String(s.curationIntervalMinutes)} onChange={(e) => set("curationIntervalMinutes")(e.target.value)} />
+                </Field>
                 <Field label="Oferta vale por (min)" hint="Só posta promoções que os grupos publicaram nesse intervalo, para o preço ainda estar valendo.">
                   <Input type="number" min={5} value={String(s.curationLookbackMinutes)} onChange={(e) => set("curationLookbackMinutes")(e.target.value)} />
                 </Field>

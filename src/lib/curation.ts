@@ -393,6 +393,30 @@ export async function pickAndQueue(opts: { productId?: number; force?: boolean }
   return `post #${r.id} (${item.name}) → ${r.status}`;
 }
 
+/**
+ * Avaliação imediata: chamada a cada promoção que chega. Se o perfume dela está entre os melhores
+ * agora (nota >= curationInstantScore) e não foi postado recentemente, posta na hora.
+ */
+export async function evaluateInstant(productId: number): Promise<string> {
+  const s = getSettings();
+  if (s.mode !== "curated" || !s.curationInstantScore) return "";
+  const { inActiveWindow } = await import("./pipeline.ts");
+  if (!inActiveWindow(s)) return "fora do horário";
+  const item = ranking(s).find((r) => r.productId === productId);
+  if (!item || !item.eligible) return item?.why || "";
+  if (item.score < s.curationInstantScore) return `nota ${item.score} < ${s.curationInstantScore}`;
+  // evita duas escolhas simultâneas do mesmo perfume (várias mensagens chegando juntas)
+  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now','-10 minutes')").get(productId);
+  if (busy) return "já escolhido";
+  setState("lastCurationAt", String(Date.now()));
+  const r = await createCuratedPost(item, s);
+  if (r.status === "queued") {
+    const { processQueue } = await import("./pipeline.ts");
+    void processQueue();
+  }
+  return `postado na hora: #${r.id} ${item.name} (nota ${item.score}) → ${r.status}`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Histórico                                                            */
 /* ------------------------------------------------------------------ */
@@ -478,6 +502,8 @@ export function startCuration() {
       if (process.env.AUTO_SOURCE_GROUPS && !getState("historyImported")) return;
       const { inActiveWindow } = await import("./pipeline.ts");
       if (!inActiveWindow(s)) return;
+      // rodada fixa opcional (0 = desligada): só serve para não ficar parado quando nada bom chega
+      if (!s.curationIntervalMinutes) return;
       const last = Number(getState("lastCurationAt") || 0);
       if (Date.now() - last < s.curationIntervalMinutes * 60e3) return;
       const r = await pickAndQueue();
