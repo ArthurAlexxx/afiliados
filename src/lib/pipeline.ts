@@ -417,6 +417,20 @@ export function startWorker() {
   const old = db().prepare("UPDATE posts SET status='skipped', reason='Descartado: aprovação manual não existe mais (o agente decide)' WHERE status='pending'").run();
   if (old.changes) log("info", `${old.changes} post(s) parados esperando aprovação foram descartados`);
   log("info", "Worker da fila iniciado (verifica a cada 15s)");
+  // ajustes vindos de variáveis do Railway (aplicados uma vez por valor, depois o painel manda)
+  import("./settings.ts").then(({ saveSettings, getState, setState }) => {
+    const perHour = process.env.CURATION_PER_HOUR;
+    if (perHour && getState("envPerHour") !== perHour) {
+      saveSettings({ curationPerHour: Number(perHour) });
+      setState("envPerHour", perHour);
+      log("info", `Ritmo ajustado para ${perHour} posts por hora`);
+    }
+    if (process.env.OPENAI_API_KEY && !getState("envImageFix")) {
+      saveSettings({ imageFixEnabled: true });
+      setState("envImageFix", "1");
+      log("info", "Imagens com IA ligadas (chave da OpenAI encontrada)");
+    }
+  });
   // volume de postagens de cada grupo (ontem e hoje) nos logs, 1 min depois de subir
   setTimeout(() => import("./volume.ts").then((m) => m.logGroupVolume()).catch((e) => log("warn", `Volume: ${(e as Error).message}`)), 60e3);
 }
