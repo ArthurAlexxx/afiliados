@@ -155,3 +155,37 @@ export async function shorten(url: string, s: Settings): Promise<string> {
     return url;
   }
 }
+
+/**
+ * Descobre a etiqueta (matt_word) e o matt_tool a partir de um link de afiliado seu (ex: meli.la/xxxx),
+ * seguindo os redirecionamentos e, se precisar, lendo o HTML da página final.
+ */
+export async function learnFromSampleLink(url: string): Promise<{ tag: string; tool: string; trail: string[] }> {
+  const trail: string[] = [];
+  let current = normalizeUrl(url);
+  let html = "";
+  for (let i = 0; i < 10; i++) {
+    trail.push(current);
+    const res = await fetch(current, { redirect: "manual", headers: { "user-agent": UA }, signal: AbortSignal.timeout(15000) });
+    const loc = res.headers.get("location");
+    if (res.status >= 300 && res.status < 400 && loc) {
+      current = new URL(loc, current).toString();
+      continue;
+    }
+    html = await res.text().catch(() => "");
+    break;
+  }
+  const find = (k: string) => {
+    for (const u of trail) {
+      try {
+        const v = new URL(u).searchParams.get(k);
+        if (v) return v;
+      } catch {
+        /* ignora */
+      }
+    }
+    const m = html.match(new RegExp(`${k}(?:=|\\\\u003d|%3D|"\\s*:\\s*")([A-Za-z0-9_.-]+)`));
+    return m ? m[1] : "";
+  };
+  return { tag: find("matt_word"), tool: find("matt_tool"), trail };
+}

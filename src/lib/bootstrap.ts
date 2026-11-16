@@ -2,6 +2,28 @@ import { db, log } from "./db.ts";
 import { Evolution } from "./evolution.ts";
 import { getSettings, getState, setState, webhookUrl, type Settings } from "./settings.ts";
 
+/**
+ * MELI_SAMPLE_LINK: um link de afiliado seu (meli.la). O painel descobre a etiqueta e configura
+ * a troca de links sozinho (parâmetros + encurtador).
+ */
+async function learnAffiliate(s: Settings) {
+  const link = process.env.MELI_SAMPLE_LINK;
+  if (!link || getState("meliSample") === link) return;
+  const { learnFromSampleLink } = await import("./affiliate.ts");
+  const r = await learnFromSampleLink(link);
+  log("info", `Link de exemplo ${link}: etiqueta "${r.tag || "?"}", matt_tool "${r.tool || "?"}" (${r.trail.map((u) => u.split("?")[0]).join(" → ")})`);
+  if (!r.tag) return;
+  const { saveSettings } = await import("./settings.ts");
+  saveSettings({
+    meliStrategy: s.meliCookie ? s.meliStrategy : "params",
+    meliTag: r.tag,
+    meliMattTool: r.tool || s.meliMattTool,
+    shortener: s.shortener === "none" ? "tinyurl" : s.shortener,
+  });
+  setState("meliSample", link);
+  log("info", `Afiliado configurado: etiqueta ${r.tag}, links encurtados`);
+}
+
 /** Atualiza a lista de grupos da instância. */
 export async function syncGroups(s: Settings = getSettings()) {
   const list = await new Evolution(s).fetchAllGroups();
@@ -99,6 +121,7 @@ export async function ensureEvolution(): Promise<string> {
     log("warn", `Não consegui configurar o webhook: ${(e as Error).message}`);
     return "falha no webhook";
   }
+  await learnAffiliate(s).catch((e) => log("warn", `Link de afiliado de exemplo: ${(e as Error).message}`));
   await autoSetupGroups(s).catch((e) => log("warn", `Configuração automática dos grupos: ${(e as Error).message}`));
   return "ok";
 }
