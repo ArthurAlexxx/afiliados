@@ -310,6 +310,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     ...built.data,
     titulo: item.name,
     desconto: discount ? `(-${discount}%)` : built.data.desconto,
+    desconto_pct: discount ? String(discount) : built.data.desconto_pct,
     grupo_origem: item.best.group_name,
   };
   const formatted = renderTemplate(s.template, data);

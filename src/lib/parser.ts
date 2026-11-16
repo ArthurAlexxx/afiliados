@@ -1,15 +1,15 @@
 /** Extração heurística dos campos de uma mensagem de promoção. */
 
-export const DEFAULT_TEMPLATE = `🔥 *{titulo}*
+export const DEFAULT_TEMPLATE = `📉 *BAIXOU {desconto_pct}%* · R$ {economia} a menos
 
-~De R$ {preco_antigo}~
-💰 *Por R$ {preco}* {desconto?}
+✨ *{titulo}*
+
+De ~R$ {preco_antigo}~
+💰 Por *R$ {preco}*
 🎟️ Cupom: *{cupom}*
-🚚 {frete}
+✅ {loja_info}
 
-🛒 *Compre aqui:* {link}
-
-⚠️ _Preço e estoque podem mudar a qualquer momento._`;
+🛒 {link}`;
 
 
 export type PromoData = {
@@ -25,6 +25,9 @@ export type PromoData = {
   texto: string;
   grupo_origem: string;
   loja: string;
+  desconto_pct: string;
+  economia: string;
+  loja_info: string;
 };
 
 export const TEMPLATE_VARS: { key: keyof PromoData; label: string }[] = [
@@ -40,6 +43,9 @@ export const TEMPLATE_VARS: { key: keyof PromoData; label: string }[] = [
   { key: "texto", label: "Texto original com links trocados" },
   { key: "grupo_origem", label: "Nome do grupo de origem" },
   { key: "loja", label: "Loja (Mercado Livre)" },
+  { key: "desconto_pct", label: "Só o número do desconto, ex: 40" },
+  { key: "economia", label: "Quanto baixou em R$, ex: 131,00" },
+  { key: "loja_info", label: "Loja oficial X / Vendido por X" },
 ];
 
 const PRICE_RE = /R\$\s*([\d.]+(?:,\d{1,2})?)/gi;
@@ -79,7 +85,10 @@ const NUM = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)`;
 const DE_RE = new RegExp(String.raw`(?:^|[\s❌✖️:(])(?:de|era|antes)\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
 const POR_RE = new RegExp(String.raw`(?:^|[\s✅✔️:)~])(?:por|apenas|agora|s[óo]|hoje)\s*(?:apenas)?\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
 
-export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja"> & {
+export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja" | "desconto_pct" | "economia" | "loja_info"> & {
+  desconto_pct: string;
+  economia: string;
+  loja_info: string;
   /** preços numéricos (NaN quando não achou) */
   precoNum: number;
   precoAntigoNum: number;
@@ -168,6 +177,15 @@ export function parsePromo(text: string): ParsedPromo {
     text.match(/Vendido por\s*_?\*?([^*_\n(]+)/i);
   const loja_vendedor = lm ? lm[1].replace(/[*_]/g, "").trim() : "";
 
+  const oficial = /loja\s+oficial/i.test(text);
+  const nomeLoja = loja_vendedor.replace(/^loja oficial\s*/i, "").replace(/\s+no\s+(ML|MELI|Mercado Livre)!?$/i, "").trim();
+  const loja_info = oficial
+    ? `Loja oficial${nomeLoja && !/^(no|do)\b/i.test(nomeLoja) ? ` ${nomeLoja}` : ""}`
+    : nomeLoja
+      ? `Vendido por ${nomeLoja}`
+      : "";
+  const economia = !Number.isNaN(precoAntigo) && !Number.isNaN(preco) ? formatPrice(precoAntigo - preco) : "";
+
   const cupomOnly = Number.isNaN(preco) || (!/\d+\s*ml\b/i.test(text) && !POR_RE.test(text.replace(/[*_`~]/g, "")));
 
   return {
@@ -178,6 +196,9 @@ export function parsePromo(text: string): ParsedPromo {
     cupom,
     frete,
     parcelamento,
+    desconto_pct: descontoPct ? String(descontoPct) : "",
+    economia,
+    loja_info,
     precoNum: preco,
     precoAntigoNum: precoAntigo,
     descontoPct,

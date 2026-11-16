@@ -32,7 +32,7 @@ export function WaPreview({
       <div className="ml-auto w-fit max-w-[92%] rounded-xl rounded-tr-sm bg-[#d9fdd3] p-1 text-[13.5px] leading-[1.45] text-[#111b21] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)] dark:bg-[#005c4b] dark:text-[#e9edef]">
         {image ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={image} alt="" className="mb-1 max-h-64 w-full rounded-lg object-cover" />
+          <img src={image} alt="" className="mb-1 h-auto w-full rounded-lg" />
         ) : null}
         <div className="px-2 pt-1 pb-0.5">
           {text ? (
