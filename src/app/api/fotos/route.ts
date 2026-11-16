@@ -1,5 +1,6 @@
 import { db } from "@/lib/db";
 import { bestImagePath } from "@/lib/curation";
+import { learnPrefs, prefsSummary } from "@/lib/photoprefs";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,7 @@ export async function GET(req: Request) {
     const usedPath = bestImagePath(id);
     const used = images.find((i) => i.path === usedPath)?.id ?? null;
     for (const i of images) delete i.path;
-    return Response.json({ product, images, used });
+    return Response.json({ product, images, used, learned: prefsSummary() });
   }
   const q = `%${(u.searchParams.get("q") || "").trim()}%`;
   const rows = db()
@@ -30,9 +31,16 @@ export async function GET(req: Request) {
        FROM products p JOIN images i ON i.product_id = p.id
        WHERE p.name LIKE ? GROUP BY p.id ORDER BY last DESC LIMIT 300`,
     )
-    .all(q);
+    .all(q) as { id: number; cover: number | null }[];
+  // capa = a foto que vai nos posts (principal ou a escolha automática)
+  const idOf = db().prepare("SELECT id FROM images WHERE path = ?");
+  for (const r of rows) {
+    const pth = bestImagePath(r.id);
+    const hit = pth ? (idOf.get(pth) as { id: number } | undefined) : undefined;
+    if (hit) r.cover = hit.id;
+  }
   const total = db().prepare("SELECT COUNT(*) n FROM images WHERE disabled = 0").get() as { n: number };
-  return Response.json({ rows, total: total.n });
+  return Response.json({ rows, total: total.n, learned: prefsSummary() });
 }
 
 /**
@@ -44,7 +52,8 @@ export async function PATCH(req: Request) {
   if (b.productId) {
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(b.mainImageId ?? null, b.productId);
     if (b.mainImageId) db().prepare("UPDATE images SET disabled = 0 WHERE id = ?").run(b.mainImageId);
-    return Response.json({ ok: true });
+    learnPrefs(); // cada escolha ensina a escolha automática
+    return Response.json({ ok: true, learned: prefsSummary() });
   }
   db().prepare("UPDATE images SET disabled = ? WHERE id = ?").run(b.disabled ? 1 : 0, b.id!);
   if (b.disabled) db().prepare("UPDATE products SET main_image_id = NULL WHERE main_image_id = ?").run(b.id!);

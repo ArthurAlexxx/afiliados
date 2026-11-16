@@ -433,6 +433,17 @@ export function startWorker() {
       log("info", "IA desligada: imagens com IA e leitura com IA desativadas, chave da OpenAI removida");
     }
   });
+  // fotos: medidas das fotos antigas (para a escolha automática aprender com as principais)
+  setTimeout(() => import("./photoprefs.ts").then((m) => m.backfillFeatures()).catch((e) => log("warn", `Fotos: ${(e as Error).message}`)), 90e3);
+  // "Deo Parfum" (Natura/Boticário) passa a ter concentração própria, separada de "Parfum"
+  import("./settings.ts").then(({ getState, setState }) => {
+    if (getState("deoParfumV1")) return;
+    const r = db()
+      .prepare("UPDATE products SET conc = 'deo', pkey = REPLACE(pkey, '|parfum', '|deo') WHERE conc = 'parfum' AND (LOWER(name) LIKE '%deo parfum%' OR LOWER(name) LIKE '%deo-parfum%' OR LOWER(name) LIKE '%deoparfum%')")
+      .run();
+    setState("deoParfumV1", "1");
+    if (r.changes) log("info", `${r.changes} perfume(s) "Deo Parfum" separados de "Parfum"`);
+  });
   // volume de postagens de cada grupo (ontem e hoje) nos logs, 1 min depois de subir
   setTimeout(() => import("./volume.ts").then((m) => m.logGroupVolume()).catch((e) => log("warn", `Volume: ${(e as Error).message}`)), 60e3);
 }

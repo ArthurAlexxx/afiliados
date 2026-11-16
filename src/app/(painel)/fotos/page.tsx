@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { api, useApi, timeAgo } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
-type Prod = { id: number; name: string; n: number; active: number; cover: number | null; last: string };
+type Prod = { id: number; name: string; n: number; active: number; cover: number | null; main: number | null; last: string };
 type Img = { id: number; width: number; height: number; score: number; disabled: number; created_at: string; message_id: string | null; group_name: string };
 
 function Lightbox({ imgs, index, onIndex, onClose, onToggle, mainId, onMain }: {
@@ -107,7 +107,10 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold">{data?.product?.name || "…"}</div>
           <div className="text-[12px] text-muted-foreground">
-            {imgs.length} foto(s) · {mainId ? "você escolheu a foto principal" : "sem principal escolhida: o sistema usa a melhor (quadrada e de nota maior)"}
+            {imgs.length} foto(s) ·{" "}
+            {mainId
+              ? "principal escolhida por você"
+              : "escolha automática: o sistema usa a melhor foto, seguindo o gosto aprendido das suas principais. Não gostou? Torne outra principal."}
           </div>
         </div>
       </div>
@@ -124,7 +127,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
               </Button>
               <span className="tabular-nums">{img.width}×{img.height}</span>
               <span>nota {img.score}</span>
-              {data?.used === img.id ? <Badge tone="success">Usada nos posts</Badge> : null}
+              {data?.used === img.id ? <Badge tone="success">{mainId ? "Usada nos posts" : "Usada nos posts (automática)"}</Badge> : null}
               {img.message_id?.startsWith("fix:") ? <Badge tone="info">IA</Badge> : null}
               {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
               <span className="ml-auto truncate">{timeAgo(img.created_at)}</span>
@@ -145,7 +148,7 @@ export default function FotosPage() {
     const t = setTimeout(() => setDeb(q), 300);
     return () => clearTimeout(t);
   }, [q]);
-  const { data } = useApi<{ rows: Prod[]; total: number }>(`/api/fotos?q=${encodeURIComponent(deb)}`);
+  const { data } = useApi<{ rows: Prod[]; total: number; learned: { n: number; likes: string[] } }>(`/api/fotos?q=${encodeURIComponent(deb)}`);
   return (
     <>
       <PageHeader
@@ -156,6 +159,13 @@ export default function FotosPage() {
         <ProductPhotos id={sel} onBack={() => setSel(null)} />
       ) : (
         <>
+          {data && (
+            <div className="mb-4 rounded-xl bg-muted px-4 py-3 text-[12.5px] text-muted-foreground">
+              {data.learned.n
+                ? `Escolha automática aprendendo com ${data.learned.n} foto(s) principal(is) que você escolheu${data.learned.likes.length ? `: você tem preferido fotos ${data.learned.likes.join(", ")}` : ""}. Quanto mais você escolher, mais ela acerta.`
+                : "Nos perfumes sem principal, o sistema escolhe a melhor foto sozinho. Cada principal que você escolher ensina o seu gosto para a escolha automática."}
+            </div>
+          )}
           <div className="relative mb-4 max-w-md">
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Buscar perfume..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
@@ -172,7 +182,9 @@ export default function FotosPage() {
                   )}
                   <div className="border-t px-3 py-2">
                     <div className="line-clamp-2 text-[12.5px] leading-snug font-medium">{p.name}</div>
-                    <div className="mt-0.5 text-[11.5px] text-muted-foreground">{p.active} foto(s){p.n > p.active ? ` · ${p.n - p.active} desligada(s)` : ""}</div>
+                    <div className="mt-0.5 text-[11.5px] text-muted-foreground">
+                      {p.active} foto(s){p.n > p.active ? ` · ${p.n - p.active} desligada(s)` : ""} · {p.main ? "★ principal escolhida" : "automática"}
+                    </div>
                   </div>
                 </button>
               ))}

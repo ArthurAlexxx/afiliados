@@ -10,6 +10,9 @@ export type ImageInfo = {
   whiteBorder: number;
   /** variedade de cores da imagem (0..~1). Cenários produzidos tendem a ser mais altos. */
   colorfulness: number;
+  /** brilho médio (0..1) e contraste (desvio do brilho, 0..~0.5). */
+  brightness: number;
+  contrast: number;
   /** hash perceptual (dHash 64 bits) para achar a mesma foto em grupos diferentes. */
   hash: string;
   /** nota final 0..100 usada para escolher a melhor foto do produto. */
@@ -62,7 +65,15 @@ export async function analyzeImage(buf: Buffer): Promise<ImageInfo> {
   for (let y = 0; y < 8; y++) for (let x = 0; x < 8; x++) bits += small[y * 9 + x] > small[y * 9 + x + 1] ? "1" : "0";
   const hash = BigInt("0b" + bits).toString(16).padStart(16, "0");
 
-  const info = { width, height, bytes: buf.length, plainBorder, whiteBorder, colorfulness, hash, score: 0 };
+  let sumL = 0, sqL = 0;
+  for (let i = 0; i < n; i++) {
+    const l = (0.299 * data[i * 3] + 0.587 * data[i * 3 + 1] + 0.114 * data[i * 3 + 2]) / 255;
+    sumL += l; sqL += l * l;
+  }
+  const brightness = sumL / n;
+  const contrast = Math.sqrt(Math.max(0, sqL / n - brightness * brightness));
+
+  const info = { width, height, bytes: buf.length, plainBorder, whiteBorder, colorfulness, brightness, contrast, hash, score: 0 };
   info.score = scoreImage(info);
   return info;
 }

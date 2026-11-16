@@ -6,6 +6,7 @@ import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { manchete, parsePromo, renderTemplate, formatPrice } from "./parser.ts";
 import { nameQuality, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
+import { autoPhotoScore, featuresOf, type PhotoRow } from "./photoprefs.ts";
 import { brandImage, standardImage } from "./branding.ts";
 import { Evolution } from "./evolution.ts";
 import { pullRadarHub, salesBoostFor } from "./sales.ts";
@@ -127,13 +128,13 @@ export async function addImage(productId: number, buf: Buffer, messageId?: strin
   const file = path.join(/*turbopackIgnore: true*/ BANK_DIR, `${productId}_${a.hash}.jpg`);
   fs.writeFileSync(file, await toJpeg(buf));
   if (same) {
-    db().prepare("UPDATE images SET path=?, width=?, height=?, hash=?, score=?, message_id=?, group_jid=? WHERE id=?")
-      .run(file, a.width, a.height, a.hash, a.score, messageId || null, groupJid || null, same.id);
+    db().prepare("UPDATE images SET path=?, width=?, height=?, hash=?, score=?, message_id=?, group_jid=?, feat=? WHERE id=?")
+      .run(file, a.width, a.height, a.hash, a.score, messageId || null, groupJid || null, JSON.stringify(featuresOf(a)), same.id);
     if (same.path !== file) fs.rmSync(same.path, { force: true });
     return `foto melhor substituiu a repetida (nota ${a.score})`;
   }
-  db().prepare("INSERT INTO images (product_id, message_id, group_jid, path, width, height, hash, score) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
-    .run(productId, messageId || null, groupJid || null, file, a.width, a.height, a.hash, a.score);
+  db().prepare("INSERT INTO images (product_id, message_id, group_jid, path, width, height, hash, score, feat) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)")
+    .run(productId, messageId || null, groupJid || null, file, a.width, a.height, a.hash, a.score, JSON.stringify(featuresOf(a)));
   return `foto guardada (nota ${a.score})`;
 }
 
@@ -378,11 +379,9 @@ export function bestImagePath(productId: number): string | null {
     .prepare("SELECT i.path FROM products p JOIN images i ON i.id = p.main_image_id WHERE p.id = ? AND i.disabled = 0")
     .get(productId) as { path: string } | undefined;
   if (main && fs.existsSync(main.path)) return main.path;
-  const rows = db().prepare("SELECT path, score, width, height FROM images WHERE product_id = ? AND disabled = 0").all(productId) as {
-    path: string; score: number; width: number; height: number;
-  }[];
-  const fit = (r: (typeof rows)[number]) => r.score - 70 * Math.abs(Math.log(r.width / Math.max(1, r.height)));
-  const best = rows.filter((r) => fs.existsSync(r.path)).sort((a, b) => fit(b) - fit(a))[0];
+  // sem principal: escolha automática, com o gosto aprendido das fotos que o Arthur escolheu
+  const rows = db().prepare("SELECT path, score, width, height, feat FROM images WHERE product_id = ? AND disabled = 0").all(productId) as PhotoRow[];
+  const best = rows.filter((r) => fs.existsSync(r.path)).sort((a, b) => autoPhotoScore(b) - autoPhotoScore(a))[0];
   return best ? best.path : null;
 }
 

@@ -68,6 +68,7 @@ export function perfumeInfo(title: string): PerfumeInfo | null {
   if (/\beau de parfum\b|\bedp\b/.test(n)) conc = "edp";
   else if (/\beau de toilette\b|\bedt\b/.test(n)) conc = "edt";
   else if (/\bextrait\b/.test(n)) conc = "extrait";
+  else if (/\bdeo[\s-]*parfum\b/.test(n)) conc = "deo";
   else if (/\bparfum\b/.test(n)) conc = "parfum";
   else if (/\b(colonia|edc|eau de cologne)\b/.test(n)) conc = "colonia";
 
@@ -92,6 +93,8 @@ function jaccard(a: string[], b: string[]) {
 
 export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
   if (a.ml !== b.ml) return false;
+  // "Parfum" é outro produto (212 Men ≠ 212 Men Parfum), mesmo quando o outro título não diz a concentração
+  if ((a.conc === "parfum") !== (b.conc === "parfum")) return false;
   if (a.conc && b.conc && a.conc !== b.conc) {
     // "Colônia" e "EDT" são usados como sinônimos em nacionais (Boticário/Natura)
     const loose = new Set(["colonia", "edt"]);
