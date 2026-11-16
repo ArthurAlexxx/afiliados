@@ -417,4 +417,6 @@ export function startWorker() {
   const old = db().prepare("UPDATE posts SET status='skipped', reason='Descartado: aprovação manual não existe mais (o agente decide)' WHERE status='pending'").run();
   if (old.changes) log("info", `${old.changes} post(s) parados esperando aprovação foram descartados`);
   log("info", "Worker da fila iniciado (verifica a cada 15s)");
+  // volume de postagens de cada grupo (ontem e hoje) nos logs, 1 min depois de subir
+  setTimeout(() => import("./volume.ts").then((m) => m.logGroupVolume()).catch((e) => log("warn", `Volume: ${(e as Error).message}`)), 60e3);
 }

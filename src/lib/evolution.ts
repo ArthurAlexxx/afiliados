@@ -81,6 +81,20 @@ export class Evolution {
     return list as Record<string, unknown>[];
   }
 
+  /** Mensagens de um grupo a partir de um horário (segundos), página a página. */
+  async findMessagesSince(remoteJid: string, sinceSec: number, limit = 250, page = 1) {
+    const r = await this.call<unknown>("POST", `/chat/findMessages/${this.inst}`, {
+      where: { key: { remoteJid }, messageTimestamp: { gte: new Date(sinceSec * 1000).toISOString() } },
+      limit,
+      offset: limit,
+      page,
+    });
+    const any = r as { messages?: { records?: unknown[]; pages?: number } | unknown[] };
+    const list = Array.isArray(r) ? r : Array.isArray(any.messages) ? any.messages : any.messages?.records || [];
+    const pages = !Array.isArray(any.messages) && any.messages?.pages ? any.messages.pages : 1;
+    return { list: list as Record<string, unknown>[], pages };
+  }
+
   sendText(number: string, text: string) {
     return this.call("POST", `/message/sendText/${this.inst}`, { number, text, linkPreview: true });
   }
