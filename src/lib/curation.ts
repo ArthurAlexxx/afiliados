@@ -74,6 +74,8 @@ export type OfferInput = {
   /** foto da mensagem (só é guardada se o grupo não usa marca d'água) */
   image?: Buffer | null;
   watermark?: boolean;
+  /** grupo com marca d'água que a gente limpa (LaMa) */
+  wmRemove?: boolean;
   createdAt?: Date;
 };
 
@@ -108,9 +110,14 @@ export async function recordOffer(o: OfferInput): Promise<string> {
       created,
     );
   if (!r.changes) return "oferta já registrada";
+  const productId0 = productId;
 
   let img = "";
-  if (o.image && !o.watermark) img = await addImage(productId, o.image, o.messageId, o.groupJid).catch((e) => `foto falhou: ${e.message}`);
+  if (o.image && !o.watermark) img = await addImage(productId0, o.image, o.messageId, o.groupJid).catch((e) => `foto falhou: ${e.message}`);
+  else if (o.image && o.wmRemove) {
+    const { queueUnwatermark } = await import("./unwatermark.ts");
+    img = await queueUnwatermark({ productId: productId0, image: o.image, messageId: o.messageId, groupJid: o.groupJid }).catch((e) => `foto falhou: ${e.message}`);
+  }
 
   return `oferta #${r.lastInsertRowid} (produto #${productId})${img ? `, ${img}` : ""}`;
 }
@@ -215,6 +222,10 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     (db().prepare("SELECT DISTINCT product_id FROM posts WHERE origin='curated' AND status='skipped' AND created_at >= datetime('now','-30 minutes')").all() as { product_id: number }[]).map((r) => r.product_id),
   );
 
+  const photoOnly = new Set(
+    (db().prepare("SELECT jid FROM groups WHERE role = 'source' AND promo = 0").all() as { jid: string }[]).map((g) => g.jid),
+  );
+
   const out: RankItem[] = [];
   for (const [pid, list] of byProduct) {
     const p = products.get(pid);
@@ -222,7 +233,8 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     const prices = list.map((o) => o.price).filter((x): x is number => typeof x === "number" && x > 0);
     const med = median(prices);
     const recent = list.filter((o) => ts(o.created_at) >= recentSince && o.price && o.url);
-    const best = recent.sort((a, b) => (a.price! - b.price!) || (ts(b.created_at) - ts(a.created_at)))[0] || null;
+    // a oferta postada (link e preço) só vem dos grupos de promoção; os outros contam só para o hype e o preço
+    const best = recent.filter((o) => !photoOnly.has(o.group_jid)).sort((a, b) => (a.price! - b.price!) || (ts(b.created_at) - ts(a.created_at)))[0] || null;
     const groups = new Set(list.map((o) => o.group_jid)).size;
     const recentGroups = new Set(recent.map((o) => o.group_jid)).size;
     const pctVsMedian = best && med ? (med - best.price!) / med : null;
@@ -380,8 +392,16 @@ export function bestImagePath(productId: number): string | null {
     .get(productId) as { path: string } | undefined;
   if (main && fs.existsSync(main.path)) return main.path;
   // sem principal: escolha automática, com o gosto aprendido das fotos que o Arthur escolheu
-  const rows = db().prepare("SELECT path, score, width, height, feat FROM images WHERE product_id = ? AND disabled = 0").all(productId) as PhotoRow[];
-  const best = rows.filter((r) => fs.existsSync(r.path)).sort((a, b) => autoPhotoScore(b) - autoPhotoScore(a))[0];
+  const rows = db()
+    .prepare(
+      `SELECT i.path, i.score, i.width, i.height, i.feat, g.photo_priority priority FROM images i
+       LEFT JOIN groups g ON g.jid = i.group_jid WHERE i.product_id = ? AND i.disabled = 0`,
+    )
+    .all(productId) as PhotoRow[];
+  // fotos abaixo de 650px não entram na escolha automática: melhor usar a foto do anúncio do ML
+  const best = rows
+    .filter((r) => Math.min(r.width, r.height) >= 650 && fs.existsSync(r.path))
+    .sort((a, b) => autoPhotoScore(b) - autoPhotoScore(a))[0];
   return best ? best.path : null;
 }
 
@@ -639,6 +659,13 @@ export function startCuration() {
         setState("radarHubAt", String(Date.now()));
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
+      // marca d'água do RP: o LaMa (open source, no próprio servidor) limpa uma foto por vez, em segundo plano
+      import("./unwatermark.ts")
+        .then(async (m) => {
+          await m.backfillGroups();
+          if (!(await m.processUnwatermark())) await m.releaseModel();
+        })
+        .catch((e) => log("warn", `Marca d'água: ${(e as Error).message}`));
       if (s.mode !== "curated") return;
       // "me avisa quando baixar": chamada no grupo 2x por dia
       {

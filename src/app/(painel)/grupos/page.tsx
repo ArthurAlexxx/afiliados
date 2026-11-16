@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 type Group = {
   jid: string; name: string; size: number; role: "none" | "source" | "destination"; captured: number; sent: number;
-  watermark: number; wm_corner?: string; offers: number; photos: number;
+  watermark: number; promo?: number; photo_priority?: number; offers: number; photos: number;
 };
 
 const ROLES = [
@@ -102,6 +102,17 @@ export default function GruposPage() {
     }
   };
 
+  const setPromo = async (g: Group, promo: boolean) => {
+    setData((d) => (d ? { rows: d.rows.map((x) => (x.jid === g.jid ? { ...x, promo: promo ? 1 : 0 } : x)) } : d));
+    try {
+      await api("/api/groups", { method: "PATCH", json: { jid: g.jid, promo } });
+      toast.success(promo ? "As promoções desse grupo podem ser postadas" : "Esse grupo agora serve só para fotos e preços");
+    } catch (e) {
+      toast.error((e as Error).message);
+      reload();
+    }
+  };
+
   const addManual = async () => {
     const jid = manual.trim();
     if (!/@g\.us$/.test(jid)) return toast.error("O ID do grupo termina com @g.us");
@@ -176,6 +187,18 @@ export default function GruposPage() {
                       </div>
                     </div>
                   </div>
+                  {g.role === "source" && (
+                    <button
+                      onClick={() => setPromo(g, g.promo === 0)}
+                      title="Grupos de promoção: as ofertas deles podem ir para o nosso grupo. Os outros só ajudam com fotos, preço real e hype."
+                      className={cn(
+                        "flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[12px] font-medium transition-colors",
+                        g.promo !== 0 ? "border-success/30 bg-success/10 text-success" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {g.promo !== 0 ? "Promoções: sim" : "Só fotos e preços"}
+                    </button>
+                  )}
                   {g.role === "source" && (
                     <button
                       onClick={() => setWatermark(g, !g.watermark)}

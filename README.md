@@ -164,3 +164,11 @@ src/
 ## Imagens com IA (marca d'água)
 
 Fotos de grupos marcados com marca d'água podem ser refeitas pela IA (OpenAI, `OPENAI_API_KEY` ou chave em Integrações). Só entram na fila perfumes com menos de 2 fotos limpas. A IA repinta só o canto da marca (configurado por grupo na tela Grupos) e o resultado é recolado sobre a original, então o frasco e o rótulo não mudam. Nada entra no banco sem aprovação na tela **Imagens**. Limite diário em `IMAGE_FIX_DAILY` (padrão 15).
+
+## Marca d'água do RP (open source, sem API paga)
+
+Grupos com "tirar marca" (`wm_remove`, hoje o RP PROMOS) têm as fotos limpas pelo **LaMa** (Apache 2.0) em ONNX, rodando no próprio servidor com `onnxruntime-web` (WASM). O modelo (~100 MB) é baixado uma vez para `DATA_DIR/models`. A posição da marca é aprendida sozinha comparando as fotos do grupo (o que se repete igual em todas). Regra: depois de limpar, a foto é conferida de novo; se a marca ainda aparecer, ela é descartada. Foto sem a marca também não entra por esse caminho.
+
+## Grupos de promoção x grupos de foto
+
+`groups.promo = 1`: as ofertas do grupo podem ser postadas. `promo = 0`: o grupo só fornece fotos, preço real e hype. Prioridade das fotos por grupo em `groups.photo_priority` (RP 3, MD Links 2, Vitrine 1).

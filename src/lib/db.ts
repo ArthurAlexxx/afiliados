@@ -170,6 +170,10 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE groups ADD COLUMN wm_ref TEXT",
     "ALTER TABLE products ADD COLUMN main_image_id INTEGER",
     "ALTER TABLE images ADD COLUMN feat TEXT",
+    "ALTER TABLE groups ADD COLUMN photo_priority INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE groups ADD COLUMN wm_remove INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE groups ADD COLUMN wm_mask TEXT",
+    "ALTER TABLE groups ADD COLUMN promo INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE image_fixes ADD COLUMN box TEXT",
     "ALTER TABLE image_fixes ADD COLUMN usage TEXT",
   ]) {

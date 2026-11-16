@@ -14,7 +14,7 @@ import { analyzeImage, type ImageInfo } from "./images.ts";
 
 export const FEATS = ["plainBorder", "whiteBorder", "colorfulness", "brightness", "contrast", "square", "res"] as const;
 type Feat = Record<(typeof FEATS)[number], number>;
-export type PhotoRow = { path: string; score: number; width: number; height: number; feat: string | null };
+export type PhotoRow = { path: string; score: number; width: number; height: number; feat: string | null; priority?: number | null };
 
 export const FEAT_LABEL: Record<(typeof FEATS)[number], [string, string]> = {
   plainBorder: ["fundo liso", "fundo com cenário"],
@@ -93,7 +93,13 @@ export function learnPrefs(): Prefs {
 
 /** Nota da escolha automática: nota base da foto + gosto aprendido. */
 export function autoPhotoScore(r: PhotoRow): number {
-  const base = r.score - 70 * Math.abs(Math.log(r.width / Math.max(1, r.height)));
+  let base = r.score - 70 * Math.abs(Math.log(r.width / Math.max(1, r.height)));
+  // grupos com fotos melhores (MD Links, Vitrine, RP sem marca) ganham prioridade
+  base += 12 * (r.priority || 0);
+  // foto pequena fica feia no post (é ampliada para 1080px)
+  const side = Math.min(r.width, r.height);
+  if (side < 800) base -= 30;
+  if (side < 1000) base -= 10;
   const p = getPrefs();
   if (!p?.n || !r.feat) return base;
   const f = JSON.parse(r.feat) as Feat;

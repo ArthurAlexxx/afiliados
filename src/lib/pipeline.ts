@@ -163,8 +163,8 @@ async function ingestMessage(d: UpsertData): Promise<string> {
     return handlePrivateMessage(who, extractText(d.message));
   }
 
-  const group = db().prepare("SELECT name, role, watermark FROM groups WHERE jid = ?").get(jid) as
-    | { name: string; role: string; watermark: number }
+  const group = db().prepare("SELECT name, role, watermark, wm_remove FROM groups WHERE jid = ?").get(jid) as
+    | { name: string; role: string; watermark: number; wm_remove: number }
     | undefined;
   if (group?.role === "destination") {
     // nosso grupo: pedidos do "me avisa quando baixar"
@@ -192,7 +192,7 @@ async function ingestMessage(d: UpsertData): Promise<string> {
   // curadoria: toda promoção vira dado (preço, grupo, foto); quem decide o que postar é o ranking
   {
     let image: Buffer | null = null;
-    if (hasImage && !group.watermark) {
+    if (hasImage && (!group.watermark || group.wm_remove)) {
       try {
         let b64 = d.message?.base64 || "";
         if (!b64 && messageId) b64 = (await new Evolution(s).getBase64FromMediaMessage(messageId)).base64 || "";
@@ -201,7 +201,7 @@ async function ingestMessage(d: UpsertData): Promise<string> {
         log("warn", `Não consegui baixar a foto de "${group.name}": ${(e as Error).message}`);
       }
     }
-    const r = await recordOffer({ messageId, groupJid: jid, groupName: group.name, text, image, watermark: Boolean(group.watermark) }).catch(
+    const r = await recordOffer({ messageId, groupJid: jid, groupName: group.name, text, image, watermark: Boolean(group.watermark), wmRemove: Boolean(group.wm_remove) }).catch(
       (e) => `erro: ${(e as Error).message}`,
     );
     if (s.mode === "curated") {
@@ -443,6 +443,22 @@ export function startWorker() {
       .run();
     setState("deoParfumV1", "1");
     if (r.changes) log("info", `${r.changes} perfume(s) "Deo Parfum" separados de "Parfum"`);
+  });
+  // grupos: 3 de promoção (RP, Herói, Clube do Perfume); os outros só fornecem fotos.
+  // Prioridade de fotos: RP (sem marca) > MD Links > Vitrine.
+  import("./settings.ts").then(({ getState, setState }) => {
+    if (getState("groupsSetupV1")) return;
+    const groups = db().prepare("SELECT jid, name FROM groups WHERE role = 'source'").all() as { jid: string; name: string }[];
+    const has = (n: string, re: RegExp) => re.test(n.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase());
+    for (const g of groups) {
+      const promo = has(g.name, /rp promos|heroi do perfume|clube do perfume/) ? 1 : 0;
+      const prio = has(g.name, /rp promos/) ? 3 : has(g.name, /md links/) ? 2 : has(g.name, /vitrine/) ? 1 : 0;
+      const rm = has(g.name, /rp promos/) ? 1 : 0;
+      db().prepare("UPDATE groups SET promo = ?, photo_priority = ?, wm_remove = ? WHERE jid = ?").run(promo, prio, rm, g.jid);
+      if (has(g.name, /vitrine/)) db().prepare("UPDATE groups SET watermark = 0 WHERE jid = ?").run(g.jid);
+    }
+    setState("groupsSetupV1", "1");
+    log("info", `Grupos: ${groups.filter((g) => has(g.name, /rp promos|heroi do perfume|clube do perfume/)).length} de promoção, o resto só fotos`);
   });
   // volume de postagens de cada grupo (ontem e hoje) nos logs, 1 min depois de subir
   setTimeout(() => import("./volume.ts").then((m) => m.logGroupVolume()).catch((e) => log("warn", `Volume: ${(e as Error).message}`)), 60e3);
