@@ -20,7 +20,6 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Menu,
-  LogOut,
   Moon,
   Sun,
   X,
@@ -170,15 +169,6 @@ function Footer({ collapsed }: { collapsed: boolean }) {
       >
         {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
       </button>
-      <form action="/api/auth/logout" method="post" className={cn(!collapsed && "ml-auto")}>
-        <button
-          className="flex h-8 items-center gap-2 rounded-[10px] px-2 text-[12.5px] text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
-          title="Sair"
-        >
-          <LogOut className="size-4" />
-          {!collapsed && "Sair"}
-        </button>
-      </form>
     </div>
   );
 }
