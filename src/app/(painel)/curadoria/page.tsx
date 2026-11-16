@@ -252,7 +252,7 @@ export default function CuradoriaPage() {
         <Card>
           <CardHeader
             title="Ranking agora"
-            description="Nota = quantos grupos postam + preço contra a média do próprio perfume + se está bombando agora. O 1º elegível é o próximo post."
+            description="Nota = hype: quantos grupos oferecem o perfume na semana, quantas vezes e quantos estão postando agora. O 1º elegível é o próximo post."
             action={<Switch checked={onlyEligible} onChange={setOnlyEligible} label="Só elegíveis" />}
           />
           <CardContent className="px-0 pb-0">

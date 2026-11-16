@@ -195,13 +195,13 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     const coolingDown = Boolean(p.last_posted_at && ts(p.last_posted_at) >= coolSince);
 
     // nota: popularidade (quantos grupos postam), preço contra o histórico e se está bombando agora
+    // nota = hype: quantos grupos oferecem o perfume, quantas vezes e se está bombando agora.
+    // Preço e % de desconto NÃO entram (variam demais de um perfume para outro).
     let score =
-      30 * Math.min(1, groups / 6) +
-      10 * Math.min(1, list.length / 20) +
-      20 * Math.min(1, recentGroups / 3) +
-      30 * Math.max(0, Math.min(1, (pctVsMedian ?? 0) / 0.2)) +
-      10 * Math.min(1, Math.max(0, (declaredPct ?? 0) - 20) / 30) +
-      // quanto mais nova a oferta, melhor (preço ainda deve estar valendo)
+      40 * Math.min(1, groups / 6) +
+      20 * Math.min(1, list.length / 20) +
+      25 * Math.min(1, recentGroups / 3) +
+      // oferta recém-chegada: o preço ainda está valendo
       (best ? 15 * Math.max(0, 1 - (Date.now() - ts(best.created_at)) / lookbackMs) : 0);
     if (!pimgs.length) score -= 20;
     score = Math.round(Math.max(0, score));
