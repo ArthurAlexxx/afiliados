@@ -1,0 +1,14 @@
+services:
+  afiliados:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+    ports:
+      - "3000:3000"
+    volumes:
+      - afiliados-data:/app/data
+
+volumes:
+  afiliados-data:
