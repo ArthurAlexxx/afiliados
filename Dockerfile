@@ -16,6 +16,5 @@ ENV NODE_ENV=production NEXT_TELEMETRY_DISABLED=1 DATA_DIR=/app/data PORT=3000 H
 COPY --from=build /app/.next/standalone ./
 COPY --from=build /app/.next/static ./.next/static
 RUN mkdir -p /app/data
-VOLUME ["/app/data"]
 EXPOSE 3000
 CMD ["node", "--no-warnings", "server.js"]
