@@ -7,7 +7,7 @@ export type BrandOptions = {
   instagram?: string;
   /** foto do grupo (qualquer formato). */
   avatar?: Buffer | null;
-  /** lado maior da imagem final (px). */
+  /** lado da imagem final quadrada (px). Todos os posts saem do mesmo tamanho. */
   maxSize?: number;
 };
 
@@ -103,11 +103,22 @@ async function textWidth(text: string, size: number, weight: number) {
  * - canto inferior esquerdo: etiqueta de vidro com o desconto (-32%)
  * - canto superior direito: etiqueta de vidro com foto do grupo, nome e @ do Instagram
  */
+/** Só padroniza (quadrado 1080) sem etiquetas. */
+export async function standardImage(input: Buffer, size = 1080) {
+  return sharp(input, { failOn: "none" })
+    .rotate()
+    .resize(size, size, { fit: "cover", position: sharp.strategy.attention })
+    .flatten({ background: "#ffffff" })
+    .jpeg({ quality: 90, mozjpeg: true })
+    .toBuffer();
+}
+
 export async function brandImage(input: Buffer, o: BrandOptions): Promise<Buffer> {
-  const maxSize = o.maxSize || 1600;
+  const maxSize = o.maxSize || 1080;
   const base = await sharp(input, { failOn: "none" })
     .rotate()
-    .resize(maxSize, maxSize, { fit: "inside", withoutEnlargement: true })
+    // formato padrão: quadrado, recorte centrado no que mais chama atenção (o frasco)
+    .resize(maxSize, maxSize, { fit: "cover", position: sharp.strategy.attention })
     .flatten({ background: "#ffffff" })
     .png()
     .toBuffer();

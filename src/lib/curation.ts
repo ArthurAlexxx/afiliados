@@ -6,7 +6,7 @@ import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { parsePromo, renderTemplate, formatPrice } from "./parser.ts";
 import { perfumeInfo, samePerfume, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
-import { brandImage } from "./branding.ts";
+import { brandImage, standardImage } from "./branding.ts";
 import { Evolution } from "./evolution.ts";
 
 const BANK_DIR = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "bank");
@@ -278,7 +278,7 @@ export async function brandAvatar(s: Settings = getSettings()): Promise<Buffer |
 
 /** Aplica as etiquetas (desconto + grupo/@) numa foto. */
 export async function brand(buf: Buffer, discountPct: number | null, s: Settings = getSettings()) {
-  if (!s.brandEnabled) return toJpeg(buf);
+  if (!s.brandEnabled) return standardImage(buf);
   return brandImage(buf, {
     discountPct,
     groupName: brandName(s),
