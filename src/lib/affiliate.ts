@@ -57,11 +57,13 @@ export async function convertMeliLink(url: string, s: Settings, opts: { wantImag
     if (s.meliCookie || s.meliStrategy === "generator") {
       try {
         result.affiliateUrl = await generatorLink(result.canonical, s);
+        console.log(`[afiliados] Link meli.la gerado: ${result.affiliateUrl}`);
         result.ok = true;
         return result;
       } catch (e) {
         if (!s.meliTag) throw e;
         result.error = `meli.la indisponível (${(e as Error).message.slice(0, 120)}), usei o link com etiqueta`;
+        console.warn(`[afiliados] Gerador meli.la falhou: ${(e as Error).message.slice(0, 300)}`);
       }
     }
     const longUrl = paramsLink(result.canonical, s);
