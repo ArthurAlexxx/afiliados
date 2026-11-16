@@ -187,17 +187,7 @@ export default function ConfigPage() {
           )}
         </Section>
 
-        <Section icon={ShieldCheck} title="Regras de envio" description="Controle o que entra no grupo e o ritmo das postagens.">
-          <Field label="Modo de envio">
-            <Select
-              value={str("sendMode")}
-              onChange={set("sendMode")}
-              options={[
-                { value: "auto", label: "Automático (posta sozinho)" },
-                { value: "manual", label: "Manual (eu aprovo cada post)" },
-              ]}
-            />
-          </Field>
+        <Section icon={ShieldCheck} title="Regras de envio" description="Limites que o agente sempre respeita. Post sem o nosso link nunca sai.">
           <Field label="Intervalo mínimo entre posts (segundos)" hint="Evita flood e bloqueio do número. Recomendado: 60 a 180.">
             <Input type="number" min={0} value={str("minIntervalSeconds")} onChange={(e) => set("minIntervalSeconds")(e.target.value)} />
           </Field>
@@ -220,19 +210,9 @@ export default function ConfigPage() {
               ]}
             />
           </Field>
-          <Field label="Se um link do ML não converter">
-            <Select
-              value={str("onConvertFail")}
-              onChange={set("onConvertFail")}
-              options={[
-                { value: "pending", label: "Mandar para aprovação" },
-                { value: "skip", label: "Ignorar a promoção" },
-              ]}
-            />
-          </Field>
           <div className="flex flex-col gap-4 rounded-xl border p-4 sm:col-span-2">
             <Switch checked={bool("requireMeliLink")} onChange={set("requireMeliLink")} label="Só postar promoções do Mercado Livre" description="Mensagens sem link do ML são ignoradas." />
-            <Switch checked={bool("sendImage")} onChange={set("sendImage")} label="Enviar com imagem" description="Reaproveita a imagem da mensagem original." />
+            <Switch checked={bool("sendImage")} onChange={set("sendImage")} label="Enviar com imagem" description="Posta com a melhor foto do perfume (quadrada, sem marca d\'água) e as nossas etiquetas." />
             <Switch checked={bool("fetchProductImage")} onChange={set("fetchProductImage")} label="Buscar foto do produto" description="Quando a mensagem original vier sem imagem, usa a foto do anúncio." />
             <Switch checked={bool("ignoreFromMe")} onChange={set("ignoreFromMe")} label="Ignorar mensagens enviadas pelo próprio número" />
           </div>
@@ -241,20 +221,16 @@ export default function ConfigPage() {
           </Field>
         </Section>
 
-        <Section icon={Sparkles} title="IA (opcional)" description="Usa o Claude para extrair título, preço e cupom de mensagens bagunçadas.">
+        <Section icon={Sparkles} title="Agente" description="Ele decide sozinho o que sai no grupo: olha o hype nos outros grupos, o histórico de preço e o que já postamos.">
+          <Field label="Chave do Claude (Anthropic)" hint="Com a chave, o Claude dá a palavra final em cada post. Sem ela, o agente decide só pelas regras.">
+            <Input type="password" value={str("anthropicApiKey")} onChange={(e) => set("anthropicApiKey")(e.target.value)} placeholder="sk-ant-..." />
+          </Field>
+          <Field label="Modelo">
+            <Input value={str("aiModel")} onChange={(e) => set("aiModel")(e.target.value)} />
+          </Field>
           <div className="sm:col-span-2">
-            <Switch checked={bool("aiEnabled")} onChange={set("aiEnabled")} label="Melhorar extração com IA" description="Sem IA, o parser automático já resolve a maioria dos formatos." />
+            <Switch checked={bool("aiEnabled")} onChange={set("aiEnabled")} label="Usar o Claude também para ler mensagens bagunçadas" description="Melhora título, preço e cupom quando o grupo escreve fora do padrão." />
           </div>
-          {bool("aiEnabled") && (
-            <>
-              <Field label="Anthropic API key">
-                <Input type="password" value={str("anthropicApiKey")} onChange={(e) => set("anthropicApiKey")(e.target.value)} placeholder="sk-ant-..." />
-              </Field>
-              <Field label="Modelo">
-                <Input value={str("aiModel")} onChange={(e) => set("aiModel")(e.target.value)} />
-              </Field>
-            </>
-          )}
         </Section>
 
         <div className="flex items-start gap-2 rounded-xl bg-muted px-4 py-3 text-[12.5px] text-muted-foreground">

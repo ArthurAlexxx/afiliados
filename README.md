@@ -29,6 +29,20 @@ Em vez de repostar tudo, o robô transforma os grupos de origem numa base de pre
 
 Configuração inicial automática por variáveis (regex no nome do grupo, aplicada uma vez): `AUTO_SOURCE_GROUPS`, `AUTO_DEST_GROUP`, `AUTO_WATERMARK_GROUPS`. Depois disso o histórico dos grupos de origem é importado sozinho. Tudo pode ser ajustado nas telas **Curadoria** e **Grupos**.
 
+## Agente (sem aprovação manual)
+
+Não existe fila de aprovação: cada post escolhido pela curadoria passa pelo **agente**, que aprova ou descarta sozinho e explica o motivo (página **Posts**).
+
+- **Nunca sai:** sem o nosso link de afiliado, sem preço, oferta velha (preço pode ter mudado), preço acima do que os grupos costumam anunciar ou baixo demais (erro de leitura), sem foto boa quando o perfume não está tão em alta, 2+ posts da mesma linha nas últimas 3h.
+- **Conta a favor:** menor preço histórico, vários grupos postando agora, vendas subindo no ML (RadarHub).
+- Com `ANTHROPIC_API_KEY` (ou a chave em Integrações → Agente), o Claude dá a palavra final com base nessas informações e nos últimos posts do nosso grupo.
+- Perfume descartado espera 30 min antes de ser avaliado de novo.
+
+## Vendas do ML (RadarHub)
+
+`POST /api/vendas` com cabeçalho `x-api-key` (`VENDAS_TOKEN` ou o token do webhook) e corpo `{ "tipo": "mais_vendidos" | "em_alta", "dados": <resposta da API do RadarHub> }`.
+Se o RadarHub estiver acessível pela internet, configure `RADARHUB_URL`, `RADARHUB_TOKEN` e `RADARHUB_CATEGORIAS` e o painel puxa a cada 6h.
+
 ## Rodando no seu computador
 
 Requisitos: **Node.js 22.13+** (usa o SQLite embutido do Node, sem instalar banco).

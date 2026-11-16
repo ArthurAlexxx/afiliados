@@ -79,7 +79,8 @@ export async function buildPost(
     loja: meliUrls.length ? "Mercado Livre" : "",
   };
 
-  let status: PostStatus = s.sendMode === "manual" ? "pending" : "queued";
+  // sem aprovação manual: ou sai, ou é descartado
+  let status: PostStatus = "queued";
   let reason: string | null = null;
 
   if (blocked) {
@@ -90,9 +91,8 @@ export async function buildPost(
     reason = "Sem link do Mercado Livre";
   } else if (meliUrls.length > 0 && ok.length < meliUrls.length) {
     const err = conversions.find((c) => !c.ok)?.error || "falha ao converter";
-    if (s.onConvertFail === "skip" || ok.length === 0) {
-      status = s.onConvertFail === "skip" ? "skipped" : "pending";
-    } else status = "pending";
+    // nunca posta sem o nosso link
+    status = "skipped";
     reason = `Link do ML não convertido: ${err}`;
   }
 
@@ -386,5 +386,8 @@ export function startWorker() {
   w.__afiliadosWorker = setInterval(() => {
     processQueue().catch((e) => log("error", `Worker: ${(e as Error).message}`));
   }, 15000);
+  // não existe mais aprovação manual: o que ficou parado esperando aprovação é descartado
+  const old = db().prepare("UPDATE posts SET status='skipped', reason='Descartado: aprovação manual não existe mais (o agente decide)' WHERE status='pending'").run();
+  if (old.changes) log("info", `${old.changes} post(s) parados esperando aprovação foram descartados`);
   log("info", "Worker da fila iniciado (verifica a cada 15s)");
 }

@@ -9,6 +9,7 @@ import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { brandImage, standardImage } from "./branding.ts";
 import { Evolution } from "./evolution.ts";
 import { pullRadarHub, salesBoostFor } from "./sales.ts";
+import { judge } from "./agent.ts";
 
 const BANK_DIR = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "bank");
 const sqlNow = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
@@ -182,6 +183,11 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
   const coolSince = Date.now() - s.curationCooldownHours * 3600e3;
   const ts = (d: string) => new Date(d.replace(" ", "T") + "Z").getTime();
 
+  // descartados pelo agente há pouco: espera 30 min antes de tentar de novo (um preço melhor pode chegar)
+  const rejected = new Set(
+    (db().prepare("SELECT DISTINCT product_id FROM posts WHERE origin='curated' AND status='skipped' AND created_at >= datetime('now','-30 minutes')").all() as { product_id: number }[]).map((r) => r.product_id),
+  );
+
   const out: RankItem[] = [];
   for (const [pid, list] of byProduct) {
     const p = products.get(pid);
@@ -216,6 +222,7 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     if (!best) why = `sem oferta nos últimos ${s.curationLookbackMinutes} min`;
     else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
+    else if (rejected.has(pid)) why = "descartado pelo agente há pouco";
     out.push({
       productId: pid,
       name: p.name,
@@ -369,12 +376,20 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     log("warn", `Foto da curadoria falhou: ${(e as Error).message}`);
   }
 
-  let status = built.status === "skipped" || built.status === "duplicate" ? "skipped" : built.status;
-  let reason = built.reason;
-  if (!mediaPath && s.curationRequireImage) {
-    status = "pending";
-    reason = "Sem foto boa para esse perfume";
-  }
+  // o agente decide sozinho: sai ou não sai
+  const offerAgeMin = (Date.now() - new Date(item.best.created_at.replace(" ", "T") + "Z").getTime()) / 60e3;
+  const decision = built.status === "skipped" || built.status === "duplicate"
+    ? { approve: false, reason: `Descartado: ${built.reason || "bloqueado"}`, checks: [], by: "regras" as const }
+    : await judge(
+        {
+          productId: item.productId, name: item.name, price: item.bestPrice, medianPrice: item.medianPrice, minPrice: item.minPrice,
+          groups: item.groups, recentGroups: item.recentGroups, score: item.score, link: data.link, hasImage: Boolean(mediaPath),
+          historicLow: Boolean(data.historico), salesNote: item.sales?.note, offerAgeMin, text: item.best.text,
+        },
+        s,
+      );
+  const status = decision.approve ? "queued" : "skipped";
+  const reason = decision.reason;
 
   const info = db()
     .prepare(
@@ -395,6 +410,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
           score: item.score, groups: item.groups, posts: item.posts, bestPrice: item.bestPrice,
           medianPrice: item.medianPrice, discount, image: bankPath ? "banco" : mediaPath ? "anúncio" : "sem foto",
         },
+        agent: decision,
       }),
       mediaPath,
       mediaPath ? "image/jpeg" : null,
@@ -403,7 +419,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
       status,
       reason,
     );
-  db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(item.productId);
+  if (decision.approve) db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(item.productId);
   const id = Number(info.lastInsertRowid);
   log(
     "info",
@@ -437,7 +453,7 @@ export async function pickAndQueue(opts: { productId?: number; force?: boolean }
  */
 /** Respeita o ritmo médio: no máximo curationPerHour posts por hora, espaçados. */
 function sinceLastCuratedMs() {
-  const last = db().prepare("SELECT MAX(created_at) t FROM posts WHERE origin = 'curated' AND status IN ('queued','sending','sent','pending')").get() as { t: string | null };
+  const last = db().prepare("SELECT MAX(created_at) t FROM posts WHERE origin = 'curated' AND status IN ('queued','sending','sent')").get() as { t: string | null };
   return last.t ? Date.now() - new Date(last.t.replace(" ", "T") + "Z").getTime() : Infinity;
 }
 const gapMs = (s: Settings) => (s.curationPerHour > 0 ? (60 / s.curationPerHour) * 60e3 : 0);

@@ -225,7 +225,7 @@ export default function CuradoriaPage() {
     <>
       <PageHeader
         title="Curadoria"
-        description="Cada promoção que chega dos grupos é avaliada na hora. Se for boa, sai no seu grupo em segundos, com a melhor foto e o seu link."
+        description="Cada promoção que chega dos grupos é avaliada na hora. O agente confere preço, foto, nosso link e o que já postamos, e decide sozinho se sai."
         actions={
           <>
             <Button size="sm" variant="outline" onClick={() => act("import", { action: "import" }, (r) => r.result || "Importado")} loading={busy === "import"}>
@@ -254,7 +254,7 @@ export default function CuradoriaPage() {
         <Card>
           <CardHeader
             title="Ranking agora"
-            description="Nota = hype: quantos grupos oferecem o perfume na semana, quantas vezes e quantos estão postando agora. O 1º elegível é o próximo post."
+            description="Nota = hype: quantos grupos oferecem o perfume na semana, quantas vezes, quantos estão postando agora e (quando houver) se está vendendo cada vez mais no ML. O 1º elegível vai para o agente."
             action={<Switch checked={onlyEligible} onChange={setOnlyEligible} label="Só elegíveis" />}
           />
           <CardContent className="px-0 pb-0">

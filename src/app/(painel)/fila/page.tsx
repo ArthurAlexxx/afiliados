@@ -3,7 +3,7 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
-import { Check, Send, Trash2, Pencil, X, RotateCcw, Search, Ban, ChevronDown, ImageOff } from "lucide-react";
+import { Bot, Check, Send, Trash2, Pencil, X, RotateCcw, Search, Ban, ChevronDown, ImageOff } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -29,11 +29,10 @@ type Post = {
 };
 
 const TABS = [
-  { key: "pending", label: "Aprovar" },
-  { key: "queued,sending", label: "Na fila" },
   { key: "sent", label: "Enviados" },
+  { key: "queued,sending", label: "Na fila" },
+  { key: "skipped,duplicate", label: "Descartados" },
   { key: "failed", label: "Falhas" },
-  { key: "skipped,duplicate", label: "Ignorados" },
   { key: "all", label: "Todos" },
 ];
 
@@ -96,6 +95,14 @@ function PostCard({ p, onChanged }: { p: Post; onChanged: () => void }) {
     }
   };
 
+  const agent = React.useMemo(() => {
+    try {
+      return (JSON.parse(p.data_json).agent || null) as { approve: boolean; reason: string; by: string; checks: { ok: boolean; label: string }[] } | null;
+    } catch {
+      return null;
+    }
+  }, [p.data_json]);
+
   const conversions = React.useMemo(() => {
     try {
       return (JSON.parse(p.data_json).conversions || []) as { original: string; affiliateUrl?: string; ok: boolean; error?: string }[];
@@ -135,10 +142,30 @@ function PostCard({ p, onChanged }: { p: Post; onChanged: () => void }) {
           </div>
 
           <div className="flex min-w-0 flex-col gap-3">
-            {p.reason ? (
+            {agent ? (
+              <div className={cn("rounded-xl border px-3 py-2.5", agent.approve ? "border-success/30" : "border-danger/30")}>
+                <div className="flex items-center gap-1.5 text-[12px] font-medium text-muted-foreground">
+                  <Bot className="size-3.5" /> Decisão do agente{agent.by === "claude" ? " (Claude)" : ""}
+                </div>
+                <div className={cn("mt-1 text-[13px] font-medium", agent.approve ? "text-success" : "text-danger")}>{agent.reason}</div>
+                {agent.checks?.length ? (
+                  <ul className="mt-2 flex flex-col gap-1">
+                    {agent.checks.map((c, i) => (
+                      <li key={i} className="flex items-center gap-1.5 text-[12px] text-muted-foreground">
+                        {c.ok ? <Check className="size-3 text-success" /> : <X className="size-3 text-danger" />}
+                        {c.label}
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
+            ) : p.reason ? (
               <div className={cn("rounded-xl px-3 py-2 text-[12.5px]", p.status === "failed" ? "bg-danger/10 text-danger" : "bg-muted text-muted-foreground")}>
                 {p.reason}
               </div>
+            ) : null}
+            {agent && p.status === "failed" && p.reason ? (
+              <div className="rounded-xl bg-danger/10 px-3 py-2 text-[12.5px] text-danger">{p.reason}</div>
             ) : null}
 
             {conversions.length ? (
@@ -175,19 +202,19 @@ function PostCard({ p, onChanged }: { p: Post; onChanged: () => void }) {
             </AnimatePresence>
 
             <div className="mt-auto flex flex-wrap gap-2 pt-1">
-              {p.status === "pending" && (
-                <Button size="sm" loading={busy === "approve"} onClick={() => act("approve", {}, "Aprovado e enviado para a fila")}>
-                  <Check className="size-3.5" /> Aprovar
-                </Button>
-              )}
-              {["pending", "queued", "failed", "skipped", "duplicate"].includes(p.status) && (
-                <Button size="sm" variant={["queued", "failed"].includes(p.status) ? "default" : "outline"} loading={busy === "send"} onClick={() => act("send", {}, "Enviado!")}>
+              {["queued", "failed"].includes(p.status) && (
+                <Button size="sm" loading={busy === "send"} onClick={() => act("send", {}, "Enviado!")}>
                   <Send className="size-3.5" /> Enviar agora
                 </Button>
               )}
-              {["failed", "skipped", "duplicate", "sent"].includes(p.status) && (
+              {["skipped", "duplicate"].includes(p.status) && (
+                <Button size="sm" variant="outline" loading={busy === "send"} onClick={() => act("send", {}, "Enviado!")}>
+                  <Send className="size-3.5" /> Postar mesmo assim
+                </Button>
+              )}
+              {["failed", "sent"].includes(p.status) && (
                 <Button size="sm" variant="outline" loading={busy === "requeue"} onClick={() => act("requeue", {}, "De volta para a fila")}>
-                  <RotateCcw className="size-3.5" /> {p.status === "sent" ? "Reenviar" : "Colocar na fila"}
+                  <RotateCcw className="size-3.5" /> {p.status === "sent" ? "Reenviar" : "Tentar de novo"}
                 </Button>
               )}
               {!editing && p.status !== "sent" && (
@@ -200,7 +227,7 @@ function PostCard({ p, onChanged }: { p: Post; onChanged: () => void }) {
                   <ImageOff className="size-3.5" /> Sem imagem
                 </Button>
               ) : null}
-              {["pending", "queued"].includes(p.status) && (
+              {p.status === "queued" && (
                 <Button size="sm" variant="ghost" loading={busy === "discard"} onClick={() => act("discard", {}, "Descartado")}>
                   <Ban className="size-3.5" /> Descartar
                 </Button>
@@ -217,7 +244,7 @@ function PostCard({ p, onChanged }: { p: Post; onChanged: () => void }) {
 }
 
 export default function FilaPage() {
-  const [tab, setTab] = React.useState("pending");
+  const [tab, setTab] = React.useState("sent");
   const [q, setQ] = React.useState("");
   const [query, setQuery] = React.useState("");
   React.useEffect(() => {
@@ -248,8 +275,8 @@ export default function FilaPage() {
   return (
     <>
       <PageHeader
-        title="Fila de posts"
-        description="Revise, edite e acompanhe o que vai para o seu grupo."
+        title="Posts"
+        description="O agente decide sozinho o que vai para o grupo. Aqui você acompanha cada decisão e o motivo."
         actions={
           <Button variant="outline" size="sm" onClick={runQueue}>
             <Send className="size-3.5" /> Processar fila agora
@@ -285,7 +312,7 @@ export default function FilaPage() {
       ) : (
         <Card className="flex flex-col items-center px-4 py-14 text-center">
           <div className="text-[14px] font-medium">Nada por aqui</div>
-          <p className="mt-1 text-[13px] text-muted-foreground">Quando chegar uma promoção nessa situação, ela aparece nesta lista.</p>
+          <p className="mt-1 text-[13px] text-muted-foreground">Quando o agente tomar uma decisão desse tipo, ela aparece aqui.</p>
         </Card>
       )}
     </>

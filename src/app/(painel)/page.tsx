@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { ArrowUpRight, CheckCircle2, Clock, Inbox, Send, Radio, Link2, CalendarClock, AlertTriangle } from "lucide-react";
+import { ArrowUpRight, Bot, CheckCircle2, Clock, Send, Radio, Link2, CalendarClock, AlertTriangle } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge, StatusBadge } from "@/components/ui/badge";
@@ -12,14 +12,15 @@ import { cn } from "@/lib/utils";
 
 type Stats = {
   counts: Record<string, number>;
-  today: { sent: number; captured: number };
+  today: { sent: number; captured: number; rejected: number };
   days: { day: string; captured: number; sent: number }[];
   bySource: { name: string; captured: number; sent: number }[];
   groups: Record<string, number>;
   config: {
     evolution: boolean;
     meli: boolean;
-    sendMode: string;
+    agent: string;
+    perHour: number;
     inWindow: boolean;
     activeFrom: string;
     activeTo: string;
@@ -106,8 +107,8 @@ function ActivityChart({ days }: { days: Stats["days"] }) {
         <span>hoje</span>
       </div>
       <div className="mt-3 flex items-center gap-4 text-[12px] text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-foreground" /> Enviadas</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-foreground/15" /> Capturadas</span>
+        <span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-foreground" /> Postados</span>
+        <span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-foreground/15" /> Ofertas lidas</span>
       </div>
     </div>
   );
@@ -137,21 +138,21 @@ export default function Dashboard() {
     <>
       <PageHeader
         title="Visão geral"
-        description="Promoções capturadas dos grupos de origem e postadas no seu grupo."
+        description="O agente lê os grupos de perfume, escolhe o que está em alta e posta sozinho no seu grupo."
         actions={
           <Link href="/fila">
             <Button variant="outline" size="sm">
-              Abrir fila <ArrowUpRight className="size-3.5" />
+              Ver posts <ArrowUpRight className="size-3.5" />
             </Button>
           </Link>
         }
       />
 
       <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <Kpi title="Enviadas hoje" value={st?.today.sent ?? "–"} icon={Send} hint={`${c.sent || 0} no total`} tone="success" />
-        <Kpi title="Capturadas hoje" value={st?.today.captured ?? "–"} icon={Radio} hint={`${st?.groups.source || 0} grupos de origem`} delay={0.04} />
-        <Kpi title="Na fila" value={c.queued ?? 0} icon={Clock} hint={`1 post a cada ${st?.config.minIntervalSeconds ?? "–"}s`} tone="info" delay={0.08} />
-        <Kpi title="Aguardando aprovação" value={c.pending ?? 0} icon={Inbox} hint={st?.config.sendMode === "manual" ? "Modo manual ativo" : "Links com falha caem aqui"} tone="warning" delay={0.12} />
+        <Kpi title="Postados hoje" value={st?.today.sent ?? "–"} icon={Send} hint={`ritmo de ${st?.config.perHour ?? "–"}/h · ${c.sent || 0} no total`} tone="success" />
+        <Kpi title="Ofertas lidas hoje" value={st?.today.captured ?? "–"} icon={Radio} hint={`${st?.groups.source || 0} grupos de origem`} delay={0.04} />
+        <Kpi title="Na fila" value={c.queued ?? 0} icon={Clock} hint="sai em segundos" tone="info" delay={0.08} />
+        <Kpi title="Descartados hoje" value={st?.today.rejected ?? 0} icon={Bot} hint="o agente explica cada um" tone="warning" delay={0.12} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
@@ -163,6 +164,7 @@ export default function Dashboard() {
         <Card>
           <CardHeader title="Status" description="Integrações e regras" />
           <CardContent className="flex flex-col gap-0.5 px-3">
+            <StatusRow ok label="Agente" detail={st?.config.agent === "claude" ? "Decide com o Claude + regras" : "Decide pelas regras (sem chave do Claude)"} href="/fila" />
             <StatusRow ok={!!st?.config.evolution} label="Evolution API" detail={st?.config.evolution ? "Credenciais configuradas" : "Configure URL, API key e instância"} href="/configuracoes" />
             <StatusRow ok={!!st?.config.meli} label="Afiliado Mercado Livre" detail={st?.config.meli ? "Conversão de links pronta" : "Falta configurar seu link de afiliado"} href="/configuracoes" />
             <StatusRow ok={(st?.groups.source || 0) > 0 && (st?.groups.destination || 0) > 0} label="Grupos" detail={`${st?.groups.source || 0} origem · ${st?.groups.destination || 0} destino`} href="/grupos" />
@@ -174,7 +176,7 @@ export default function Dashboard() {
       <div className="mt-4 grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
           <CardHeader
-            title="Últimas promoções"
+            title="Últimas decisões do agente"
             action={
               <Link href="/fila" className="text-[12.5px] font-medium text-muted-foreground hover:text-foreground">
                 Ver todas
@@ -188,7 +190,7 @@ export default function Dashboard() {
                   <li key={p.id} className="flex items-center gap-3 px-2 py-2.5">
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-[13.5px] font-medium">
-                        {p.formatted_text.split("\n")[0].replace(/[*_~]/g, "") || "(sem texto)"}
+                        {p.formatted_text.split("\n").find((l) => /\d+\s*ml/i.test(l))?.replace(/[*_~]/g, "") || p.formatted_text.split("\n")[0].replace(/[*_~]/g, "") || "(sem texto)"}
                       </div>
                       <div className="truncate text-[12px] text-muted-foreground">
                         {p.source_name} · {timeAgo(p.created_at)}
@@ -205,7 +207,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
         <Card>
-          <CardHeader title="Grupos que mais rendem" description="Últimos 7 dias" />
+          <CardHeader title="Grupos que mais postam" description="Ofertas lidas e quantas viraram post nosso · 7 dias" />
           <CardContent>
             {st?.bySource.length ? (
               <ul className="flex flex-col gap-3">

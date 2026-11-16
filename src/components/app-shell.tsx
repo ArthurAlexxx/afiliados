@@ -33,7 +33,7 @@ const NAV = [
     items: [
       { href: "/", label: "Visão geral", icon: LayoutDashboard },
       { href: "/curadoria", label: "Curadoria", icon: Sparkles },
-      { href: "/fila", label: "Fila de posts", icon: ListOrdered, badgeKey: "pending" as const },
+      { href: "/fila", label: "Posts", icon: ListOrdered },
       { href: "/grupos", label: "Grupos", icon: Users },
       { href: "/conexao", label: "Conectar WhatsApp", icon: QrCode },
     ],
@@ -185,7 +185,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     const load = () =>
       fetch("/api/stats")
         .then((r) => (r.ok ? r.json() : null))
-        .then((j) => alive && j && setPending(j.counts?.pending || 0))
+        .then((j) => alive && j && setPending(0))
         .catch(() => {});
     load();
     const t = setInterval(load, 20000);

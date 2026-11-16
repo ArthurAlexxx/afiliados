@@ -12,15 +12,18 @@ import { WaPreview } from "@/components/wa-preview";
 import { api, useApi } from "@/lib/client";
 import { DEFAULT_TEMPLATE, TEMPLATE_VARS, parsePromo, renderTemplate } from "@/lib/parser";
 
-const SAMPLE = `🔥🔥 *Fone de Ouvido Bluetooth JBL Tune 520BT* 🔥🔥
+const SAMPLE = `📉 Baixou 43%
 
-~De R$ 349,90~
-✅ Por R$ 199,90
-💳 10x de R$ 19,99 sem juros
-🎟️ Use o cupom: JBL20
-🚚 Frete grátis
+Asad Eau de Parfum 100ml
 
-🛒 https://mercadolivre.com/sec/1aBcDeF`;
+❌ DE: R$299,00
+✅ POR: R$169,00 (frete grátis)
+
+🎟️ CUPOM: DEZOFF
+
+🛒 Vendido por KID'S LIFE
+
+https://mercadolivre.com/sec/1aBcDeF`;
 
 type PreviewResult = {
   formatted: string;
@@ -91,7 +94,7 @@ export default function TemplatePage() {
     <>
       <PageHeader
         title="Template e teste"
-        description="Defina o padrão das postagens do seu grupo e simule com qualquer mensagem."
+        description="Padrão dos posts que o agente publica. Simule com qualquer mensagem dos grupos."
         actions={
           <>
             <Button size="sm" variant="ghost" onClick={() => setTpl(DEFAULT_TEMPLATE)}>

@@ -35,12 +35,11 @@ export function Badge({
 }
 
 export const STATUS: Record<string, { label: string; tone: keyof typeof tones }> = {
-  pending: { label: "Aguardando aprovação", tone: "warning" },
   queued: { label: "Na fila", tone: "info" },
   sending: { label: "Enviando", tone: "info" },
   sent: { label: "Enviado", tone: "success" },
   failed: { label: "Falhou", tone: "danger" },
-  skipped: { label: "Ignorado", tone: "neutral" },
+  skipped: { label: "Descartado pelo agente", tone: "neutral" },
   duplicate: { label: "Duplicado", tone: "neutral" },
 };
 
