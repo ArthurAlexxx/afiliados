@@ -246,6 +246,9 @@ export async function inpaint(src: Buffer, box: [number, number, number, number]
 export async function processUnwatermark(): Promise<boolean> {
   const w = globalThis as { __afiliadosUnwmBusy?: boolean };
   if (w.__afiliadosUnwmBusy) return false;
+  // TESTE: no máximo 30 fotos esperando o Arthur olhar; não fica rodando sem parar
+  const waiting = (db().prepare("SELECT COUNT(*) n FROM image_fixes WHERE status = 'wm_ready'").get() as { n: number }).n;
+  if (waiting >= 30) return false;
   const row = db()
     .prepare("SELECT id, product_id, group_jid, src_path FROM image_fixes WHERE status = 'wm_queued' ORDER BY id DESC LIMIT 1")
     .get() as { id: number; product_id: number; group_jid: string; src_path: string } | undefined;
@@ -277,10 +280,9 @@ export async function processUnwatermark(): Promise<boolean> {
       log("warn", `Foto #${row.id}: a marca não saiu por completo, foto descartada`);
       return true;
     }
-    const { addImage } = await import("./curation.ts");
-    const msg = await addImage(row.product_id, out, `lama:${row.id}`, row.group_jid);
-    set("wm_done", msg, file);
-    log("info", `Marca d'água tirada (foto #${row.id}, ${((Date.now() - t) / 1000).toFixed(0)}s): ${msg}`);
+    // TESTE: nada entra nos posts sem o Arthur aprovar (tela Fotos → "Marca d'água: teste")
+    set("wm_ready", `pronta para aprovar (${((Date.now() - t) / 1000).toFixed(0)}s)`, file);
+    log("info", `Marca d'água tirada (foto #${row.id}): aguardando aprovação`);
     return true;
   } catch (e) {
     set("wm_failed", (e as Error).message.slice(0, 300));
@@ -331,6 +333,37 @@ export async function backfillGroups() {
     }
     log("info", `Marca d'água: ${n} foto(s) recentes de ${g.name} na fila para limpar`);
   }
+}
+
+/** Aprovar: a foto limpa entra no banco do perfume. Recusar: fica de fora. */
+export async function approveClean(id: number, ok: boolean): Promise<string> {
+  const r = db().prepare("SELECT product_id, group_jid, out_path FROM image_fixes WHERE id = ? AND status = 'wm_ready'").get(id) as
+    | { product_id: number; group_jid: string; out_path: string }
+    | undefined;
+  if (!r) throw new Error("foto não encontrada");
+  if (!ok) {
+    db().prepare("UPDATE image_fixes SET status = 'wm_rejected', updated_at = datetime('now') WHERE id = ?").run(id);
+    return "recusada";
+  }
+  const { addImage } = await import("./curation.ts");
+  const msg = await addImage(r.product_id, fs.readFileSync(r.out_path), `lama:${id}`, r.group_jid);
+  db().prepare("UPDATE image_fixes SET status = 'wm_done', error = ?, updated_at = datetime('now') WHERE id = ?").run(msg, id);
+  return msg;
+}
+
+export function listClean(status = "wm_ready") {
+  return db()
+    .prepare(
+      `SELECT f.id, f.product_id, p.name, f.status, f.error, f.created_at FROM image_fixes f LEFT JOIN products p ON p.id = f.product_id
+       WHERE f.status = ? ORDER BY f.id DESC LIMIT 60`,
+    )
+    .all(status);
+}
+
+export function cleanFile(id: number, which: "src" | "out"): string | null {
+  const r = db().prepare("SELECT src_path, out_path FROM image_fixes WHERE id = ?").get(id) as { src_path: string; out_path: string | null } | undefined;
+  const p = which === "out" ? r?.out_path : r?.src_path;
+  return p && fs.existsSync(p) ? p : null;
 }
 
 /** Libera a memória do modelo quando a fila esvazia. */

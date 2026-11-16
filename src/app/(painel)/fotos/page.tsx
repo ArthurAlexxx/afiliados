@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, Star, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -140,7 +140,81 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
   );
 }
 
+type Clean = { id: number; product_id: number; name: string | null; status: string; error: string | null; created_at: string };
+
+function CleanReview() {
+  const { data, reload } = useApi<{ rows: Clean[]; stats: Record<string, number> }>("/api/limpas");
+  const [busy, setBusy] = React.useState<number | null>(null);
+  const [big, setBig] = React.useState<{ id: number; f: "src" | "out" } | null>(null);
+  const decide = async (c: Clean, ok: boolean) => {
+    setBusy(c.id);
+    try {
+      await api("/api/limpas", { method: "POST", json: { id: c.id, ok } });
+      toast.success(ok ? "Aprovada: entrou no banco de fotos desse perfume" : "Recusada: não será usada");
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const st = data?.stats || {};
+  return (
+    <>
+      <div className="mb-4 rounded-xl bg-muted px-4 py-3 text-[12.5px] text-muted-foreground">
+        Teste gratuito para tirar a marca d&apos;água das fotos do RP PROMOS. Nenhuma foto daqui vai para os posts sem você aprovar.
+        Fotos em que a marca não saiu por completo já são descartadas sozinhas. Clique numa foto para ver em tamanho real.
+        {" "}Esperando você: {st.wm_ready || 0} · aprovadas: {st.wm_done || 0} · recusadas: {st.wm_rejected || 0} · descartadas (marca ficou): {st.wm_still || 0} · na fila: {st.wm_queued || 0}
+      </div>
+      {!data ? (
+        <div className="h-64 animate-pulse rounded-xl bg-muted" />
+      ) : !data.rows.length ? (
+        <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhuma foto esperando aprovação ainda. O teste processa uma foto por vez (cerca de 30s cada).</Card>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-2">
+          {data.rows.map((c) => (
+            <div key={c.id} className="overflow-hidden rounded-xl border bg-card">
+              <div className="grid grid-cols-2 gap-px bg-border">
+                {(["src", "out"] as const).map((f) => (
+                  <button key={f} onClick={() => setBig({ id: c.id, f })} className="relative bg-white" title="Ver em tamanho real">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/limpas/${c.id}?f=${f}&w=700`} alt="" loading="lazy" className="aspect-square w-full object-contain" />
+                    <span className="absolute top-2 left-2 rounded-md bg-black/70 px-2 py-0.5 text-[11px] text-white">{f === "src" ? "Antes (com marca)" : "Depois (limpa)"}</span>
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 text-[12px] text-muted-foreground">
+                <span className="min-w-0 flex-1 truncate font-medium text-foreground">{c.name || `perfume #${c.product_id}`}</span>
+                <span>{timeAgo(c.created_at)}</span>
+                <Button size="sm" variant="outline" disabled={busy === c.id} onClick={() => decide(c, false)}><X className="size-3.5" /> Recusar</Button>
+                <Button size="sm" variant="accent" disabled={busy === c.id} onClick={() => decide(c, true)}><Check className="size-3.5" /> Aprovar</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {big && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={() => setBig(null)}>
+          <div className="flex items-center gap-2 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
+            {(["src", "out"] as const).map((f) => (
+              <button key={f} onClick={() => setBig({ id: big.id, f })} className={cn("h-8 rounded-[10px] px-3", big.f === f ? "bg-accent text-accent-foreground" : "bg-white/10 hover:bg-white/20")}>
+                {f === "src" ? "Antes" : "Depois"}
+              </button>
+            ))}
+            <button onClick={() => setBig(null)} aria-label="Fechar" className="ml-auto flex size-8 items-center justify-center rounded-[10px] bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto px-4 pb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/limpas/${big.id}?f=${big.f}`} alt="" className="mx-auto max-w-none" onClick={(e) => e.stopPropagation()} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function FotosPage() {
+  const [tab, setTab] = React.useState<"fotos" | "limpas">("fotos");
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
   const [sel, setSel] = React.useState<number | null>(null);
@@ -155,7 +229,13 @@ export default function FotosPage() {
         title="Fotos dos perfumes"
         description={`O banco de fotos de cada perfume, em resolução original. Clique numa foto para ver em tela cheia e clique de novo para ver em 100% (setas do teclado navegam). Escolha a foto principal de cada perfume: os posts dele sempre saem com ela. ${data ? `${data.total} fotos ativas.` : ""}`}
       />
-      {sel ? (
+      <div className="mb-4 flex gap-2">
+        <Button size="sm" variant={tab === "fotos" ? "accent" : "outline"} onClick={() => setTab("fotos")}>Perfumes</Button>
+        <Button size="sm" variant={tab === "limpas" ? "accent" : "outline"} onClick={() => setTab("limpas")}>Marca d&apos;água: teste</Button>
+      </div>
+      {tab === "limpas" ? (
+        <CleanReview />
+      ) : sel ? (
         <ProductPhotos id={sel} onBack={() => setSel(null)} />
       ) : (
         <>
