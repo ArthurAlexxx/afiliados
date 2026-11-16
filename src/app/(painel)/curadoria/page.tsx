@@ -351,6 +351,8 @@ export default function CuradoriaPage() {
                   <Input type="number" min={5} value={String(s.curationLookbackMinutes)} onChange={(e) => set("curationLookbackMinutes")(e.target.value)} />
                 </Field>
                 <Switch checked={Boolean(s.curationRequireImage)} onChange={set("curationRequireImage")} label="Só postar com foto do banco" description="Sem isso, usa a foto do anúncio quando o perfume não tem foto boa." />
+                <Switch checked={s.top5Enabled !== false} onChange={set("top5Enabled")} label="Top 5 do dia às 21h" description="Um post só com as 5 melhores ofertas do dia (imagem com os 5 perfumes + links)." />
+                <a href="/api/top5?img=1" target="_blank" rel="noreferrer" className="text-[12.5px] font-medium text-muted-foreground underline-offset-2 hover:underline">Ver prévia do Top 5 de hoje</a>
                 <Button onClick={save} loading={busy === "save"} disabled={!dirty}>
                   {busy !== "save" && <Save className="size-4" />} Salvar
                 </Button>

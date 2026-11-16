@@ -1,7 +1,6 @@
 /** Extração heurística dos campos de uma mensagem de promoção. */
 
-export const DEFAULT_TEMPLATE = `🏆 *{historico}*
-📉 *Baixou {desconto_pct}%*
+export const DEFAULT_TEMPLATE = `{manchete}
 
 *{titulo}*
 
@@ -17,6 +16,20 @@ export const DEFAULT_TEMPLATE = `🏆 *{historico}*
 
 /** Modelos padrão antigos: quem ainda usa um deles passa para o novo automaticamente. */
 export const OLD_DEFAULT_TEMPLATES = [
+  `🏆 *{historico}*
+📉 *Baixou {desconto_pct}%*
+
+*{titulo}*
+
+❌ ~DE: R\${preco_antigo}~
+✅ POR: R\${preco} {frete_tag?}
+
+🏷️ Cupom: \`{cupom}\` ✅
+
+🛒 LOJA: *{loja_nome}*
+
+📎 LINK DO PRODUTO ➡️
+{link}`,
   `📉 *Baixou {desconto_pct}%*
 
 *{titulo}*
@@ -61,6 +74,8 @@ export type PromoData = {
   loja_nome: string;
   frete_tag: string;
   historico: string;
+  /** 1ª linha do post (vai na notificação): selo de menor preço + "Baixou N%" */
+  manchete: string;
 };
 
 export const TEMPLATE_VARS: { key: keyof PromoData; label: string }[] = [
@@ -81,7 +96,8 @@ export const TEMPLATE_VARS: { key: keyof PromoData; label: string }[] = [
   { key: "loja_info", label: "Loja oficial X / Vendido por X" },
   { key: "loja_nome", label: "Só o nome da loja" },
   { key: "frete_tag", label: "(frete grátis) quando tiver" },
-  { key: "historico", label: "MENOR PREÇO HISTÓRICO quando for" },
+  { key: "historico", label: "Selo de menor preço (30 dias) quando for" },
+  { key: "manchete", label: "1ª linha: 🏆 selo · Baixou N% (ou só 📉 Baixou N%)" },
 ];
 
 const PRICE_RE = /R\$\s*([\d.]+(?:,\d{1,2})?)/gi;
@@ -121,7 +137,7 @@ const NUM = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)`;
 const DE_RE = new RegExp(String.raw`(?:^|[\s❌✖️:(])(?:de|era|antes)\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
 const POR_RE = new RegExp(String.raw`(?:^|[\s✅✔️:)~])(?:por|apenas|agora|s[óo]|hoje)\s*(?:apenas)?\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
 
-export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja" | "desconto_pct" | "economia" | "loja_info" | "loja_nome" | "frete_tag" | "historico"> & {
+export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja" | "desconto_pct" | "economia" | "loja_info" | "loja_nome" | "frete_tag" | "historico" | "manchete"> & {
   desconto_pct: string;
   economia: string;
   loja_info: string;
@@ -245,6 +261,13 @@ export function parsePromo(text: string): ParsedPromo {
     cupomOnly,
     loja_vendedor,
   };
+}
+
+/** 1ª linha do post, a que aparece na notificação do celular. */
+export function manchete(d: Partial<PromoData>): string {
+  const pct = (d.desconto_pct || "").trim();
+  if (d.historico) return `🏆 *${d.historico}*${pct ? ` · Baixou ${pct}%` : ""}`;
+  return pct ? `📉 *Baixou ${pct}%*` : "";
 }
 
 /**

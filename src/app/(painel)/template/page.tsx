@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/input";
 import { StatusBadge } from "@/components/ui/badge";
 import { WaPreview } from "@/components/wa-preview";
 import { api, useApi } from "@/lib/client";
-import { DEFAULT_TEMPLATE, TEMPLATE_VARS, parsePromo, renderTemplate } from "@/lib/parser";
+import { DEFAULT_TEMPLATE, TEMPLATE_VARS, manchete, parsePromo, renderTemplate } from "@/lib/parser";
 
 const SAMPLE = `📉 Baixou 43%
 
@@ -48,7 +48,8 @@ export default function TemplatePage() {
 
   const template = tpl ?? "";
   const local = React.useMemo(() => {
-    const data = { ...parsePromo(sample), link: "https://meli.la/SEU-LINK", links: "https://meli.la/SEU-LINK", texto: sample, grupo_origem: "Grupo de teste", loja: "Mercado Livre" };
+    const base = { ...parsePromo(sample), link: "https://meli.la/SEU-LINK", links: "https://meli.la/SEU-LINK", texto: sample, grupo_origem: "Grupo de teste", loja: "Mercado Livre", historico: "" };
+    const data = { ...base, manchete: manchete(base) };
     return { text: renderTemplate(template, data), data };
   }, [template, sample]);
 

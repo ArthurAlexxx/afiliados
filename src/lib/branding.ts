@@ -108,7 +108,7 @@ async function textWidth(text: string, size: number, weight: number) {
  * A foto inteira fica centralizada; as sobras são preenchidas com a própria foto ampliada e desfocada.
  */
 /** Cor do fundo quando as bordas da foto são lisas (fundo de estúdio); null se o fundo tem cenário. */
-async function plainEdgeColor(src: Buffer): Promise<{ r: number; g: number; b: number } | null> {
+export async function plainEdgeColor(src: Buffer): Promise<{ r: number; g: number; b: number } | null> {
   const N = 96;
   const { data } = await sharp(src).resize(N, N, { fit: "fill" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
   const px: number[][] = [];

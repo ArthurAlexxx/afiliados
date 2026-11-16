@@ -4,7 +4,7 @@ import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { convertMeliLink, type ConvertResult } from "./affiliate.ts";
-import { parsePromo, renderTemplate, type PromoData } from "./parser.ts";
+import { manchete, parsePromo, renderTemplate, type PromoData } from "./parser.ts";
 import { aiExtract } from "./ai.ts";
 import { Evolution } from "./evolution.ts";
 import { evaluateInstant, recordOffer } from "./curation.ts";
@@ -72,6 +72,7 @@ export async function buildPost(
   const data: PromoData = {
     ...parsed,
     historico: "",
+    manchete: "",
     link: first?.affiliateUrl || "",
     links: ok.map((c) => c.affiliateUrl).join("\n"),
     texto,
@@ -96,6 +97,7 @@ export async function buildPost(
     reason = `Link do ML não convertido: ${err}`;
   }
 
+  data.manchete = manchete(data);
   return {
     formatted: renderTemplate(s.template, data),
     data,

@@ -3,7 +3,7 @@ import path from "node:path";
 import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
-import { parsePromo, renderTemplate, formatPrice } from "./parser.ts";
+import { manchete, parsePromo, renderTemplate, formatPrice } from "./parser.ts";
 import { nameQuality, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { brandImage, standardImage } from "./branding.ts";
@@ -337,27 +337,34 @@ export async function brand(buf: Buffer, discountPct: number | null, s: Settings
 }
 
 /**
- * Menor preço histórico: o preço é o menor já visto nos grupos (90 dias),
- * ou fica até 5% acima do recorde antigo (de mais de 7 dias atrás) e é o menor da última semana.
- * Ex: R$500 → R$400 (recorde) → semanas depois R$420 também ganha o selo; quem viu o de R$400 provavelmente não vê este.
+ * Selo de menor preço (vai na 1ª linha do post, que é o que aparece na notificação).
+ * Só quando é verdade: o preço é o menor visto nos grupos nos últimos 30 dias,
+ * ou fica até 5% acima de um recorde de mais de 7 dias atrás e é o menor da última semana
+ * (ex: R$500 → R$400 → semanas depois R$420 também ganha; quem viu o de R$400 provavelmente não vê este).
+ * O texto respeita quanto histórico temos: só diz "30 dias" quando o banco cobre ~30 dias.
  */
-export function isHistoricLow(productId: number, price: number | null, messageId?: string | null): boolean {
-  if (!price || price <= 0) return false;
+export function lowPriceSeal(productId: number, price: number | null, messageId?: string | null): string {
+  if (!price || price <= 0) return "";
   const rows = db()
-    .prepare("SELECT price, created_at FROM offers WHERE product_id = ? AND price > 0 AND created_at >= datetime('now','-90 days') AND created_at < datetime('now','-15 minutes') AND message_id IS NOT ? ORDER BY created_at")
+    .prepare("SELECT price, created_at FROM offers WHERE product_id = ? AND price > 0 AND created_at >= datetime('now','-30 days') AND created_at < datetime('now','-15 minutes') AND message_id IS NOT ? ORDER BY created_at")
     .all(productId, messageId ?? null) as { price: number; created_at: string }[];
-  if (rows.length < 5) return false;
+  if (rows.length < 5) return "";
   const ts = (d: string) => new Date(d.replace(" ", "T") + "Z").getTime();
-  const span = ts(rows[rows.length - 1].created_at) - ts(rows[0].created_at);
-  if (Math.abs(span) < 2 * 86400e3) return false; // pouco histórico ainda
+  const coverDays = (Date.now() - ts(rows[0].created_at)) / 86400e3;
+  if (coverDays < 2) return ""; // pouco histórico ainda
   const med = median(rows.map((r) => r.price))!;
   const valid = rows.filter((r) => r.price >= med * 0.5); // ignora preço lido errado (kit, miniatura)
-  if (!valid.length) return false;
+  if (!valid.length) return "";
   const low = valid.reduce((a, b) => (b.price < a.price ? b : a));
-  if (price <= low.price) return true;
   const weekAgo = Date.now() - 7 * 86400e3;
   const lastWeek = valid.filter((r) => ts(r.created_at) >= weekAgo).map((r) => r.price);
-  return ts(low.created_at) < weekAgo && price <= low.price * 1.05 && (!lastWeek.length || price <= Math.min(...lastWeek));
+  const ok = price <= low.price || (ts(low.created_at) < weekAgo && price <= low.price * 1.05 && (!lastWeek.length || price <= Math.min(...lastWeek)));
+  if (!ok) return "";
+  return coverDays >= 25 ? "MENOR PREÇO EM 30 DIAS" : coverDays >= 7 ? "MENOR PREÇO DA SEMANA" : "MENOR PREÇO DOS ÚLTIMOS DIAS";
+}
+
+export function isHistoricLow(productId: number, price: number | null, messageId?: string | null): boolean {
+  return Boolean(lowPriceSeal(productId, price, messageId));
 }
 
 /**
@@ -391,8 +398,9 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     desconto: discount ? `(-${discount}%)` : built.data.desconto,
     desconto_pct: discount ? String(discount) : built.data.desconto_pct,
     grupo_origem: item.best.group_name,
-    historico: isHistoricLow(item.productId, item.best.price, (item.best as { message_id?: string }).message_id) ? "MENOR PREÇO HISTÓRICO" : "",
+    historico: lowPriceSeal(item.productId, item.best.price, (item.best as { message_id?: string }).message_id),
   };
+  data.manchete = manchete(data);
   const formatted = renderTemplate(s.template, data);
 
   let mediaPath: string | null = null;
@@ -627,6 +635,12 @@ export function startCuration() {
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
       if (s.mode !== "curated") return;
+      // Top 5 do dia às 21h (um post só)
+      if (s.top5Enabled) {
+        const { runTop5 } = await import("./top5.ts");
+        const r = await runTop5();
+        if (r.msg.startsWith("post")) return;
+      }
       // espera o histórico ser importado na primeira vez, para não escolher com o banco vazio
       if (process.env.AUTO_SOURCE_GROUPS && !getState("historyImported")) return;
       const { inActiveWindow } = await import("./pipeline.ts");

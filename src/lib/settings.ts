@@ -49,6 +49,8 @@ export type Settings = {
   curationCooldownHours: number;
   curationLookbackMinutes: number;
   curationRequireImage: boolean;
+  /** post único às 21h com as 5 melhores ofertas do dia */
+  top5Enabled: boolean;
 
   // Identidade visual (etiquetas na foto)
   brandEnabled: boolean;
@@ -112,6 +114,7 @@ export function defaults(): Settings {
     curationCooldownHours: 5,
     curationLookbackMinutes: 45,
     curationRequireImage: false,
+    top5Enabled: true,
 
     brandEnabled: true,
     brandName: env.BRAND_NAME || "",
