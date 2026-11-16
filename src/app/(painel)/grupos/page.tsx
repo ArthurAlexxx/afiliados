@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 type Group = {
   jid: string; name: string; size: number; role: "none" | "source" | "destination"; captured: number; sent: number;
-  watermark: number; offers: number; photos: number;
+  watermark: number; wm_corner?: string; offers: number; photos: number;
 };
 
 const ROLES = [
@@ -96,6 +96,17 @@ export default function GruposPage() {
     try {
       await api("/api/groups", { method: "PATCH", json: { jid: g.jid, watermark } });
       toast.success(watermark ? "Fotos desse grupo não serão usadas" : "Fotos desse grupo liberadas para o banco");
+    } catch (e) {
+      toast.error((e as Error).message);
+      reload();
+    }
+  };
+
+  const setCorner = async (g: Group, wmCorner: string) => {
+    setData((d) => (d ? { rows: d.rows.map((x) => (x.jid === g.jid ? { ...x, wm_corner: wmCorner } : x)) } : d));
+    try {
+      await api("/api/groups", { method: "PATCH", json: { jid: g.jid, wmCorner } });
+      toast.success("Canto da marca d'água salvo");
     } catch (e) {
       toast.error((e as Error).message);
       reload();
@@ -189,6 +200,20 @@ export default function GruposPage() {
                       {g.watermark ? "Marca d'água: não usar fotos" : "Fotos liberadas"}
                     </button>
                   )}
+                  {g.role === "source" && g.watermark ? (
+                    <select
+                      aria-label="Onde fica a marca d'água"
+                      title="Onde fica a marca d'água (a IA mexe só nesse canto)"
+                      value={g.wm_corner || "top-right"}
+                      onChange={(e) => setCorner(g, e.target.value)}
+                      className="h-8 rounded-[10px] border bg-background px-2 text-[12px]"
+                    >
+                      <option value="top-right">Marca: sup. direito</option>
+                      <option value="top-left">Marca: sup. esquerdo</option>
+                      <option value="bottom-right">Marca: inf. direito</option>
+                      <option value="bottom-left">Marca: inf. esquerdo</option>
+                    </select>
+                  ) : null}
                   <RoleSwitch jid={g.jid} value={g.role} onChange={(r) => setRole(g, r)} />
                 </li>
               ))}

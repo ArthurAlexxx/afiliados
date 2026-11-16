@@ -233,6 +233,21 @@ export default function ConfigPage() {
           </div>
         </Section>
 
+        <Section icon={Sparkles} title="Imagens com IA" description="Refaz fotos de grupos com marca d'água (só o canto da marca) para perfumes com poucas fotos. Tudo passa pela sua aprovação na tela Imagens.">
+          <Field label="Chave da OpenAI" hint="Usada só para refazer as fotos. Cada foto é uma chamada paga (qualidade média).">
+            <Input type="password" value={str("openaiApiKey")} onChange={(e) => set("openaiApiKey")(e.target.value)} placeholder="sk-..." />
+          </Field>
+          <Field label="Modelo de imagem">
+            <Input value={str("imageModel")} onChange={(e) => set("imageModel")(e.target.value)} />
+          </Field>
+          <Field label="Máximo de fotos por dia" hint="Limite de gasto: depois disso a fila espera o dia seguinte.">
+            <Input type="number" value={str("imageFixDaily") || "15"} onChange={(e) => set("imageFixDaily")(Number(e.target.value))} />
+          </Field>
+          <div className="sm:col-span-2">
+            <Switch checked={bool("imageFixEnabled")} onChange={set("imageFixEnabled")} label="Refazer fotos com marca d'água" description="Na tela Grupos, marque o canto onde cada grupo põe a marca (padrão: superior direito)." />
+          </div>
+        </Section>
+
         <div className="flex items-start gap-2 rounded-xl bg-muted px-4 py-3 text-[12.5px] text-muted-foreground">
           <Info className="mt-0.5 size-4 shrink-0" />
           Valores definidos aqui têm prioridade sobre as variáveis de ambiente (.env). Campos secretos aparecem mascarados; deixe como está para manter o valor atual.

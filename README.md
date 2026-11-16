@@ -160,3 +160,7 @@ src/
 
 - O Mercado Livre não tem API pública para links de afiliado; a estratégia *Gerador* usa o mesmo endpoint do portal. Se o ML mudar esse endpoint, ajuste `MELI_CREATE_LINK_URL` ou use a estratégia de parâmetros.
 - Respeite um intervalo razoável entre posts para não ter o número bloqueado pelo WhatsApp.
+
+## Imagens com IA (marca d'água)
+
+Fotos de grupos marcados com marca d'água podem ser refeitas pela IA (OpenAI, `OPENAI_API_KEY` ou chave em Integrações). Só entram na fila perfumes com menos de 2 fotos limpas. A IA repinta só o canto da marca (configurado por grupo na tela Grupos) e o resultado é recolado sobre a original, então o frasco e o rótulo não mudam. Nada entra no banco sem aprovação na tela **Imagens**. Limite diário em `IMAGE_FIX_DAILY` (padrão 15).

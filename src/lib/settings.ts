@@ -63,6 +63,12 @@ export type Settings = {
   aiEnabled: boolean;
   anthropicApiKey: string;
   aiModel: string;
+
+  // Fotos com marca d'água refeitas pela IA (OpenAI), sempre com aprovação manual
+  imageFixEnabled: boolean;
+  openaiApiKey: string;
+  imageModel: string;
+  imageFixDaily: number;
 };
 
 export const SECRET_KEYS: (keyof Settings)[] = [
@@ -71,6 +77,7 @@ export const SECRET_KEYS: (keyof Settings)[] = [
   "meliCsrf",
   "bitlyToken",
   "anthropicApiKey",
+  "openaiApiKey",
 ];
 
 const env = process.env;
@@ -126,6 +133,11 @@ export function defaults(): Settings {
     aiEnabled: false,
     anthropicApiKey: env.ANTHROPIC_API_KEY || "",
     aiModel: env.AI_MODEL || "claude-haiku-5-5",
+
+    imageFixEnabled: Boolean(env.OPENAI_API_KEY),
+    openaiApiKey: env.OPENAI_API_KEY || "",
+    imageModel: env.IMAGE_MODEL || "gpt-image-1",
+    imageFixDaily: Number(env.IMAGE_FIX_DAILY || 15),
   };
 }
 

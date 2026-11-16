@@ -110,6 +110,12 @@ export async function recordOffer(o: OfferInput): Promise<string> {
 
   let img = "";
   if (o.image && !o.watermark) img = await addImage(productId, o.image, o.messageId, o.groupJid).catch((e) => `foto falhou: ${e.message}`);
+  else if (o.image && o.watermark) {
+    const { queueImageFix } = await import("./imagefix.ts");
+    img = await queueImageFix({ productId, image: o.image, messageId: o.messageId, groupJid: o.groupJid, groupName: o.groupName }).catch(
+      (e) => `foto para a IA falhou: ${e.message}`,
+    );
+  }
   return `oferta #${r.lastInsertRowid} (produto #${productId})${img ? `, ${img}` : ""}`;
 }
 
@@ -634,6 +640,8 @@ export function startCuration() {
         setState("radarHubAt", String(Date.now()));
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
+      // fotos com marca d'água: a IA refaz uma por vez, em segundo plano (aprovação manual na tela Imagens)
+      if (s.imageFixEnabled) import("./imagefix.ts").then((m) => m.processImageFixes()).catch(() => {});
       if (s.mode !== "curated") return;
       // "me avisa quando baixar": chamada no grupo 2x por dia
       {

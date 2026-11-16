@@ -137,6 +137,23 @@ function migrate(db: DatabaseSync) {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    -- fotos de grupos com marca d'água refeitas pela IA (só entram no banco depois da aprovação)
+    CREATE TABLE IF NOT EXISTS image_fixes (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id  INTEGER NOT NULL,
+      group_jid   TEXT,
+      group_name  TEXT,
+      message_id  TEXT,
+      corner      TEXT NOT NULL DEFAULT 'top-right',
+      src_path    TEXT NOT NULL,
+      out_path    TEXT,
+      status      TEXT NOT NULL DEFAULT 'queued',   -- queued | ready | approved | rejected | failed
+      error       TEXT,
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_image_fixes_status ON image_fixes(status, created_at);
+
     CREATE TABLE IF NOT EXISTS logs (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       level      TEXT NOT NULL,
@@ -149,6 +166,7 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE groups ADD COLUMN watermark INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE posts ADD COLUMN product_id INTEGER",
     "ALTER TABLE posts ADD COLUMN origin TEXT NOT NULL DEFAULT 'repost'",
+    "ALTER TABLE groups ADD COLUMN wm_corner TEXT NOT NULL DEFAULT 'top-right'",
   ]) {
     try {
       db.exec(sql);

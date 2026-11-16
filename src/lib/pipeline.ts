@@ -192,7 +192,7 @@ async function ingestMessage(d: UpsertData): Promise<string> {
   // curadoria: toda promoção vira dado (preço, grupo, foto); quem decide o que postar é o ranking
   {
     let image: Buffer | null = null;
-    if (hasImage && !group.watermark) {
+    if (hasImage && (!group.watermark || s.imageFixEnabled)) {
       try {
         let b64 = d.message?.base64 || "";
         if (!b64 && messageId) b64 = (await new Evolution(s).getBase64FromMediaMessage(messageId)).base64 || "";
