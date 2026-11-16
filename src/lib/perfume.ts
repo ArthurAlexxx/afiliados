@@ -41,6 +41,23 @@ function norm(s: string) {
     .trim();
 }
 
+/** Palavras do nome (sem marca, sem genéricas, sem volume). Serve para nomes sem "ml", como os do ranking de vendas. */
+export function nameTokens(title: string): string[] {
+  return [
+    ...new Set(
+      norm(title)
+        .replace(/\b\d{2,4}\s*ml\b/g, " ")
+        .split(" ")
+        .filter((t) => t && !/^\d+$/.test(t) && !STOP.has(t) && !BRAND_WORDS.has(t)),
+    ),
+  ].sort();
+}
+
+export function tokenSimilarity(a: string[], b: string[]) {
+  if (!a.length || !b.length) return 0;
+  return jaccard(a, b);
+}
+
 export function perfumeInfo(title: string): PerfumeInfo | null {
   const n = norm(title);
   const mlm = n.match(/\b(\d{2,4})\s*ml\b/);

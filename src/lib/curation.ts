@@ -8,6 +8,7 @@ import { perfumeInfo, samePerfume, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { brandImage, standardImage } from "./branding.ts";
 import { Evolution } from "./evolution.ts";
+import { pullRadarHub, salesBoostFor } from "./sales.ts";
 
 const BANK_DIR = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "bank");
 const sqlNow = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
@@ -141,6 +142,8 @@ export type RankItem = {
   coolingDown: boolean;
   eligible: boolean;
   why: string;
+  /** bônus por estar vendendo cada vez mais no ML (RadarHub) */
+  sales: { boost: number; note: string } | null;
   score: number;
 };
 
@@ -204,6 +207,9 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
       // oferta recém-chegada: o preço ainda está valendo
       (best ? 15 * Math.max(0, 1 - (Date.now() - ts(best.created_at)) / lookbackMs) : 0);
     if (!pimgs.length) score -= 20;
+    // vendendo cada vez mais no Mercado Livre: sai na frente
+    const sales = salesBoostFor(p.name, p.ml);
+    if (sales) score += sales.boost;
     score = Math.round(Math.max(0, score));
 
     let why = "";
@@ -229,6 +235,7 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
       coolingDown,
       eligible: !why,
       why,
+      sales: sales ? { boost: sales.boost, note: sales.note } : null,
       score,
     });
   }
@@ -509,6 +516,11 @@ export function startCuration() {
     w.__afiliadosCurationBusy = true;
     try {
       const s = getSettings();
+      // vendas do RadarHub a cada 6h, quando ele estiver acessível
+      if (process.env.RADARHUB_URL && Date.now() - Number(getState("radarHubAt") || 0) > 6 * 3600e3) {
+        setState("radarHubAt", String(Date.now()));
+        pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
+      }
       if (s.mode !== "curated") return;
       // espera o histórico ser importado na primeira vez, para não escolher com o banco vazio
       if (process.env.AUTO_SOURCE_GROUPS && !getState("historyImported")) return;

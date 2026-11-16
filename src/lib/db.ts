@@ -99,6 +99,24 @@ function migrate(db: DatabaseSync) {
     );
     CREATE INDEX IF NOT EXISTS idx_images_product ON images(product_id, score);
 
+    -- vendas do Mercado Livre (RadarHub): o que está vendendo e subindo agora
+    CREATE TABLE IF NOT EXISTS sales (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      kind        TEXT NOT NULL,            -- em_alta | mais_vendidos
+      category    TEXT,
+      name        TEXT NOT NULL,
+      brand       TEXT,
+      ml          INTEGER,
+      tokens      TEXT NOT NULL,
+      position    INTEGER,
+      revenue     REAL,
+      units       REAL,
+      growth      REAL,                     -- % de crescimento (19 = +19%)
+      period      TEXT,
+      updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_sales_kind ON sales(kind, updated_at);
+
     CREATE TABLE IF NOT EXISTS logs (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       level      TEXT NOT NULL,

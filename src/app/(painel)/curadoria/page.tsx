@@ -3,7 +3,7 @@
 import * as React from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { toast } from "sonner";
-import { Sparkles, History, Send, ImageOff, Image as ImageIcon, Flame, Users, Tag, Save, AtSign, ChevronDown, Wand2 } from "lucide-react";
+import { Sparkles, History, Send, ImageOff, Image as ImageIcon, Flame, Users, Tag, Save, AtSign, ChevronDown, Wand2, TrendingUp } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -30,6 +30,7 @@ type Row = {
   image: { id: number } | null;
   eligible: boolean;
   why: string;
+  sales?: { boost: number; note: string } | null;
   score: number;
   lastPostedAt: string | null;
   best: { group: string; price: number; old: number | null; coupon: string | null; at: string; title: string } | null;
@@ -103,6 +104,7 @@ function RankRow({ r, i, onPost, posting, onToggleImg }: { r: Row; i: number; on
             )}
             {r.declaredPct ? <Badge tone="accent">-{r.declaredPct}%</Badge> : null}
             {r.recentGroups >= 2 && <Badge tone="warning"><Flame className="size-3" />{r.recentGroups} grupos agora</Badge>}
+            {r.sales && <Badge tone="success"><TrendingUp className="size-3" />{r.sales.note} · +{r.sales.boost}</Badge>}
             {!r.eligible && <span className="text-[11.5px] text-muted-foreground">{r.why}</span>}
           </div>
         </div>
