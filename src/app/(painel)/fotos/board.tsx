@@ -64,7 +64,7 @@ export function PhotoBoard({
   only,
 }: {
   onOpen: (id: number) => void;
-  Drop: React.ComponentType<{ productId: number; onAdded: () => void; compact?: boolean }>;
+  Drop: React.ComponentType<{ productId: number; onAdded: () => void; compact?: boolean; onUploaded?: (id: number) => void; label?: string }>;
   /** dentro da página de Posts: só os posts esperando foto, sem barra de filtros */
   embedded?: boolean;
   onCount?: (n: number) => void;
@@ -85,7 +85,9 @@ export function PhotoBoard({
   const [preview, setPreview] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState<number | null>(null);
   // foto aberta no enquadramento 1:1 antes de virar a do post
-  const [cropFor, setCropFor] = React.useState<{ row: Row; k: Kind; o: Opt; src: string; initial: Crop | null; adjust?: boolean } | null>(null);
+  const [cropFor, setCropFor] = React.useState<{ row: Row; k: Kind; o: Opt; src: string; initial: Crop | null; adjust?: boolean; dropped?: boolean } | null>(null);
+  // foto arrastada da internet: já está no banco; abre o quadrado 1:1 antes de liberar o post
+  const dropped = (row: Row) => (id: number) => setCropFor({ row, k: "bank", o: { id }, src: `/api/fotos/${id}?w=1200`, initial: null, dropped: true });
   const parse = (c?: string | null): Crop | null => {
     try {
       return c ? (JSON.parse(c) as Crop) : null;
@@ -415,6 +417,9 @@ export function PhotoBoard({
                       </div>
                     ) : null}
 
+                    {row.fragram.length || row.bank.length ? (
+                      <Drop productId={row.id} onAdded={() => refreshRow(row.id)} onUploaded={dropped(row)} compact label="Achou uma foto melhor na internet? Arraste aqui" />
+                    ) : null}
                     {/* plano B: link certo do Fragrantica ou foto do Google */}
                     {(!row.fragram.length && !busyFrag) || editing === row.id ? (
                       <div className="grid gap-3 lg:grid-cols-2">
@@ -443,7 +448,7 @@ export function PhotoBoard({
                             ) : null}
                           </form>
                         </div>
-                        {editing !== row.id && (row.waiting || noOptions) ? <Drop productId={row.id} onAdded={() => refreshRow(row.id)} compact /> : null}
+                        {editing !== row.id && (row.waiting || noOptions) ? <Drop productId={row.id} onAdded={() => refreshRow(row.id)} onUploaded={dropped(row)} compact /> : null}
                       </div>
                     ) : null}
                   </div>
@@ -463,7 +468,12 @@ export function PhotoBoard({
           title={cropFor.row.name}
           initial={cropFor.initial}
           confirmLabel={cropFor.adjust ? "Salvar enquadramento" : cropFor.row.waiting ? "Usar e postar" : "Usar esta foto"}
-          onCancel={() => setCropFor(null)}
+          onCancel={() => {
+            const x = cropFor;
+            setCropFor(null);
+            // cancelou o enquadramento de uma foto arrastada: usa a foto inteira mesmo
+            if (x.dropped) void choose(x.row, "bank", x.o);
+          }}
           onConfirm={async (c) => {
             const x = cropFor;
             setCropFor(null);

@@ -27,7 +27,20 @@ async function readDrop(dt: DataTransfer): Promise<{ data?: string; url?: string
   return url.startsWith("data:") ? { data: url } : { url };
 }
 
-export function DropPhoto({ productId, onAdded, compact }: { productId: number; onAdded: () => void; compact?: boolean }) {
+export function DropPhoto({
+  productId,
+  onAdded,
+  compact,
+  onUploaded,
+  label,
+}: {
+  productId: number;
+  onAdded: () => void;
+  compact?: boolean;
+  /** quando passado, a foto entra no banco mas o post só sai depois do enquadramento */
+  onUploaded?: (imageId: number) => void;
+  label?: string;
+}) {
   const [over, setOver] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const input = React.useRef<HTMLInputElement>(null);
@@ -37,9 +50,12 @@ export function DropPhoto({ productId, onAdded, compact }: { productId: number; 
     if (!got) return toast.error("Não achei imagem no que foi solto. Arraste a própria foto (ou copie a imagem e cole aqui com Ctrl+V)");
     setBusy(true);
     try {
-      const r = await api<{ msg: string }>("/api/fotos/upload", { method: "POST", json: { productId, ...got } });
-      toast.success(r.msg);
-      onAdded();
+      const r = await api<{ msg: string; id: number }>("/api/fotos/upload", { method: "POST", json: { productId, ...got, noRelease: !!onUploaded } });
+      if (onUploaded) onUploaded(r.id);
+      else {
+        toast.success(r.msg);
+        onAdded();
+      }
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -76,7 +92,7 @@ export function DropPhoto({ productId, onAdded, compact }: { productId: number; 
       <ImagePlus className="size-6 shrink-0" />
       <div className="min-w-0">
         <div className={cn("font-medium text-foreground", compact && "text-[12.5px] font-semibold")}>
-          {busy ? "Baixando a foto…" : compact ? "Ou arraste uma foto do Google aqui" : "Arraste aqui uma foto do Google (ou cole com Ctrl+V, ou clique para escolher)"}
+          {busy ? "Baixando a foto…" : compact ? label || "Ou arraste uma foto do Google aqui" : "Arraste aqui uma foto do Google (ou cole com Ctrl+V, ou clique para escolher)"}
         </div>
         <div>
           {compact

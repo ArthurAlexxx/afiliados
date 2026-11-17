@@ -15,7 +15,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
  * Vira a foto principal do perfume na hora.
  */
 export async function POST(req: Request) {
-  const b = (await req.json()) as { productId?: number; data?: string; url?: string; crop?: unknown };
+  const b = (await req.json()) as { productId?: number; data?: string; url?: string; crop?: unknown; noRelease?: boolean };
   const pid = Number(b.productId);
   if (!pid || !db().prepare("SELECT 1 FROM products WHERE id = ?").get(pid)) return Response.json({ error: "perfume não encontrado" }, { status: 400 });
   try {
@@ -55,7 +55,8 @@ export async function POST(req: Request) {
     learnPrefs();
     // já estava na fila para sair: refaz a imagem do post com a foto/enquadramento novo
     await import("@/lib/curation").then((m) => m.refreshQueuedMedia(pid!)).catch(() => 0);
-    const rel = await releaseWaiting(pid).catch(() => "");
+    // noRelease: a tela abre o enquadramento 1:1 antes; o post sai quando ele confirmar
+    const rel = b.noRelease ? "" : await releaseWaiting(pid).catch(() => "");
     log("info", `Foto colocada à mão no perfume #${pid} (${meta.width}×${meta.height}) virou a principal`);
     return Response.json({ ok: true, id: img.id, msg: `Foto adicionada e definida como principal (${meta.width}×${meta.height})${rel ? ` · ${rel}` : ""}` });
   } catch (e) {
