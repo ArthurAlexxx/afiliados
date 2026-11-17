@@ -513,6 +513,10 @@ export function startWorker() {
       setState("fragPhotoPickV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
     }
+    if (getState("fragArtArabiaV1") !== "1") {
+      setState("fragArtArabiaV1", "1");
+      db().prepare("UPDATE products SET name = 'Lattafa Art of Arabia I 100ml', frag_brand = 'Lattafa Perfumes', frag_name = 'Art of Arabia I' WHERE frag_url LIKE '%Art-of-Arabia-I-92423%'").run();
+    }
     if (getState("fragRoyalV1") !== "1") {
       setState("fragRoyalV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL AND lower(name) LIKE '%royal collection%'").run();
