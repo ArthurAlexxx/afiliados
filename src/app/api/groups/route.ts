@@ -35,7 +35,8 @@ export async function PATCH(req: Request) {
     jid: string; role?: string; name?: string; watermark?: boolean; wmCorner?: string; promo?: boolean; follow?: boolean;
   };
   if (jid && typeof follow === "boolean" && !role) {
-    db().prepare("UPDATE groups SET follow = ? WHERE jid = ?").run(follow ? 1 : 0, jid);
+    // grupo copiado precisa poder ter a oferta postada: liga "Promoções: sim" junto (senão a cópia sai "sem oferta com link")
+    db().prepare("UPDATE groups SET follow = ?, promo = CASE WHEN ? = 1 THEN 1 ELSE promo END WHERE jid = ?").run(follow ? 1 : 0, follow ? 1 : 0, jid);
     return Response.json({ ok: true });
   }
   if (jid && typeof promo === "boolean" && !role) {
