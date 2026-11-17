@@ -111,7 +111,7 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     const missing = nameToks.filter((t) => !has(ourAll, t) && !isBrand(t) && !BRAND_WORDS.has(t) && !has(brandToks, t) && !(STOP.has(t) && !VARIANT.has(t)) && !["men", "women", "her", "him", "femme", "homme", "le", "la"].includes(t));
     if (missing.length) continue;
     // e o nosso não pode ter uma variação que a Fragrantica não tem (Salvo ≠ Salvo Intense)
-    const extraVariant = ours.filter((t) => VARIANT.has(t) && !has(nameToks, t) && !has(brandToks, t));
+    const extraVariant = ours.filter((t) => VARIANT.has(t) && !has(nameToks, t) && !has(brandToks, t) && !(t === "royal" && /royal\s+collection/i.test(ourName)));
     if (extraVariant.length) continue;
     // a maior parte das nossas palavras explicada pela marca + nome
     const explained = ours.filter((t) => has(nameToks, t) || has(brandToks, t) || isBrand(t)).length;
