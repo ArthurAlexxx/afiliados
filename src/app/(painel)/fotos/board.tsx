@@ -200,8 +200,12 @@ export function PhotoBoard({
 
   async function toggleBlock(row: Row) {
     await api("/api/fotos", { method: "PATCH", json: { productId: row.id, blocked: !row.blocked } });
-    toast.success(row.blocked ? "Liberado para postar" : "Não vai mais ser postado");
-    refreshRow(row.id);
+    toast.success(row.blocked ? "Liberado para postar" : "Não vai ser postado: está em Posts › Rejeitados");
+    setPreview(null);
+    // marcado para não postar: sai daqui (fica na aba Rejeitados dos Posts)
+    if (!row.blocked && (f === "wait" || embedded))
+      setData((d) => (d ? { ...d, rows: d.rows.filter((x) => x.id !== row.id), counts: { ...d.counts, wait: Math.max(0, d.counts.wait - (row.waiting ? 1 : 0)) } } : d));
+    else refreshRow(row.id);
   }
 
   const c = data?.counts;

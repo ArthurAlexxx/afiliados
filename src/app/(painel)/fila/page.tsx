@@ -72,7 +72,7 @@ type Post = {
 const TABS = [
   { key: "fila", label: "Fila" },
   { key: "sent", label: "Enviados" },
-  { key: "skipped,duplicate", label: "Descartados" },
+  { key: "rejected", label: "Rejeitados e descartados" },
   { key: "failed", label: "Falhas" },
   { key: "all", label: "Todos" },
 ];
@@ -681,6 +681,11 @@ function HistoryRow({ p, onChanged }: { p: Post; onChanged: () => void }) {
                   <Send className="size-3.5" /> {p.status === "failed" ? "Tentar de novo agora" : "Postar mesmo assim"}
                 </Button>
               ) : null}
+              {["skipped", "duplicate"].includes(p.status) ? (
+                <Button size="sm" variant="outline" loading={busy === "restore"} onClick={() => run("restore", "Voltou para a fila")}>
+                  <RotateCcw className="size-3.5" /> Voltar para a fila
+                </Button>
+              ) : null}
               {p.status === "sent" ? (
                 <Button size="sm" variant="outline" loading={busy === "requeue"} onClick={() => run("requeue", "De volta para a fila")}>
                   <RotateCcw className="size-3.5" /> Reenviar
@@ -742,6 +747,92 @@ function HistoryTab({ status }: { status: string }) {
   );
 }
 
+
+/* ---------- Rejeitados ---------- */
+
+type Blocked = { id: number; name: string; main: number | null; post: number | null; post_at: string | null; has_media: number; url: string | null; grp: string | null; price: number | null };
+
+function RejectedTab() {
+  const { data, reload } = useApi<{ rows: Blocked[] }>("/api/posts/rejected", 30000);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  async function unblock(b: Blocked, restore: boolean) {
+    setBusy(`${b.id}:${restore}`);
+    try {
+      if (restore && b.post) {
+        const r = await act(b.post, "restore");
+        toast.success(r.msg || "Voltou para a fila");
+      } else {
+        await api("/api/fotos", { method: "PATCH", json: { productId: b.id, blocked: false } });
+        toast.success("Liberado: as próximas ofertas dele podem sair");
+      }
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <>
+      <Section
+        title="Marcados para não postar"
+        hint="Perfumes que você tirou com “Não postar”. Nenhuma oferta deles sai até você liberar."
+        count={data?.rows.length}
+      >
+        {!data ? (
+          <div className="h-40 animate-pulse rounded-xl bg-muted" />
+        ) : data.rows.length ? (
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {data.rows.map((b) => (
+              <Card key={b.id} className="flex gap-3 p-3">
+                <div className="size-20 shrink-0 overflow-hidden rounded-lg border bg-muted">
+                  {b.main ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`/api/fotos/square?img=${b.main}&w=200`} alt="" loading="lazy" className="size-full object-cover" />
+                  ) : b.post && b.has_media ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={`/api/media/${b.post}`} alt="" loading="lazy" className="size-full object-cover" />
+                  ) : (
+                    <div className="flex size-full items-center justify-center text-[11px] text-muted-foreground">sem foto</div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="line-clamp-2 text-[13.5px] leading-snug font-semibold">{b.name}</div>
+                  <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground">
+                    {b.price ? `${brl(b.price)} · ` : ""}
+                    {b.grp || ""}
+                    {b.post_at ? ` · ${timeAgo(b.post_at)}` : ""}
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {b.post ? (
+                      <Button size="sm" className="h-7 text-[12px]" loading={busy === `${b.id}:true`} onClick={() => unblock(b, true)}>
+                        <RotateCcw className="size-3.5" /> Voltar para a fila
+                      </Button>
+                    ) : null}
+                    <Button size="sm" variant="outline" className="h-7 text-[12px]" loading={busy === `${b.id}:false`} onClick={() => unblock(b, false)}>
+                      Só liberar
+                    </Button>
+                    {b.url ? (
+                      <a href={b.url} target="_blank" rel="noreferrer" className="inline-flex h-7 items-center rounded-lg px-2 text-[12px] font-medium text-violet-600 hover:underline dark:text-violet-400">
+                        Ver no ML ↗
+                      </a>
+                    ) : null}
+                  </div>
+                </div>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <Card className="px-5 py-6 text-center text-[13px] text-muted-foreground">Nenhum perfume bloqueado.</Card>
+        )}
+      </Section>
+      <Section title="Posts descartados" hint="Saíram da fila por algum motivo (sem foto em 3h, oferta velha, repetido…). Dá para voltar qualquer um.">
+        <HistoryTab status="skipped,duplicate" />
+      </Section>
+    </>
+  );
+}
+
 export default function FilaPage() {
   const [tab, setTab] = React.useState("fila");
   const { data: counts } = useApi<{ counts: Record<string, number> }>("/api/stats", 15000);
@@ -774,6 +865,8 @@ export default function FilaPage() {
               ? (c.queued || 0) + (c.sending || 0) + (c.photo || 0)
               : t.key === "all"
                 ? null
+                : t.key === "rejected"
+                  ? (c.skipped || 0) + (c.duplicate || 0)
                 : t.key.split(",").reduce((a, k) => a + (c[k] || 0), 0);
           return (
             <button
@@ -790,7 +883,7 @@ export default function FilaPage() {
           );
         })}
       </div>
-      {tab === "fila" ? <QueueTab /> : tab === "sent" ? <SentGallery /> : <HistoryTab key={tab} status={tab} />}
+      {tab === "fila" ? <QueueTab /> : tab === "sent" ? <SentGallery /> : tab === "rejected" ? <RejectedTab /> : <HistoryTab key={tab} status={tab} />}
     </>
   );
 }

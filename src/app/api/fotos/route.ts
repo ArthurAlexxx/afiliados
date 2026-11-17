@@ -61,7 +61,8 @@ export async function PATCH(req: Request) {
   if (b.productId && typeof b.blocked === "boolean") {
     db().prepare("UPDATE products SET blocked = ? WHERE id = ?").run(b.blocked ? 1 : 0, b.productId);
     // o que estava na fila desse perfume sai
-    if (b.blocked) db().prepare("UPDATE posts SET status = 'skipped', reason = 'Perfume bloqueado' WHERE product_id = ? AND status IN ('queued','pending')").run(b.productId);
+    if (b.blocked)
+      db().prepare("UPDATE posts SET status = 'skipped', reason = 'Não postar (marcado por você)' WHERE product_id = ? AND status IN ('queued','pending','photo')").run(b.productId);
     return Response.json({ ok: true });
   }
   if (b.productId) {
