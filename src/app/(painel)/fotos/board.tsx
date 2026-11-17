@@ -61,12 +61,15 @@ export function PhotoBoard({
   Drop,
   embedded,
   onCount,
+  only,
 }: {
   onOpen: (id: number) => void;
   Drop: React.ComponentType<{ productId: number; onAdded: () => void; compact?: boolean }>;
   /** dentro da página de Posts: só os posts esperando foto, sem barra de filtros */
   embedded?: boolean;
   onCount?: (n: number) => void;
+  /** só este perfume (configurar a foto a partir de um post enviado) */
+  only?: number;
 }) {
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
@@ -97,7 +100,7 @@ export function PhotoBoard({
     return () => clearTimeout(t);
   }, [q]);
 
-  const url = (offset: number) => `/api/fotos/board?f=${f}&q=${encodeURIComponent(deb)}&offset=${offset}`;
+  const url = (offset: number) => (only ? `/api/fotos/board?id=${only}` : `/api/fotos/board?f=${f}&q=${encodeURIComponent(deb)}&offset=${offset}`);
 
   React.useEffect(() => {
     let alive = true;
@@ -284,7 +287,16 @@ export function PhotoBoard({
         <div className="h-64 animate-pulse rounded-xl bg-muted" />
       ) : !data.rows.length ? (
         <Card className={cn("px-5 text-center text-[13px] text-muted-foreground", embedded ? "py-6" : "py-12")}>
-          {embedded ? "Nenhum post esperando foto agora." : "Nenhum perfume nesse filtro."}
+          {only ? (
+            <div className="mx-auto max-w-md space-y-2 text-left">
+              <div>Esse perfume ainda não tem fotos no banco nem do Fragrantica. Arraste uma do Google:</div>
+              <Drop productId={only} onAdded={() => api<Resp>(url(0)).then(setData).catch(() => undefined)} compact />
+            </div>
+          ) : embedded ? (
+            "Nenhum post esperando foto agora."
+          ) : (
+            "Nenhum perfume nesse filtro."
+          )}
         </Card>
       ) : (
         <div className="space-y-3">

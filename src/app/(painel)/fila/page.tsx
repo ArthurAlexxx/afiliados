@@ -443,6 +443,7 @@ function SentCard({ p, onOpen }: { p: QPost; onOpen: () => void }) {
 }
 
 function SentDetail({ p, onClose }: { p: QPost; onClose: () => void }) {
+  const [config, setConfig] = React.useState(false);
   React.useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
     window.addEventListener("keydown", k);
@@ -458,10 +459,23 @@ function SentDetail({ p, onClose }: { p: QPost; onClose: () => void }) {
             <div className="truncate text-[15px] font-semibold">{p.name || titleOf(p.formatted_text)}</div>
             <div className="text-[12px] text-muted-foreground">Enviado {clockOf(p.sent_at)} · {timeAgo(p.sent_at)} · #{p.id}</div>
           </div>
+          {p.product_id ? (
+            <Button size="sm" variant={config ? "outline" : "accent"} onClick={() => setConfig((v) => !v)}>
+              <CropIcon className="size-3.5" /> {config ? "Fechar foto" : "Configurar foto para os próximos"}
+            </Button>
+          ) : null}
           <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted">
             <X className="size-5" />
           </button>
         </div>
+        {config && p.product_id ? (
+          <div className="border-b border-[var(--border-soft)] bg-muted/20 p-4">
+            <div className="mb-2 text-[12.5px] text-muted-foreground">
+              Escolha a foto e enquadre no quadrado 1:1. Este post já saiu e não muda; os próximos desse perfume saem assim.
+            </div>
+            <PhotoBoard embedded only={p.product_id} onOpen={() => undefined} Drop={DropPhoto} />
+          </div>
+        ) : null}
         <div className="grid gap-4 p-4 md:grid-cols-2">
           <WaPreview text={p.formatted_text} image={p.has_media ? `/api/media/${p.id}?v=${encodeURIComponent(p.mv)}` : null} time={clockOf(p.sent_at)} />
           <div className="space-y-2">
