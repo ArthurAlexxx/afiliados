@@ -202,6 +202,7 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE products ADD COLUMN frag_url TEXT",
     "ALTER TABLE products ADD COLUMN frag_checked_at TEXT",
     "ALTER TABLE products ADD COLUMN blocked INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE products ADD COLUMN frag_data TEXT",
     "ALTER TABLE pin_photos ADD COLUMN chosen_by TEXT",
   ]) {
     try {

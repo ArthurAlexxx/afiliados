@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const u = new URL(req.url);
   const id = Number(u.searchParams.get("id") || 0);
   if (id) {
-    const product = db().prepare("SELECT id, name, main_image_id, blocked FROM products WHERE id = ?").get(id);
+    const product = db().prepare("SELECT id, name, main_image_id, blocked, frag_data, frag_url FROM products WHERE id = ?").get(id);
     const images = db()
       .prepare(
         `SELECT i.id, i.path, i.width, i.height, i.score, i.disabled, i.created_at, i.message_id, COALESCE(g.name, '') group_name

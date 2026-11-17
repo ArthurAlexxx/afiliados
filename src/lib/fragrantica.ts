@@ -23,17 +23,72 @@ const MASC = /\b(masculino|masculina|men|man|homme|him|pour homme)\b/;
 const genderOf = (s: string) => (FEM.test(norm(s)) ? "f" : MASC.test(norm(s)) ? "m" : null);
 const has = (list: string[], t: string) => list.some((x) => near(x, t));
 
-async function search(q: string): Promise<Hit[]> {
+async function runActor(input: Record<string, unknown>): Promise<Record<string, unknown>[]> {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("falta APIFY_TOKEN");
   const r = await fetch(`https://api.apify.com/v2/acts/${ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=120`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ searchQueries: [q], scrapeDetails: false, maxResults: 12 }),
+    body: JSON.stringify(input),
     signal: AbortSignal.timeout(150_000),
   });
   if (!r.ok) throw new Error(`Apify ${r.status}: ${(await r.text()).slice(0, 200)}`);
-  return ((await r.json()) as Hit[]).filter((h) => h.name && h.brand);
+  return (await r.json()) as Record<string, unknown>[];
+}
+
+export type FragData = {
+  url: string; name: string; brand: string; year: number | null; gender: string | null; family: string | null;
+  description: string; top: string[]; middle: string[]; base: string[]; accords: { name: string; strength: number; color: string }[];
+  seasons: Record<string, number>; longevity: number | null; sillage: number | null; rating: number | null; ratingCount: number | null;
+  image: string | null; at: string;
+};
+
+/** Ficha completa do perfume (em português): descrição, pirâmide de notas, acordes, estações, fixação, projeção e foto. */
+export async function fetchDetails(productId: number): Promise<FragData | null> {
+  const p = db().prepare("SELECT frag_url FROM products WHERE id = ?").get(productId) as { frag_url: string | null } | undefined;
+  if (!p?.frag_url) return null;
+  const [d] = (await runActor({ startUrls: [{ url: p.frag_url }], scrapeDetails: true, includeCommunityVotes: true, includeReviews: false, maxResults: 1, language: "pt" })) as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  if (!d) return null;
+  const notes = (l: unknown) => (Array.isArray(l) ? l.map((n: { name?: string }) => String(n.name || "")).filter(Boolean) : []);
+  const data: FragData = {
+    url: p.frag_url,
+    name: String(d.name || ""),
+    brand: String(d.brand || ""),
+    year: Number(d.year) || null,
+    gender: d.genderLabel || null,
+    family: d.fragranceFamily || null,
+    description: String(d.descriptionText || ""),
+    top: notes(d.notesTop),
+    middle: notes(d.notesMiddle),
+    base: notes(d.notesBase),
+    accords: Array.isArray(d.mainAccords) ? d.mainAccords.map((a: { name: string; strength: number; color: string }) => ({ name: a.name, strength: Math.round(a.strength), color: a.color })) : [],
+    seasons: d.seasonVotes || {},
+    longevity: d.longevity?.average ?? null,
+    sillage: d.sillage?.average ?? null,
+    rating: d.ratingValue ?? null,
+    ratingCount: d.ratingCount ?? null,
+    image: d.imageUrlLarge || d.imageUrl || null,
+    at: new Date().toISOString(),
+  };
+  db().prepare("UPDATE products SET frag_data = ? WHERE id = ?").run(JSON.stringify(data), productId);
+  // foto oficial do frasco vai para o banco do perfume (não vira principal sozinha)
+  if (data.image) {
+    try {
+      const r = await fetch(data.image, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20000) });
+      if (r.ok) {
+        const { addImage } = await import("./curation.ts");
+        const msg = await addImage(productId, Buffer.from(await r.arrayBuffer()), `frag:${productId}`);
+        log("info", `Fragrantica: foto do frasco de ${data.brand} ${data.name}: ${msg}`);
+      } else log("info", `Fragrantica: foto do frasco não baixou (${r.status})`);
+    } catch (e) {
+      log("warn", `Fragrantica: foto do frasco: ${(e as Error).message}`);
+    }
+  }
+  return data;
+}
+
+async function search(q: string): Promise<Hit[]> {
+  return ((await runActor({ searchQueries: [q], scrapeDetails: false, maxResults: 12 })) as unknown as Hit[]).filter((h) => h.name && h.brand);
 }
 
 /** Palavras que identificam o perfume no nosso nome (sem ml, concentração, gênero, "árabe"…). */
@@ -106,11 +161,12 @@ export async function standardize(productId: number): Promise<string> {
   const name = canonicalName(h, p.ml, p.conc);
   db().prepare("UPDATE products SET frag_name = ?, frag_brand = ?, frag_url = ?, name = ? WHERE id = ?").run(h.name, h.brand, h.url, name, p.id);
   if (name !== p.name) log("info", `Fragrantica: "${p.name}" → "${name}"`);
+  await fetchDetails(p.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`));
   return name;
 }
 
 /** Fila: perfumes ainda não conferidos, os com promoção recente primeiro. Um por vez. */
-export async function fragranticaStep(max = 3) {
+export async function fragranticaStep(max = 6) {
   if (!process.env.APIFY_TOKEN || process.env.FRAGRANTICA === "0") return;
   const g = globalThis as { __fragBusy?: boolean };
   if (g.__fragBusy) return;
@@ -122,11 +178,12 @@ export async function fragranticaStep(max = 3) {
          ORDER BY (SELECT MAX(o.created_at) FROM offers o WHERE o.product_id = p.id) DESC LIMIT ?`,
       )
       .all(max) as { id: number }[];
-    let changed = 0;
-    for (const r of rows) {
-      const n = await standardize(r.id).catch((e) => (log("warn", `Fragrantica: ${(e as Error).message}`), ""));
-      if (n && n !== "não achei") changed++;
-    }
+    // várias buscas ao mesmo tempo (auditoria rápida do banco)
+    const res = await Promise.all(rows.map((r) => standardize(r.id).catch((e) => (log("warn", `Fragrantica: ${(e as Error).message}`), ""))));
+    const changed = res.filter((n) => n && n !== "não achei" && n !== "nome vazio").length;
+    // já achados antes desta versão: busca a ficha completa (2 por rodada)
+    const old = db().prepare("SELECT id FROM products WHERE frag_url IS NOT NULL AND frag_data IS NULL LIMIT 2").all() as { id: number }[];
+    await Promise.all(old.map((r) => fetchDetails(r.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`))));
     if (changed) {
       const { mergeDuplicateProducts } = await import("./curation.ts");
       const m = mergeDuplicateProducts();

@@ -165,6 +165,64 @@ function PinOptions({ productId, onChosen }: { productId: number; onChosen: () =
   );
 }
 
+type Frag = {
+  url: string; name: string; brand: string; year: number | null; gender: string | null; description: string;
+  top: string[]; middle: string[]; base: string[]; accords: { name: string; strength: number; color: string }[];
+  seasons: Record<string, number>; longevity: number | null; sillage: number | null; rating: number | null; ratingCount: number | null;
+};
+const SEASONS: [string, string][] = [["winter", "Inverno"], ["autumn", "Outono"], ["spring", "Primavera"], ["summer", "Verão"], ["day", "Dia"], ["night", "Noite"]];
+const LONG = ["", "muito fraca", "fraca", "moderada", "duradoura", "eterna"];
+const SILL = ["", "íntima", "moderada", "forte", "enorme"];
+
+/** Ficha da Fragrantica: descrição, notas, acordes, estações, fixação e projeção. */
+function FragCard({ raw }: { raw: string }) {
+  let f: Frag;
+  try {
+    f = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  const maxSeason = Math.max(1, ...SEASONS.map(([k]) => f.seasons?.[k] || 0));
+  return (
+    <Card className="mb-4 grid gap-4 p-4 text-[13px] md:grid-cols-[1.3fr_1fr]">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-baseline gap-2">
+          <a href={f.url} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline">{f.brand} {f.name}</a>
+          <span className="text-muted-foreground">{[f.gender, f.year].filter(Boolean).join(" · ")}</span>
+          {f.rating ? <Badge tone="success">★ {f.rating.toFixed(2)} ({f.ratingCount} votos)</Badge> : null}
+        </div>
+        {f.description ? <p className="text-muted-foreground">{f.description}</p> : null}
+        <div className="grid gap-1">
+          {[["Topo", f.top], ["Coração", f.middle], ["Fundo", f.base]].map(([l, n]) =>
+            (n as string[]).length ? (
+              <div key={l as string}><b>{l as string}:</b> {(n as string[]).join(", ")}</div>
+            ) : null,
+          )}
+        </div>
+        <div className="flex gap-4 text-muted-foreground">
+          {f.longevity ? <span>Fixação: <b className="text-foreground">{LONG[Math.round(f.longevity)] || f.longevity.toFixed(1)}</b></span> : null}
+          {f.sillage ? <span>Projeção: <b className="text-foreground">{SILL[Math.round(f.sillage)] || f.sillage.toFixed(1)}</b></span> : null}
+        </div>
+      </div>
+      <div className="space-y-3">
+        <div className="space-y-1">
+          {f.accords.slice(0, 7).map((a) => (
+            <div key={a.name} className="rounded px-2 py-0.5 text-[12px] font-medium text-black/80" style={{ width: `${Math.max(30, a.strength)}%`, background: a.color }}>{a.name}</div>
+          ))}
+        </div>
+        <div className="grid grid-cols-6 items-end gap-1.5">
+          {SEASONS.map(([k, l]) => (
+            <div key={k} className="text-center text-[11px] text-muted-foreground">
+              <div className="mx-auto mb-1 w-full rounded-sm bg-accent/70" style={{ height: `${Math.round(40 * ((f.seasons?.[k] || 0) / maxSeason)) + 2}px` }} />
+              {l}
+            </div>
+          ))}
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 /** Lê o que foi arrastado/colado: arquivo de imagem, ou o endereço da imagem (Google manda o link ou o HTML com a <img>). */
 async function readDrop(dt: DataTransfer): Promise<{ data?: string; url?: string } | null> {
   const file = [...dt.files].find((f) => f.type.startsWith("image/")) || [...(dt.items || [])].find((i) => i.kind === "file" && i.type.startsWith("image/"))?.getAsFile();
@@ -247,7 +305,7 @@ function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => v
 }
 
 function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
-  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null; blocked?: number }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
+  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null; blocked?: number; frag_data?: string | null; frag_url?: string | null }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
   const blocked = Boolean(data?.product?.blocked);
   const setBlocked = async () => {
     try {
@@ -297,6 +355,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
           </div>
         </div>
       </div>
+      {data?.product?.frag_data ? <FragCard raw={data.product.frag_data} /> : null}
       <DropPhoto productId={id} onAdded={reload} />
       <PinOptions productId={id} onChosen={reload} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
@@ -316,6 +375,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
               {img.message_id?.startsWith("fix:") ? <Badge tone="info">IA</Badge> : null}
               {img.message_id?.startsWith("manual:") ? <Badge tone="info">Você colocou</Badge> : null}
               {img.message_id?.startsWith("pin:") ? <Badge tone="info">Pinterest</Badge> : null}
+              {img.message_id?.startsWith("frag:") ? <Badge tone="info">Fragrantica</Badge> : null}
               {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
               <span className="ml-auto truncate">{timeAgo(img.created_at)}</span>
             </div>
