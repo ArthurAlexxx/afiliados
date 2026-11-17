@@ -15,7 +15,8 @@ type Hit = { name: string; brand: string; url: string; ratingCount?: number; yea
 const GENERIC = new Set(["for", "men", "women", "man", "woman", "him", "her", "pour", "homme", "femme", "unisex", "eau", "de", "parfum", "toilette", "edp", "edt", "the", "perfumes", "perfume", "fragrances", "parfums", "paris"]);
 const VARIANT = new Set([...FLANKERS, "elixir", "intense", "extrait", "parfum", "absolu", "bourbon", "nero", "vintage", "sequoia", "platin", "platinum", "noir", "oud", "gold", "silver", "black", "white", "blue", "red", "pink", "rose", "night", "sport", "edition", "limited", "prive", "privee", "reserve", "dark", "light", "pure", "extreme", "le", "la", "men", "women", "femme", "homme", "her", "him"]);
 
-const toks = (s: string) => norm(s).split(" ").filter(Boolean);
+// "Bade'e" = "Badee"
+const toks = (s: string) => norm(s.replace(/['’`´]/g, "")).split(" ").filter(Boolean);
 const near = (a: string, b: string) => a === b || (a.length >= 5 && a[0] === b[0] && Math.abs(a.length - b.length) <= 2 && dist(a, b) <= (Math.min(a.length, b.length) >= 7 ? 2 : 1));
 const FEM = /\b(feminino|feminina|women|woman|femme|her|pour elle)\b/;
 const MASC = /\b(masculino|masculina|men|man|homme|him|pour homme)\b/;
@@ -58,7 +59,7 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     const key = nameToks.filter((t) => !GENERIC.has(t));
     if (!key.length) continue;
     // todas as palavras do nome da Fragrantica têm que estar no nosso (gênero só se estiver escrito)
-    const missing = nameToks.filter((t) => !has(ourAll, t) && !["men", "women", "her", "him", "femme", "homme", "le", "la"].includes(t));
+    const missing = nameToks.filter((t) => !has(ourAll, t) && !(STOP.has(t) && !VARIANT.has(t)) && !["men", "women", "her", "him", "femme", "homme", "le", "la"].includes(t));
     if (missing.length) continue;
     // e o nosso não pode ter uma variação que a Fragrantica não tem (Salvo ≠ Salvo Intense)
     const extraVariant = ours.filter((t) => VARIANT.has(t) && !has(nameToks, t) && !has(brandToks, t));
