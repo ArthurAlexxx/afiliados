@@ -380,16 +380,18 @@ export async function checkPins(productId: number) {
         sim = v[Math.floor(v.length / 2)]; // parecida com a maioria?
       }
     }
-    if (sim != null && sim < 0.4) flags.push(refSig ? "cor diferente da referência" : "cor diferente das outras");
+    if (sim != null && sim < 0.25) flags.push(refSig ? "cor diferente da referência" : "cor diferente das outras");
     db().prepare("UPDATE pin_photos SET ref_sim = ?, flags = ? WHERE id = ?").run(sim, flags.length ? flags.join(" · ") : null, r.id);
   });
+  const why = db().prepare("SELECT flags, COUNT(*) n FROM pin_photos WHERE product_id = ? AND status = 'pending' AND flags IS NOT NULL GROUP BY flags").all(productId) as { flags: string; n: number }[];
+  if (why.length) log("info", `Pinterest: suspeitas em ${p.name}: ${why.map((w) => `${w.n}× ${w.flags}`).join("; ")}`);
 }
 
 /** Uma vez: confere as fotos do primeiro teste com as regras de precisão. */
 export async function recheckAllPins() {
   const { getState, setState } = await import("./settings.ts");
-  if (getState("pinCheckV1")) return;
-  setState("pinCheckV1", "1");
+  if (getState("pinCheckV2")) return;
+  setState("pinCheckV2", "1");
   const ids = db().prepare("SELECT DISTINCT product_id FROM pin_photos WHERE status = 'pending'").all() as { product_id: number }[];
   for (const r of ids) await checkPins(r.product_id).catch((e) => log("warn", `Pinterest: conferência falhou: ${(e as Error).message}`));
   const bad = (db().prepare("SELECT COUNT(*) n FROM pin_photos WHERE status = 'pending' AND flags IS NOT NULL").get() as { n: number }).n;
