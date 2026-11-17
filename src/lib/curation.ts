@@ -656,6 +656,17 @@ export function startCuration() {
       log("warn", `Revisão de nomes: ${(e as Error).message}`);
     }
   }
+  // perfumes repetidos: na subida e a cada 6h
+  const merge = () => {
+    try {
+      const n = mergeDuplicateProducts();
+      if (n) log("info", `${n} perfume(s) repetido(s) juntado(s)`);
+    } catch (e) {
+      log("warn", `Juntar perfumes repetidos: ${(e as Error).message}`);
+    }
+  };
+  merge();
+  setInterval(merge, 6 * 3600e3);
   w.__afiliadosCuration = setInterval(async () => {
     if (w.__afiliadosCurationBusy) return;
     w.__afiliadosCurationBusy = true;
@@ -706,4 +717,57 @@ export function startCuration() {
       w.__afiliadosCurationBusy = false;
     }
   }, 60e3);
+}
+
+/**
+ * Junta perfumes cadastrados duas vezes (ex.: "Lattafa The Kingdom EDP 100ml" e "The Kingdom Lattafa Edp 100ml"),
+ * que entraram antes das regras atuais de nome. Fica o que tem foto principal escolhida (ou mais ofertas);
+ * ofertas, fotos, posts, Pinterest e pedidos do outro passam para ele.
+ */
+export function mergeDuplicateProducts(): number {
+  const rows = db()
+    .prepare(
+      `SELECT p.*, (SELECT COUNT(*) FROM offers o WHERE o.product_id = p.id) n,
+        (SELECT 1 FROM pin_photos f WHERE f.product_id = p.id AND f.status = 'approved' LIMIT 1) pin FROM products p ORDER BY p.ml, p.id`,
+    )
+    .all() as (ProductRow & { main_image_id: number | null; n: number; pin: number | null })[];
+  const infos = rows.map((r) => ({ r, a: { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens) as string[], key: r.pkey }, b: perfumeInfo(r.name) }));
+  const same = (x: (typeof infos)[number], y: (typeof infos)[number]) =>
+    samePerfume(x.a, y.a) || (x.b && y.b ? samePerfume(x.b, y.b) : false);
+  const gone = new Set<number>();
+  let merged = 0;
+  for (let i = 0; i < infos.length; i++) {
+    if (gone.has(infos[i].r.id)) continue;
+    for (let j = i + 1; j < infos.length && infos[j].r.ml === infos[i].r.ml; j++) {
+      const x = infos[i], y = infos[j];
+      if (gone.has(y.r.id) || !same(x, y)) continue;
+      const rank = (z: typeof x) => (z.r.pin ? 4 : 0) + (z.r.main_image_id ? 2 : 0) + z.r.n / 1e4;
+      const [keep, drop] = rank(x) >= rank(y) ? [x, y] : [y, x];
+      const k = keep.r.id, d = drop.r.id;
+      const tx = db();
+      tx.exec("BEGIN");
+      try {
+        for (const t of ["offers", "images", "posts", "wishes", "image_fixes"]) tx.prepare(`UPDATE ${t} SET product_id = ? WHERE product_id = ?`).run(k, d);
+        tx.prepare("UPDATE OR IGNORE pin_photos SET product_id = ? WHERE product_id = ?").run(k, d);
+        tx.prepare("DELETE FROM pin_photos WHERE product_id = ?").run(d);
+        // o que já está aprovado no que fica manda; opções pendentes do outro viram recusadas se já há escolha
+        if (keep.r.pin) tx.prepare("UPDATE pin_photos SET status = 'rejected' WHERE product_id = ? AND status = 'pending'").run(k);
+        const main = keep.r.main_image_id ?? drop.r.main_image_id;
+        const last = [keep.r.last_posted_at, drop.r.last_posted_at].filter(Boolean).sort().pop() ?? null;
+        const name = nameQuality(drop.r.name) > nameQuality(keep.r.name) ? drop.r.name : keep.r.name;
+        tx.prepare("UPDATE products SET main_image_id = ?, last_posted_at = ?, name = ? WHERE id = ?").run(main, last, name, k);
+        tx.prepare("DELETE FROM products WHERE id = ?").run(d);
+        tx.exec("COMMIT");
+      } catch (e) {
+        tx.exec("ROLLBACK");
+        log("warn", `Juntar perfumes repetidos (${keep.r.name} + ${drop.r.name}): ${(e as Error).message}`);
+        continue;
+      }
+      gone.add(d);
+      if (keep === y) infos[i] = y; // segue comparando com o que ficou
+      merged++;
+      log("info", `Perfume repetido juntado: "${drop.r.name}" entrou em "${keep.r.name}"`);
+    }
+  }
+  return merged;
 }
