@@ -165,10 +165,35 @@ export async function standardize(productId: number): Promise<string> {
   db().prepare("UPDATE products SET frag_name = ?, frag_brand = ?, frag_url = ?, name = ? WHERE id = ?").run(h.name, h.brand, h.url, name, p.id);
   if (name !== p.name) log("info", `Fragrantica: "${p.name}" → "${name}"`);
   await fetchDetails(p.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`));
+  await fetchFragram(p.id).catch((e) => log("warn", `Fragram: ${(e as Error).message}`));
   return name;
 }
 
 /** Fila: perfumes ainda não conferidos, os com promoção recente primeiro. Um por vez. */
+/**
+ * Fotos da seção "Fragram Photos" da página do perfume. O servidor não abre o Fragrantica direto (Cloudflare),
+ * então a página vem pelo Web Fetch do Apify (~US$ 0,0015 por página); guarda só as URLs das fotos.
+ */
+export async function fetchFragram(productId: number): Promise<number> {
+  const p = db().prepare("SELECT frag_url FROM products WHERE id = ?").get(productId) as { frag_url: string | null } | undefined;
+  if (!p?.frag_url || !process.env.APIFY_TOKEN) return 0;
+  const page = "https://www.fragrantica.com" + new URL(p.frag_url).pathname;
+  const r = await fetch(`https://apify--web-fetch.apify.actor/?formats=links&url=${encodeURIComponent(page)}`, {
+    headers: { authorization: `Bearer ${process.env.APIFY_TOKEN}` },
+    signal: AbortSignal.timeout(90000),
+  });
+  if (!r.ok) throw new Error(`Web Fetch respondeu ${r.status}: ${(await r.text()).slice(0, 160)}`);
+  const j = (await r.json()) as { links?: string[]; fetch?: { httpStatusCode?: number } };
+  if (j.fetch?.httpStatusCode && j.fetch.httpStatusCode >= 400) throw new Error(`Fragrantica respondeu ${j.fetch.httpStatusCode}`);
+  const urls = [...new Set((j.links || []).filter((u) => /^https:\/\/fimgs\.net\/photogram\/p1200\//.test(u)))];
+  const ins = db().prepare("INSERT OR IGNORE INTO frag_photos (frag_url, url, thumb) VALUES (?, ?, ?)");
+  let n = 0;
+  for (const u of urls) n += Number(ins.run(p.frag_url, u, u.replace("/p1200/", "/p180/")).changes);
+  db().prepare("UPDATE products SET fragram_at = datetime('now') WHERE frag_url = ?").run(p.frag_url);
+  log("info", `Fragram: ${urls.length} foto(s) em ${page.split("/").pop()} (${n} nova(s))`);
+  return urls.length;
+}
+
 export async function fragranticaStep(max = 4) {
   if (!process.env.APIFY_TOKEN || process.env.FRAGRANTICA === "0") return;
   const g = globalThis as { __fragBusy?: boolean };
@@ -178,7 +203,7 @@ export async function fragranticaStep(max = 4) {
     const rows = db()
       .prepare(
         `SELECT p.id FROM products p WHERE p.frag_checked_at IS NULL
-         ORDER BY (SELECT MAX(o.created_at) FROM offers o WHERE o.product_id = p.id) DESC LIMIT ?`,
+         ORDER BY EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo') DESC, (SELECT MAX(o.created_at) FROM offers o WHERE o.product_id = p.id) DESC LIMIT ?`,
       )
       .all(max) as { id: number }[];
     // várias buscas ao mesmo tempo (auditoria rápida do banco)
@@ -187,6 +212,15 @@ export async function fragranticaStep(max = 4) {
     // já achados antes desta versão: busca a ficha completa (2 por rodada)
     const old = db().prepare("SELECT id FROM products WHERE frag_url IS NOT NULL AND frag_data IS NULL LIMIT 2").all() as { id: number }[];
     await Promise.all(old.map((r) => fetchDetails(r.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`))));
+    // Fragram Photos dos que ainda não foram lidos (posts esperando foto primeiro), 3 por rodada
+    const gram = db()
+      .prepare(
+        `SELECT MIN(p.id) id FROM products p WHERE p.frag_url IS NOT NULL AND p.fragram_at IS NULL
+         AND NOT EXISTS (SELECT 1 FROM frag_photos f WHERE f.frag_url = p.frag_url)
+         GROUP BY p.frag_url ORDER BY MAX(EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo')) DESC, MAX(p.id) DESC LIMIT 3`,
+      )
+      .all() as { id: number }[];
+    await Promise.all(gram.map((r) => fetchFragram(r.id).catch((e) => log("warn", `Fragram: ${(e as Error).message}`))));
     if (changed) {
       const { mergeDuplicateProducts } = await import("./curation.ts");
       const m = mergeDuplicateProducts();

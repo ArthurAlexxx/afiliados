@@ -233,8 +233,25 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                   </div>
                 ) : null}
                 {!row.fragram.length ? (
-                  <div className="text-[11.5px] text-muted-foreground">
-                    {row.fragUrl ? "Sem fotos no Fragram Photos do Fragrantica." : "Ainda não achado no Fragrantica."}
+                  <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground">
+                    <span>{row.fragUrl ? "Sem fotos no Fragram Photos do Fragrantica." : "Ainda não achado no Fragrantica."}</span>
+                    <form
+                      className="flex gap-1"
+                      onSubmit={async (e) => {
+                        e.preventDefault();
+                        const inp = (e.currentTarget.elements.namedItem("u") as HTMLInputElement);
+                        try {
+                          const r = await api<{ msg: string }>("/api/fotos/fraglink", { method: "POST", json: { productId: row.id, url: inp.value } });
+                          toast.success(r.msg);
+                          refreshRow(row.id);
+                        } catch (err) {
+                          toast.error((err as Error).message);
+                        }
+                      }}
+                    >
+                      <Input name="u" placeholder="Colar link do Fragrantica" className="h-7 w-64 text-[11.5px]" />
+                      <Button type="submit" size="sm" variant="outline" className="h-7 text-[11.5px]">Trazer fotos</Button>
+                    </form>
                   </div>
                 ) : null}
               </div>
