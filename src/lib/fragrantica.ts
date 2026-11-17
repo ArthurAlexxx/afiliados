@@ -210,9 +210,13 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     const nameToks = toks(h.name).filter((t) => !GENERIC.has(t) || VARIANT.has(t));
     const key = nameToks.filter((t) => !GENERIC.has(t));
     if (!key.length) continue;
+    // "Parfum" é outro produto: Stronger With You Parfum ≠ Stronger With You (Arthur, 17/nov).
+    // Exceção: flanker que a Fragrantica não chama de Parfum (Le Male Elixir), aí a variação já separa.
+    if (hc === "parfum" && oc !== "parfum") continue;
+    if (oc === "parfum" && hc !== "parfum" && !nameToks.some((t) => VARIANT.has(t))) continue;
     // todas as palavras do nome da Fragrantica têm que estar no nosso (gênero só se estiver escrito)
     // "Emporio Armani Stronger With You": palavra de marca no nome da Fragrantica não precisa estar no nosso
-    const missing = nameToks.filter((t) => !has(ourAll, t) && !isBrand(t) && !BRAND_WORDS.has(t) && !has(brandToks, t) && !(STOP.has(t) && !VARIANT.has(t)) && !["men", "women", "her", "him", "femme", "homme", "le", "la"].includes(t));
+    const missing = nameToks.filter((t) => !has(ourAll, t) && !isBrand(t) && !BRAND_WORDS.has(t) && !has(brandToks, t) && !(STOP.has(t) && !VARIANT.has(t)) && !["men", "women", "her", "him", "femme", "homme", "le", "la"].includes(t) && !(hc && hc === oc && ["eau", "de", "parfum", "toilette", "cologne", "extrait"].includes(t)));
     if (missing.length) continue;
     // e o nosso não pode ter uma variação que a Fragrantica não tem (Salvo ≠ Salvo Intense)
     const extraVariant = ours.filter((t) => VARIANT.has(t) && !has(nameToks, t) && !has(brandToks, t) && !(t === "royal" && /royal\s+collection/i.test(ourName)));
@@ -230,7 +234,7 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     // sem a marca no nosso nome: só aceita nome com 2+ palavras e perfume conhecido
     if (!brandIn && (key.length < 2 || (h.ratingCount || 0) < 300)) continue;
     // nosso nome sem gênero: o nome sem "For Her/For Him" é o original ("Million Gold" e não "Million Gold For Her")
-    const sc = key.length * 10 + explained + Math.log10(1 + (h.ratingCount || 0)) / 10 - (!ourG && hg ? 15 : 0) - unexpl.length * 3;
+    const sc = key.length * 10 + explained + Math.log10(1 + (h.ratingCount || 0)) / 10 - (!ourG && hg ? 15 : 0) - unexpl.length * 3 + (hc && hc === oc ? 20 : 0);
     ok.push(h);
     if (sc > bestScore) (bestScore = sc), (best = h);
   }

@@ -4,7 +4,7 @@ import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { manchete, parsePromo, renderTemplate, formatPrice } from "./parser.ts";
-import { nameQuality, notPerfume, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
+import { FLANKERS, nameQuality, norm, notPerfume, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { autoPhotoScore, featuresOf, type PhotoRow } from "./photoprefs.ts";
 import { brandImage, standardImage } from "./branding.ts";
@@ -405,8 +405,8 @@ export function isHistoricLow(productId: number, price: number | null, messageId
  * Troca a linha do título já renderizada (funciona com qualquer template).
  */
 export function withFragTitle(text: string, productId: number, oldTitle: string): string {
-  const p = db().prepare("SELECT frag_name, frag_brand, ml FROM products WHERE id = ?").get(productId) as
-    | { frag_name: string | null; frag_brand: string | null; ml: number }
+  const p = db().prepare("SELECT frag_name, frag_brand, ml, conc FROM products WHERE id = ?").get(productId) as
+    | { frag_name: string | null; frag_brand: string | null; ml: number; conc: string | null }
     | undefined;
   if (!p?.frag_name || !p.frag_brand || !oldTitle) return text;
   const brand = p.frag_brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim();
@@ -415,7 +415,10 @@ export function withFragTitle(text: string, productId: number, oldTitle: string)
   const i = lines.findIndex((l) => l.includes(oldTitle));
   if (i < 0) return text;
   const name = lines[i].replace(oldTitle, p.frag_name);
-  lines.splice(i, 1, name, `🏷️ ${nice}${p.ml ? ` · ${p.ml}ml` : ""}`);
+  // concentração na linha da marca: Parfum, EDP e EDT têm preços diferentes (Arthur, 17/nov)
+  const CONC: Record<string, string> = { parfum: "Parfum", edp: "Eau de Parfum", edt: "Eau de Toilette", extrait: "Extrait de Parfum", colonia: "Colônia", deo: "Deo Parfum" };
+  const conc = p.conc && CONC[p.conc] && !norm(p.frag_name).includes(norm(CONC[p.conc])) ? CONC[p.conc] : "";
+  lines.splice(i, 1, name, `🏷️ ${nice}${conc ? ` · ${conc}` : ""}${p.ml ? ` · ${p.ml}ml` : ""}`);
   return lines.join("\n");
 }
 
@@ -1093,6 +1096,53 @@ function scheduleDupCheck() {
   }, 20_000);
 }
 
+const isParfum = (t: string) => perfumeInfo(t)?.conc === "parfum";
+
+/**
+ * Separa o "Parfum" que tinha sido juntado com a versão comum (Stronger With You Parfum ≠ Stronger With You).
+ * Ofertas e posts cujo título é de outra concentração vão para o perfume certo; a página da Fragrantica
+ * errada é esquecida para ser procurada de novo.
+ */
+export function splitParfum(): number {
+  const prods = db().prepare("SELECT id, conc, name, frag_url FROM products").all() as { id: number; conc: string | null; name: string; frag_url: string | null }[];
+  let moved = 0;
+  const touched = new Set<number>();
+  const tx = db();
+  for (const p of prods) {
+    const mine = p.conc === "parfum";
+    const offers = tx.prepare("SELECT id, title FROM offers WHERE product_id = ?").all(p.id) as { id: number; title: string }[];
+    const other = offers.filter((o) => o.title && perfumeInfo(o.title) && isParfum(o.title) !== mine);
+    if (!other.length) continue;
+    for (const o of other) {
+      const info = perfumeInfo(o.title)!;
+      const to = findOrCreateProduct(info, o.title);
+      if (to === p.id) continue;
+      tx.prepare("UPDATE offers SET product_id = ? WHERE id = ?").run(to, o.id);
+      touched.add(p.id).add(to);
+      moved++;
+    }
+    const posts = tx.prepare("SELECT id, original_text FROM posts WHERE product_id = ?").all(p.id) as { id: number; original_text: string }[];
+    for (const q of posts) {
+      const title = (q.original_text || "").split("\n").map((l) => l.replace(/[*_~]/g, "").trim()).find((l) => perfumeInfo(l)) || "";
+      if (!title || isParfum(title) === mine) continue;
+      const to = findOrCreateProduct(perfumeInfo(title)!, title);
+      if (to !== p.id) tx.prepare("UPDATE posts SET product_id = ? WHERE id = ?").run(to, q.id);
+    }
+    log("info", `Agente de cadastro: ${other.length} oferta(s) de outra concentração separadas de ${p.name}`);
+  }
+  // página da Fragrantica de outra concentração (só nos perfumes mexidos): esquece para procurar de novo
+  const flank = new RegExp(`\\b(${FLANKERS.join("|")})\\b`, "i");
+  for (const id of touched) {
+    const p = db().prepare("SELECT conc, frag_url, frag_name FROM products WHERE id = ?").get(id) as { conc: string | null; frag_url: string | null; frag_name: string | null } | undefined;
+    if (!p?.frag_url) continue;
+    const fn = (p.frag_name || p.frag_url.split("/").pop()!.replace(/-\d+\.html$/, "").replace(/-/g, " ")).toLowerCase();
+    const fragParfum = /\bparfum\b/.test(fn) && !/eau de parfum/.test(fn);
+    if (fragParfum === (p.conc === "parfum") || (!fragParfum && flank.test(fn))) continue;
+    db().prepare("UPDATE products SET frag_url = NULL, frag_name = NULL, frag_brand = NULL, frag_data = NULL, frag_accords = NULL, fragram_at = NULL, frag_searched = 0, frag_checked_at = NULL WHERE id = ?").run(id);
+  }
+  return moved;
+}
+
 export function mergeDuplicateProducts(): number {
   const rows = db()
     .prepare(
@@ -1102,7 +1152,7 @@ export function mergeDuplicateProducts(): number {
     .all() as (ProductRow & { main_image_id: number | null; n: number; pin: number | null })[];
   const infos = rows.map((r) => ({ r, a: { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens) as string[], key: r.pkey }, b: perfumeInfo(r.name) }));
   type FR = { frag_url?: string | null };
-  const concOk = (a: string | null, b: string | null) => !a || !b || a === b || (["colonia", "edt"].includes(a) && ["colonia", "edt"].includes(b));
+  const concOk = (a: string | null, b: string | null) => (a === "parfum") === (b === "parfum") && (!a || !b || a === b || (["colonia", "edt"].includes(a) && ["colonia", "edt"].includes(b)));
   const gen = (n: string) => (/\b(feminino|feminina|women|woman|femme|for her)\b/i.test(n) ? "f" : /\b(masculino|masculina|men|man|homme|for him)\b/i.test(n) ? "m" : null);
   const same = (x: (typeof infos)[number], y: (typeof infos)[number]) =>
     !(gen(x.r.name) && gen(y.r.name) && gen(x.r.name) !== gen(y.r.name)) && (
