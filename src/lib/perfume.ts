@@ -42,13 +42,42 @@ export function norm(s: string) {
 }
 
 /** Palavras do nome (sem marca, sem genéricas, sem volume). Serve para nomes sem "ml", como os do ranking de vendas. */
+/** distância de edição (com troca de letras vizinhas) */
+function dist(a: string, b: string): number {
+  const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 1; j <= b.length; j++) d[0][j] = j;
+  for (let i = 1; i <= a.length; i++)
+    for (let j = 1; j <= b.length; j++) {
+      d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) d[i][j] = Math.min(d[i][j], d[i - 2][j - 2] + 1);
+    }
+  return d[a.length][b.length];
+}
+
+const brandCache = new Map<string, boolean>();
+/** Marca, mesmo escrita errada pelos grupos ("Lataffa", "Latafa", "Armaff"). */
+export function isBrand(t: string): boolean {
+  if (BRAND_WORDS.has(t)) return true;
+  if (t.length < 5) return false;
+  let r = brandCache.get(t);
+  if (r === undefined) {
+    r = false;
+    for (const b of BRAND_WORDS) {
+      if (b.length < 5 || b[0] !== t[0] || Math.abs(b.length - t.length) > 2) continue;
+      if (dist(t, b) <= (Math.min(b.length, t.length) >= 7 ? 2 : 1)) { r = true; break; }
+    }
+    brandCache.set(t, r);
+  }
+  return r;
+}
+
 export function nameTokens(title: string): string[] {
   return [
     ...new Set(
       norm(title)
         .replace(/\b\d{2,4}\s*ml\b/g, " ")
         .split(" ")
-        .filter((t) => t && !/^\d+$/.test(t) && !STOP.has(t) && !BRAND_WORDS.has(t)),
+        .filter((t) => t && !/^\d+$/.test(t) && !STOP.has(t) && !isBrand(t)),
     ),
   ].sort();
 }
@@ -77,7 +106,7 @@ export function perfumeInfo(title: string): PerfumeInfo | null {
       n
         .replace(/\b\d{2,4}\s*ml\b/g, " ")
         .split(" ")
-        .filter((t) => t && !STOP.has(t) && !BRAND_WORDS.has(t)),
+        .filter((t) => t && !STOP.has(t) && !isBrand(t)),
     ),
   ].sort();
   if (!tokens.length) return null;
