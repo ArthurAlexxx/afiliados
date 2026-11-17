@@ -729,6 +729,13 @@ export function startCuration() {
       // posta a melhor promoção que estiver valendo
       const since = sinceLastCuratedMs();
       const p = pace(s);
+      if (p.mirror && Date.now() - Number(getState("paceLogAt") || 0) > 10 * 60e3) {
+        setState("paceLogAt", String(Date.now()));
+        const rk = ranking(s).filter((i) => !/^sem oferta/.test(i.why || ""));
+        const whys = new Map<string, number>();
+        for (const i of rk) if (!i.eligible) { const k = (i.why || "").replace(/R\$ [\d.,]+/g, "R$").replace(/#\d+/g, "#"); whys.set(k, (whys.get(k) || 0) + 1); }
+        log("info", `Ritmo ${MIRROR_GROUP}: eles ${p.theirs} na última hora, nós ${p.ours}; promoções valendo agora: ${rk.filter((i) => i.eligible).length} boas, ${rk.length - rk.filter((i) => i.eligible).length} barradas (${[...whys].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([k, n]) => `${n}× ${k}`).join("; ")})`);
+      }
       if (p.mirror && slotOpen(s)) {
         // espelho do RP: estamos atrás deles na última hora, posta a melhor promoção valendo
         const top = ranking(s).find((i) => i.eligible);
