@@ -84,6 +84,17 @@ function core(name: string) {
   return toks(name.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => !/^\d+$/.test(t) && !STOP.has(t) && t.length > 1);
 }
 
+/** Concentração escrita no nome: colonia | edt | edp | extrait | parfum (sozinho, "Le Parfum") */
+function concOf(name: string): string | null {
+  const n = norm(name);
+  if (/\b(colonia|cologne|eau de cologne|edc)\b/.test(n)) return "colonia";
+  if (/\b(eau de toilette|edt)\b/.test(n)) return "edt";
+  if (/\b(extrait)\b/.test(n)) return "extrait";
+  if (/\b(eau de parfum|edp)\b/.test(n)) return "edp";
+  if (/\bparfum\b/.test(n)) return "parfum";
+  return null;
+}
+
 /** Escolhe o resultado da Fragrantica que é exatamente esse perfume (ou nenhum). */
 export function pick(ourName: string, hits: Hit[]): Hit | null {
   const ours = core(ourName);
@@ -103,6 +114,10 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     const nums = toks(ourName.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => /^\d+$/.test(t));
     const theirs = toks(`${h.brand} ${h.name}`);
     if (nums.some((n) => !theirs.includes(n))) continue;
+    // concentração escrita nos dois e diferente: "Code Parfum" ≠ "Code Colonia"
+    const hc = concOf(h.name), oc = concOf(ourName);
+    if (hc && oc && hc !== oc) continue;
+    if (hc === "colonia" && oc !== "colonia") continue;
     const nameToks = toks(h.name).filter((t) => !GENERIC.has(t) || VARIANT.has(t));
     const key = nameToks.filter((t) => !GENERIC.has(t));
     if (!key.length) continue;
@@ -142,7 +157,9 @@ export function canonicalName(h: Pick<Hit, "brand" | "name">, ml: number, _conc?
   const cap = (s: string) => (s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : s);
   const brand = cap(h.brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim());
   let name = h.name.trim();
-  if (!norm(name).startsWith(norm(brand))) name = `${brand} ${name}`;
+  // "Armani Code Parfum" já começa com uma palavra da marca (Giorgio Armani): não repete a marca
+  const first = toks(name)[0];
+  if (!norm(name).startsWith(norm(brand)) && !toks(brand).includes(first)) name = `${brand} ${name}`;
   return `${name}${ml ? ` ${ml}ml` : ""}`.replace(/\s+/g, " ").trim();
 }
 

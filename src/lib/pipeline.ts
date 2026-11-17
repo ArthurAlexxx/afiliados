@@ -496,8 +496,8 @@ export function startWorker() {
       log("info", `Fragrantica: ${n} foto(s) de capa tiradas do banco`);
     }
     // Arthur (nov/2026): nome simples = Marca + nome da Fragrantica + ml; e tenta de novo os não achados
-    if (getState("fragSimpleNameV1") !== "1") {
-      setState("fragSimpleNameV1", "1");
+    if (getState("fragSimpleNameV2") !== "1") {
+      setState("fragSimpleNameV2", "1");
       import("./fragrantica.ts").then(({ canonicalName }) => {
         const rows = db().prepare("SELECT id, name, ml, frag_name, frag_brand FROM products WHERE frag_name IS NOT NULL AND frag_brand IS NOT NULL").all() as { id: number; name: string; ml: number; frag_name: string; frag_brand: string }[];
         let n = 0;
@@ -516,6 +516,11 @@ export function startWorker() {
     if (getState("fragArtArabiaV1") !== "1") {
       setState("fragArtArabiaV1", "1");
       db().prepare("UPDATE products SET name = 'Lattafa Art of Arabia I 100ml', frag_brand = 'Lattafa Perfumes', frag_name = 'Art of Arabia I' WHERE frag_url LIKE '%Art-of-Arabia-I-92423%'").run();
+    }
+    if (getState("fragCodeV1") !== "1") {
+      setState("fragCodeV1", "1");
+      // Armani Code Parfum tinha virado "Code Colonia": #555 é o Parfum (Arthur)
+      db().prepare("UPDATE products SET frag_url = 'https://www.fragrantica.com/perfume/Giorgio-Armani/Armani-Code-Parfum-75126.html', frag_name = 'Armani Code Parfum', frag_brand = 'Giorgio Armani', name = 'Armani Code Parfum ' || ml || 'ml', frag_data = NULL, fragram_at = NULL WHERE id = 555").run();
     }
     if (getState("fragRoyalV1") !== "1") {
       setState("fragRoyalV1", "1");

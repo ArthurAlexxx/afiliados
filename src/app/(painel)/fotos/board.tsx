@@ -45,6 +45,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
+  const [editing, setEditing] = React.useState<number | null>(null);
   const sentinel = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -213,6 +214,11 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                       Fragrantica
                     </a>
                   ) : null}
+                  {row.fragUrl ? (
+                    <button onClick={() => setEditing(editing === row.id ? null : row.id)} className="shrink-0 text-[11.5px] text-muted-foreground underline">
+                      perfume errado? trocar link
+                    </button>
+                  ) : null}
                   <Button size="sm" variant="outline" className="h-7 shrink-0 text-[11.5px]" onClick={() => toggleBlock(row)}>
                     <Ban className="size-3.5" /> {row.blocked ? "Liberar" : "Não postar"}
                   </Button>
@@ -232,9 +238,13 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                     <Drop productId={row.id} onAdded={() => refreshRow(row.id)} />
                   </div>
                 ) : null}
-                {!row.fragram.length ? (
+                {!row.fragram.length || editing === row.id ? (
                   <div className="flex flex-wrap items-center gap-2 text-[11.5px] text-muted-foreground">
-                    <span>{row.fragUrl ? "Sem fotos no Fragram Photos do Fragrantica." : "Ainda não achado no Fragrantica."}</span>
+                    <span>
+                      {editing === row.id
+                        ? "Cole o link da página certa do Fragrantica: o nome e as fotos são trocados."
+                        : row.fragUrl ? "Sem fotos no Fragram Photos do Fragrantica." : "Ainda não achado no Fragrantica."}
+                    </span>
                     <form
                       className="flex gap-1"
                       onSubmit={async (e) => {
@@ -243,6 +253,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                         try {
                           const r = await api<{ msg: string }>("/api/fotos/fraglink", { method: "POST", json: { productId: row.id, url: inp.value } });
                           toast.success(r.msg);
+                          setEditing(null);
                           refreshRow(row.id);
                         } catch (err) {
                           toast.error((err as Error).message);
