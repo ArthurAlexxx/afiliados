@@ -460,6 +460,21 @@ export function startWorker() {
     setState("groupsSetupV1", "1");
     log("info", `Grupos: ${groups.filter((g) => has(g.name, /rp promos|heroi do perfume|clube do perfume/)).length} de promoção, o resto só fotos`);
   });
+  // Teste de tirar marca d'água encerrado (Arthur não gostou do resultado): nada na fila, nenhum grupo com "tirar marca".
+  // Depois, um levantamento de quais grupos mandam fotos sem marca.
+  import("./settings.ts").then(({ getState, setState }) => {
+    if (!getState("unwmOffV1")) {
+      db().prepare("UPDATE groups SET wm_remove = 0").run();
+      db().prepare("UPDATE image_fixes SET status = 'wm_off', updated_at = datetime('now') WHERE status IN ('wm_queued', 'wm_ready')").run();
+      setState("unwmOffV1", "1");
+      log("info", "Marca d'água: teste desligado");
+    }
+    if (!getState("groupSurveyV1"))
+      setTimeout(() => {
+        setState("groupSurveyV1", "1");
+        import("./groupsurvey.ts").then((m) => m.surveyGroups()).catch((e) => log("warn", `Levantamento de fotos: ${(e as Error).message}`));
+      }, 120_000);
+  });
   // Fotos limpas (teste de marca d'água) que entraram no banco antes da tela de aprovação: voltam para a aprovação.
   import("./settings.ts").then(({ getState, setState }) => {
     if (getState("unwmGateV1")) return;

@@ -659,13 +659,6 @@ export function startCuration() {
         setState("radarHubAt", String(Date.now()));
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
-      // marca d'água do RP: o LaMa (open source, no próprio servidor) limpa uma foto por vez, em segundo plano
-      import("./unwatermark.ts")
-        .then(async (m) => {
-          await m.backfillGroups();
-          if (!(await m.processUnwatermark())) await m.releaseModel();
-        })
-        .catch((e) => log("warn", `Marca d'água: ${(e as Error).message}`));
       if (s.mode !== "curated") return;
       // "me avisa quando baixar": chamada no grupo 2x por dia
       {

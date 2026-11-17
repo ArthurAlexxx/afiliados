@@ -60,6 +60,15 @@ export async function learnMask(groupJid: string): Promise<Mask | null> {
     .map((r) => r.src_path)
     .filter((f) => fs.existsSync(f));
   if (files.length < MIN_SAMPLES) return null;
+  const mask = await maskFromFiles(files);
+  if (!mask) return null;
+  db().prepare("UPDATE groups SET wm_mask = ? WHERE jid = ?").run(JSON.stringify(mask), groupJid);
+  log("info", `Marca d'água aprendida (${mask.samples} fotos): caixa ${mask.box.map((v) => v.toFixed(2)).join(", ")}`);
+  return mask;
+}
+
+/** Procura uma marca que se repete igual em várias fotos (a mesma lógica serve para saber se um grupo marca as fotos). */
+export async function maskFromFiles(files: string[]): Promise<Mask | null> {
   const grids = await Promise.all(files.map(gridRgb));
   const n = grids.length;
   const P = G * G;
@@ -126,8 +135,6 @@ export async function learnMask(groupJid: string): Promise<Mask | null> {
     tpl.push((mean[i * 3] + mean[i * 3 + 1] + mean[i * 3 + 2]) / 3);
   }
   const mask: Mask = { box: [x0 / G, y0 / G, x1 / G, y1 / G], tpl, tw: x1 - x0, th: y1 - y0, samples: n, at: Date.now() };
-  db().prepare("UPDATE groups SET wm_mask = ? WHERE jid = ?").run(JSON.stringify(mask), groupJid);
-  log("info", `Marca d'água aprendida (${n} fotos): caixa ${mask.box.map((v) => v.toFixed(2)).join(", ")}`);
   return mask;
 }
 
