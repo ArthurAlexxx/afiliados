@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 /** Converte a formatação do WhatsApp (*negrito*, _itálico_, ~riscado~) em HTML seguro. */
-function waToHtml(text: string) {
+export function waToHtml(text: string) {
   const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   return esc
     .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:;]|$)/g, "$1<strong>$2</strong>")

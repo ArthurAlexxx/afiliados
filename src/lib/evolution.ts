@@ -95,6 +95,12 @@ export class Evolution {
     return { list: list as Record<string, unknown>[], pages };
   }
 
+  /** Conversas do número (contatos e grupos), com a última mensagem quando a Evolution manda. */
+  async findChats() {
+    const r = await this.call<unknown>("POST", `/chat/findChats/${this.inst}`, {});
+    return (Array.isArray(r) ? r : []) as Record<string, unknown>[];
+  }
+
   sendText(number: string, text: string) {
     return this.call("POST", `/message/sendText/${this.inst}`, { number, text, linkPreview: true });
   }
