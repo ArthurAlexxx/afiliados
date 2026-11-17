@@ -390,7 +390,24 @@ function Section({ title, hint, count, children, right }: { title: string; hint?
 }
 
 function QueueTab() {
-  const { data, reload } = useApi<QueueResp>("/api/posts/queue", 5000);
+  const { data, reload: load } = useApi<QueueResp>("/api/posts/queue", 3000);
+  // qualquer ação aqui (aprovar, foto, segurar, enviar) atualiza todas as seções na hora
+  const reload = React.useCallback(async () => {
+    await load();
+    window.dispatchEvent(new Event("posts-changed"));
+  }, [load]);
+  React.useEffect(() => {
+    const on = () => void load();
+    window.addEventListener("posts-changed", on);
+    return () => window.removeEventListener("posts-changed", on);
+  }, [load]);
+  // mudou algo no servidor (post saiu, aprovado em outra aba, foto chegou): avisa as outras seções
+  const sig = data ? [...data.review, ...data.queued, ...data.waiting].map((p) => p.id).join(",") + `|${data.sent?.length ?? ""}` : "";
+  const lastSig = React.useRef("");
+  React.useEffect(() => {
+    if (lastSig.current && sig !== lastSig.current) window.dispatchEvent(new Event("posts-changed"));
+    lastSig.current = sig;
+  }, [sig]);
   const [, tick] = React.useState(0);
   const [waitN, setWaitN] = React.useState<number | null>(null);
   const [crop, setCrop] = React.useState<{ p: QPost; initial: Crop | null } | null>(null);
@@ -638,10 +655,15 @@ function SentGallery() {
     return () => clearTimeout(t);
   }, [q]);
   React.useEffect(() => setPage(1), [query, group, period, sort]);
-  const { data, loading } = useApi<SentResp>(
+  const { data, loading, reload: reloadSent } = useApi<SentResp>(
     `/api/posts/sent?page=${page}&period=${period}&sort=${sort}${query ? `&q=${encodeURIComponent(query)}` : ""}${group ? `&group=${encodeURIComponent(group)}` : ""}`,
-    30000,
+    10000,
   );
+  React.useEffect(() => {
+    const on = () => void reloadSent();
+    window.addEventListener("posts-changed", on);
+    return () => window.removeEventListener("posts-changed", on);
+  }, [reloadSent]);
   const pages = data?.pages || 1;
   const nums = Array.from({ length: pages }, (_, i) => i + 1).filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 2);
   const sel2 = "h-9 rounded-lg border border-[var(--border-soft)] bg-card px-2.5 text-[13px] outline-none focus:ring-2 focus:ring-violet-500/40";

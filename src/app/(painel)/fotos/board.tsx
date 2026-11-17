@@ -137,7 +137,7 @@ export function PhotoBoard({
   React.useEffect(() => {
     const on = (e: Event) => {
       const rows = (e as CustomEvent<{ post: number }[]>).detail;
-      const key = rows.map((r) => `${r.post}:${(r as { photos?: number }).photos || 0}:${(r as { searched?: number }).searched || 0}`).join(",");
+      const key = rows.map((r) => `${r.post}:${(r as { review?: number }).review ? "r" : "p"}:${(r as { photos?: number }).photos || 0}:${(r as { searched?: number }).searched || 0}`).join(",");
       if (waitKey.current && key !== waitKey.current) {
         api<Resp>(url(0))
           .then((r) => {
@@ -152,6 +152,19 @@ export function PhotoBoard({
     return () => window.removeEventListener("waiting-photos", on);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [f, deb]);
+
+  // dentro de Posts: tudo em tempo real (aprovou, chegou foto, saiu): relê sozinho e na hora de cada ação da página
+  React.useEffect(() => {
+    if (!embedded && !only) return;
+    const reload = () => api<Resp>(url(0)).then((r) => setData(r)).catch(() => undefined);
+    const t = setInterval(() => !document.hidden && reload(), 5000);
+    window.addEventListener("posts-changed", reload);
+    return () => {
+      clearInterval(t);
+      window.removeEventListener("posts-changed", reload);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [embedded, only]);
 
   React.useEffect(() => {
     const el = sentinel.current;
@@ -191,6 +204,7 @@ export function PhotoBoard({
       else if (k === "pin") await api("/api/pinterest", { method: "POST", json: { id: o.id, main: true } });
       else await api("/api/fotos/upload", { method: "POST", json: { productId: row.id, url: o.url, crop } });
       toast.success(row.waiting ? `Foto escolhida: o post de ${row.name} está saindo agora` : `Foto principal de ${row.name} trocada`);
+      window.dispatchEvent(new Event("posts-changed"));
       setPreview(null);
       // post resolvido: sai da lista de esperando na hora, sem precisar atualizar a página
       if (row.waiting && f === "wait")
@@ -206,6 +220,7 @@ export function PhotoBoard({
   async function toggleBlock(row: Row) {
     await api("/api/fotos", { method: "PATCH", json: { productId: row.id, blocked: !row.blocked } });
     toast.success(row.blocked ? "Liberado para postar" : "Não vai ser postado: está em Posts › Rejeitados");
+    window.dispatchEvent(new Event("posts-changed"));
     setPreview(null);
     // marcado para não postar: sai daqui (fica na aba Rejeitados dos Posts)
     if (!row.blocked && (f === "wait" || embedded))
