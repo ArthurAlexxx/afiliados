@@ -459,6 +459,13 @@ export function startWorker() {
       setState("fragRetryV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
     }
+    // Arthur (17/nov): "nem poste isso - Kiss Com Caixa Deo Colônia 100ml"
+    if (getState("blockKissV1") !== "1") {
+      setState("blockKissV1", "1");
+      const r = db().prepare("UPDATE products SET blocked = 1 WHERE lower(name) LIKE '%kiss%' AND lower(name) LIKE '%col%nia%' AND ml = 100").run();
+      db().prepare("UPDATE posts SET status = 'skipped', reason = 'Perfume bloqueado' WHERE status IN ('queued','pending') AND product_id IN (SELECT id FROM products WHERE blocked = 1)").run();
+      log("info", `Bloqueado (não postar): Kiss Deo Colônia 100ml (${r.changes} cadastro(s))`);
+    }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {
       saveSettings({ activeTo: "23:00" });

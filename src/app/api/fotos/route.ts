@@ -10,7 +10,7 @@ export async function GET(req: Request) {
   const u = new URL(req.url);
   const id = Number(u.searchParams.get("id") || 0);
   if (id) {
-    const product = db().prepare("SELECT id, name, main_image_id FROM products WHERE id = ?").get(id);
+    const product = db().prepare("SELECT id, name, main_image_id, blocked FROM products WHERE id = ?").get(id);
     const images = db()
       .prepare(
         `SELECT i.id, i.path, i.width, i.height, i.score, i.disabled, i.created_at, i.message_id, COALESCE(g.name, '') group_name
@@ -54,7 +54,13 @@ export async function GET(req: Request) {
  * { productId, mainImageId }: define a foto principal do perfume (null volta para a escolha automática).
  */
 export async function PATCH(req: Request) {
-  const b = (await req.json()) as { id?: number; disabled?: boolean; productId?: number; mainImageId?: number | null };
+  const b = (await req.json()) as { id?: number; disabled?: boolean; productId?: number; mainImageId?: number | null; blocked?: boolean };
+  if (b.productId && typeof b.blocked === "boolean") {
+    db().prepare("UPDATE products SET blocked = ? WHERE id = ?").run(b.blocked ? 1 : 0, b.productId);
+    // o que estava na fila desse perfume sai
+    if (b.blocked) db().prepare("UPDATE posts SET status = 'skipped', reason = 'Perfume bloqueado' WHERE product_id = ? AND status IN ('queued','pending')").run(b.productId);
+    return Response.json({ ok: true });
+  }
   if (b.productId) {
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(b.mainImageId ?? null, b.productId);
     if (b.mainImageId) db().prepare("UPDATE images SET disabled = 0 WHERE id = ?").run(b.mainImageId);

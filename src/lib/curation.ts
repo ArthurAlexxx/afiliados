@@ -272,6 +272,8 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
 
     let why = "";
     if (!best) why = `sem oferta nos últimos ${s.curationLookbackMinutes} min`;
+    // perfume bloqueado pelo Arthur ("não poste isso")
+    else if ((p as { blocked?: number }).blocked) why = "bloqueado por você (não postar)";
     // regra do Arthur: só perfume (body splash, creme, loção, hidratante… não)
     else if (notPerfume(`${p.name}\n${best.text.split("\n").find((l) => l.trim()) || ""}`))
       why = `não é perfume (${notPerfume(`${p.name}\n${best.text.split("\n").find((l) => l.trim()) || ""}`)})`;
@@ -603,6 +605,7 @@ export async function followPost(productId: number, groupJid: string): Promise<s
   const item = ranking(s).find((i) => i.productId === productId);
   if (!item?.best) return "cópia: sem oferta com link";
   if (notPerfume(`${item.name}\n${item.best.text.split("\n").find((l) => l.trim()) || ""}`)) return "cópia: não é perfume";
+  if ((db().prepare("SELECT blocked FROM products WHERE id = ?").get(productId) as { blocked: number } | undefined)?.blocked) return "cópia: perfume bloqueado por você";
   const r = await createCuratedPost(item, s, { follow: g.name });
   if (r.status === "queued") {
     const { processQueue } = await import("./pipeline.ts");

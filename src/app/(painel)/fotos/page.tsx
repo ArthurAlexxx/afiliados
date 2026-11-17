@@ -247,7 +247,17 @@ function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => v
 }
 
 function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
-  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
+  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null; blocked?: number }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
+  const blocked = Boolean(data?.product?.blocked);
+  const setBlocked = async () => {
+    try {
+      await api("/api/fotos", { method: "PATCH", json: { productId: id, blocked: !blocked } });
+      toast.success(blocked ? "Perfume liberado para postar" : "Esse perfume não será mais postado");
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    }
+  };
   const mainId = data?.product?.main_image_id ?? null;
   const setMain = async (img: Img) => {
     const off = mainId === img.id;
@@ -274,6 +284,9 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
     <>
       <div className="mb-4 flex items-center gap-3">
         <Button variant="outline" size="sm" onClick={onBack}><ChevronLeft className="size-4" /> Todos os perfumes</Button>
+        <Button variant={blocked ? "accent" : "outline"} size="sm" className="order-last ml-auto" onClick={setBlocked}>
+          {blocked ? "Bloqueado · liberar" : "Não postar este perfume"}
+        </Button>
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold">{data?.product?.name || "…"}</div>
           <div className="text-[12px] text-muted-foreground">
