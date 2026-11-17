@@ -25,7 +25,8 @@ type ProductRow = { id: number; pkey: string; name: string; ml: number; conc: st
 function findOrCreateProduct(info: PerfumeInfo, title: string): number {
   const rows = db().prepare("SELECT * FROM products WHERE ml = ?").all(info.ml) as ProductRow[];
   for (const r of rows) {
-    if (r.pkey === info.key || samePerfume(info, { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens), key: r.pkey })) {
+    const byName = perfumeInfo(r.name);
+    if (r.pkey === info.key || samePerfume(info, { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens), key: r.pkey }) || (byName && samePerfume(info, byName))) {
       // guarda o nome mais completo (marca + linha + ml), como os grupos escrevem
       const clean = displayName(title);
       if (nameQuality(clean) > nameQuality(r.name)) db().prepare("UPDATE products SET name = ? WHERE id = ?").run(clean, r.id);
@@ -35,6 +36,8 @@ function findOrCreateProduct(info: PerfumeInfo, title: string): number {
   const res = db()
     .prepare("INSERT INTO products (pkey, name, ml, conc, tokens) VALUES (?, ?, ?, ?, ?)")
     .run(info.key, displayName(title), info.ml, info.conc, JSON.stringify(info.tokens));
+  log("info", `Agente de cadastro: perfume novo no banco: ${displayName(title)}`);
+  scheduleDupCheck();
   return Number(res.lastInsertRowid);
 }
 
@@ -724,6 +727,21 @@ export function startCuration() {
  * que entraram antes das regras atuais de nome. Fica o que tem foto principal escolhida (ou mais ofertas);
  * ofertas, fotos, posts, Pinterest e pedidos do outro passam para ele.
  */
+/** Agente de cadastro: cada perfume novo que entra no banco dispara a checagem de repetidos (junta em até 20s). */
+function scheduleDupCheck() {
+  const g = globalThis as { __dupTimer?: NodeJS.Timeout };
+  if (g.__dupTimer) return;
+  g.__dupTimer = setTimeout(() => {
+    g.__dupTimer = undefined;
+    try {
+      const n = mergeDuplicateProducts();
+      log("info", n ? `Agente de cadastro: ${n} repetido(s) arrumado(s)` : "Agente de cadastro: nenhum repetido");
+    } catch (e) {
+      log("warn", `Agente de cadastro: ${(e as Error).message}`);
+    }
+  }, 20_000);
+}
+
 export function mergeDuplicateProducts(): number {
   const rows = db()
     .prepare(
@@ -766,8 +784,12 @@ export function mergeDuplicateProducts(): number {
       gone.add(d);
       if (keep === y) infos[i] = y; // segue comparando com o que ficou
       merged++;
-      log("info", `Perfume repetido juntado: "${drop.r.name}" entrou em "${keep.r.name}"`);
+      log("info", `Agente de cadastro: perfume repetido juntado: "${drop.r.name}" entrou em "${keep.r.name}"`);
     }
   }
+  // guarda as palavras do nome com as regras atuais (marca escrita errada fica de fora), para os próximos anúncios acharem
+  const up = db().prepare("UPDATE products SET tokens = ? WHERE id = ?");
+  for (const x of infos)
+    if (!gone.has(x.r.id) && x.b && x.b.ml === x.r.ml && JSON.stringify(x.b.tokens) !== x.r.tokens) up.run(JSON.stringify(x.b.tokens), x.r.id);
   return merged;
 }
