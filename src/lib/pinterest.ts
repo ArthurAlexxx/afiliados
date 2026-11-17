@@ -325,7 +325,7 @@ export function extraWords(product: string, title: string): string[] {
 }
 
 /** Assinatura de cor do centro da foto (onde fica o frasco): matizes das partes coloridas + cores gerais. */
-async function colorSig(buf: Buffer): Promise<{ hue: number[]; rgb: number[]; colored: number }> {
+export async function colorSig(buf: Buffer): Promise<{ hue: number[]; rgb: number[]; colored: number }> {
   const img = sharp(buf).rotate();
   const m = await img.metadata();
   const w = m.width || 1, h = m.height || 1;
@@ -355,7 +355,7 @@ async function colorSig(buf: Buffer): Promise<{ hue: number[]; rgb: number[]; co
   return { hue: hue.map((x) => x / nh), rgb: rgb.map((x) => x / nr), colored: colored / nr };
 }
 
-function sigSim(a: Awaited<ReturnType<typeof colorSig>>, b: Awaited<ReturnType<typeof colorSig>>) {
+export function sigSim(a: Awaited<ReturnType<typeof colorSig>>, b: Awaited<ReturnType<typeof colorSig>>) {
   const inter = (x: number[], y: number[]) => x.reduce((s, v, i) => s + Math.min(v, y[i]), 0);
   const rgb = inter(a.rgb, b.rgb);
   // as duas com cor (frasco verde, amarelo…): a matiz manda

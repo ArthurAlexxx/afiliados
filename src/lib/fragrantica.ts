@@ -146,6 +146,47 @@ export function canonicalName(h: Pick<Hit, "brand" | "name">, ml: number, _conc?
   return `${name}${ml ? ` ${ml}ml` : ""}`.replace(/\s+/g, " ").trim();
 }
 
+const ROMAN = new Set(["i", "ii", "iii", "iv", "v", "vi", "vii", "viii", "ix", "x"]);
+
+/**
+ * Quando o nome não decide entre versões da mesma linha (só muda o número: "Art of Arabia I/II/III"),
+ * compara a foto de referência do perfume (a do post que pegamos / anúncio do ML) com o frasco de cada versão.
+ */
+async function pickByPhoto(productId: number, ourName: string, hits: Hit[]): Promise<Hit | null> {
+  const ourAll = toks(ourName);
+  const fam = hits.filter((h) => {
+    const brandToks = toks(h.brand).filter((t) => !GENERIC.has(t));
+    if (brandToks.length && !brandToks.some((t) => has(ourAll, t))) return false;
+    const nameToks = toks(h.name).filter((t) => !GENERIC.has(t));
+    const key = nameToks.filter((t) => !ROMAN.has(t) && !/^\d+$/.test(t));
+    if (!key.length) return false;
+    // todas as palavras batem; o que falta é só o número da versão
+    return key.every((t) => has(ourAll, t) || STOP.has(t) || has(brandToks, t));
+  });
+  if (fam.length < 2) return null;
+  const { refImage, colorSig, sigSim } = await import("./pinterest.ts");
+  const ref = await refImage(productId);
+  if (!ref) return null;
+  const rs = await colorSig(ref);
+  const scored: { h: Hit; sim: number }[] = [];
+  for (const h of fam) {
+    const id = /-(\d+)\.html/.exec(h.url)?.[1];
+    if (!id) continue;
+    const r = await fetch(`https://fimgs.net/mdimg/perfume/o.${id}.jpg`, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20000) }).catch(() => null);
+    if (!r?.ok) continue;
+    scored.push({ h, sim: sigSim(rs, await colorSig(Buffer.from(await r.arrayBuffer()))) });
+  }
+  scored.sort((a, b) => b.sim - a.sim);
+  const [a, b] = scored;
+  const msg = scored.map((x) => `${x.h.name} ${(x.sim * 100).toFixed(0)}%`).join(", ");
+  if (a && a.sim >= 0.55 && (!b || a.sim - b.sim >= 0.12)) {
+    log("info", `Fragrantica: "${ourName}" decidido pela foto do anúncio → ${a.h.name} (${msg})`);
+    return a.h;
+  }
+  log("info", `Fragrantica: "${ourName}" foto não decidiu entre as versões (${msg})`);
+  return null;
+}
+
 /** Procura um perfume na Fragrantica e, se achar com certeza, troca o nome dele pelo padrão. */
 export async function standardize(productId: number): Promise<string> {
   const p = db().prepare("SELECT id, name, ml, conc FROM products WHERE id = ?").get(productId) as { id: number; name: string; ml: number; conc: string | null } | undefined;
@@ -161,7 +202,9 @@ export async function standardize(productId: number): Promise<string> {
     db().prepare("UPDATE products SET frag_checked_at = NULL WHERE id = ?").run(p.id);
     throw e;
   }
-  const h = pick(p.name, hits);
+  let h = pick(p.name, hits);
+  // várias versões do mesmo perfume (Art of Arabia I, II, III): decide pela foto do anúncio original
+  if (!h) h = await pickByPhoto(p.id, p.name, hits).catch((e) => (log("warn", `Fragrantica (foto): ${(e as Error).message}`), null));
   if (!h) {
     log("info", `Fragrantica: não achei com certeza "${p.name}" (${hits.slice(0, 3).map((x) => `${x.brand} ${x.name}`).join(" | ") || "nada"})`);
     return "não achei";
