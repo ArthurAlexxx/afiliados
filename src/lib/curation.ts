@@ -29,7 +29,8 @@ function findOrCreateProduct(info: PerfumeInfo, title: string): number {
     if (r.pkey === info.key || samePerfume(info, { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens), key: r.pkey }) || (byName && samePerfume(info, byName))) {
       // guarda o nome mais completo (marca + linha + ml), como os grupos escrevem
       const clean = displayName(title);
-      if (nameQuality(clean) > nameQuality(r.name)) db().prepare("UPDATE products SET name = ? WHERE id = ?").run(clean, r.id);
+      // nome padrão da Fragrantica não é trocado pelo título dos grupos
+      if (!(r as { frag_name?: string | null }).frag_name && nameQuality(clean) > nameQuality(r.name)) db().prepare("UPDATE products SET name = ? WHERE id = ?").run(clean, r.id);
       return r.id;
     }
   }
@@ -817,6 +818,7 @@ export function startCuration() {
         setState("radarHubAt", String(Date.now()));
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
+      import("./fragrantica.ts").then((m) => m.fragranticaStep()).catch((e) => log("warn", `Fragrantica: ${(e as Error).message}`));
       import("./pinterest.ts").then(async (m) => { await m.prefetchNext(); await m.pinAutoStep(); }).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
       if (s.mode !== "curated") return;
       // "me avisa quando baixar": chamada no grupo 2x por dia
@@ -905,8 +907,15 @@ export function mergeDuplicateProducts(): number {
     )
     .all() as (ProductRow & { main_image_id: number | null; n: number; pin: number | null })[];
   const infos = rows.map((r) => ({ r, a: { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens) as string[], key: r.pkey }, b: perfumeInfo(r.name) }));
+  type FR = { frag_url?: string | null };
+  const concOk = (a: string | null, b: string | null) => !a || !b || a === b || (["colonia", "edt"].includes(a) && ["colonia", "edt"].includes(b));
+  const gen = (n: string) => (/\b(feminino|feminina|women|woman|femme|for her)\b/i.test(n) ? "f" : /\b(masculino|masculina|men|man|homme|for him)\b/i.test(n) ? "m" : null);
   const same = (x: (typeof infos)[number], y: (typeof infos)[number]) =>
-    samePerfume(x.a, y.a) || (x.b && y.b ? samePerfume(x.b, y.b) : false);
+    !(gen(x.r.name) && gen(y.r.name) && gen(x.r.name) !== gen(y.r.name)) && (
+    // mesma página da Fragrantica, mesmo ml: mesmo perfume
+    (Boolean((x.r as FR).frag_url) && (x.r as FR).frag_url === (y.r as FR).frag_url && x.r.ml === y.r.ml && concOk(x.r.conc, y.r.conc)) ||
+    samePerfume(x.a, y.a) ||
+    (x.b && y.b ? samePerfume(x.b, y.b) : false));
   const gone = new Set<number>();
   let merged = 0;
   for (let i = 0; i < infos.length; i++) {
@@ -927,7 +936,9 @@ export function mergeDuplicateProducts(): number {
         if (keep.r.pin) tx.prepare("UPDATE pin_photos SET status = 'rejected' WHERE product_id = ? AND status = 'pending'").run(k);
         const main = keep.r.main_image_id ?? drop.r.main_image_id;
         const last = [keep.r.last_posted_at, drop.r.last_posted_at].filter(Boolean).sort().pop() ?? null;
-        const name = nameQuality(drop.r.name) > nameQuality(keep.r.name) ? drop.r.name : keep.r.name;
+        const fk = (keep.r as FR).frag_url, fd = (drop.r as FR).frag_url;
+        const name = fk ? keep.r.name : fd ? drop.r.name : nameQuality(drop.r.name) > nameQuality(keep.r.name) ? drop.r.name : keep.r.name;
+        if (!fk && fd) tx.prepare("UPDATE products SET frag_name = (SELECT frag_name FROM products WHERE id = ?), frag_brand = (SELECT frag_brand FROM products WHERE id = ?), frag_url = ? WHERE id = ?").run(d, d, fd, k);
         tx.prepare("UPDATE products SET main_image_id = ?, last_posted_at = ?, name = ? WHERE id = ?").run(main, last, name, k);
         tx.prepare("DELETE FROM products WHERE id = ?").run(d);
         tx.exec("COMMIT");
@@ -945,6 +956,6 @@ export function mergeDuplicateProducts(): number {
   // guarda as palavras do nome com as regras atuais (marca escrita errada fica de fora), para os próximos anúncios acharem
   const up = db().prepare("UPDATE products SET tokens = ? WHERE id = ?");
   for (const x of infos)
-    if (!gone.has(x.r.id) && x.b && x.b.ml === x.r.ml && JSON.stringify(x.b.tokens) !== x.r.tokens) up.run(JSON.stringify(x.b.tokens), x.r.id);
+    if (!gone.has(x.r.id) && !(x.r as FR).frag_url && x.b && x.b.ml === x.r.ml && JSON.stringify(x.b.tokens) !== x.r.tokens) up.run(JSON.stringify(x.b.tokens), x.r.id);
   return merged;
 }

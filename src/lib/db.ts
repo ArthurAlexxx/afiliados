@@ -197,6 +197,10 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE pin_photos ADD COLUMN feat TEXT",
     "ALTER TABLE groups ADD COLUMN follow INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE posts ADD COLUMN wa_ids TEXT",
+    "ALTER TABLE products ADD COLUMN frag_name TEXT",
+    "ALTER TABLE products ADD COLUMN frag_brand TEXT",
+    "ALTER TABLE products ADD COLUMN frag_url TEXT",
+    "ALTER TABLE products ADD COLUMN frag_checked_at TEXT",
     "ALTER TABLE pin_photos ADD COLUMN chosen_by TEXT",
   ]) {
     try {

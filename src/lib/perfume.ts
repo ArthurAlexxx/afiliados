@@ -28,7 +28,7 @@ export const STOP = new Set(
   `perfume perfumes eau de du des la le_ toilette parfum edp edt edc extrait colonia colonias desodorante deo
   masculino masculina feminino feminina unissex unisex original originais arabe arabes importado importada lacrado
   refil refillable recarregavel spray natural vaporisateur vapo o a e and com para por no na em men man homme
-  pour femme woman women al el ml lacrada caixa selo novo nova contratipo inspiracao`.split(/\s+/).filter(Boolean),
+  pour femme woman women for al el ml lacrada caixa selo novo nova contratipo inspiracao`.split(/\s+/).filter(Boolean),
 );
 
 export function norm(s: string) {
@@ -43,7 +43,7 @@ export function norm(s: string) {
 
 /** Palavras do nome (sem marca, sem genéricas, sem volume). Serve para nomes sem "ml", como os do ranking de vendas. */
 /** distância de edição (com troca de letras vizinhas) */
-function dist(a: string, b: string): number {
+export function dist(a: string, b: string): number {
   const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
   for (let j = 1; j <= b.length; j++) d[0][j] = j;
   for (let i = 1; i <= a.length; i++)
