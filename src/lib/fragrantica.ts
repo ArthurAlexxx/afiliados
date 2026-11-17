@@ -167,7 +167,7 @@ function noteResult(kind: string, productId: number, result: string) {
 
 /** Palavras que identificam o perfume no nosso nome (sem ml, concentração, gênero, "árabe"…). */
 // palavras de anúncio do Mercado Livre que não fazem parte do nome do perfume ("Frasco 100ml", "Spray")
-const AD_WORDS = new Set(["frasco", "spray", "vaporizador", "vapo", "lacrado", "original", "importado", "novo", "oficial", "lancamento", "unidade", "masculino", "feminino", "masculina", "feminina", "unissex", "perfume"]);
+const AD_WORDS = new Set(["frasco", "spray", "vaporizador", "vapo", "lacrado", "original", "importado", "novo", "oficial", "lancamento", "unidade", "volume", "masculino", "feminino", "masculina", "feminina", "unissex", "perfume"]);
 
 function core(name: string) {
   return toks(name.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => !/^\d+$/.test(t) && !STOP.has(t) && !AD_WORDS.has(t) && t.length > 1);
