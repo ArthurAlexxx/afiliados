@@ -393,3 +393,36 @@ export async function recheckAllPins() {
   const bad = (db().prepare("SELECT COUNT(*) n FROM pin_photos WHERE status = 'pending' AND flags IS NOT NULL").get() as { n: number }).n;
   log("info", `Pinterest: conferi ${ids.length} perfume(s); ${bad} foto(s) marcadas como possivelmente de outro perfume`);
 }
+
+/**
+ * Perfume escolhido para a fila (ou entre os próximos) sem foto principal: busca as opções no Pinterest uma vez,
+ * para o Arthur escolher a foto fixa. Uma busca por vez.
+ */
+let chain: Promise<unknown> = Promise.resolve();
+export function ensurePins(productId: number, why = "próximo da fila") {
+  if (!process.env.APIFY_TOKEN) return;
+  const has = db().prepare("SELECT main_image_id m FROM products WHERE id = ?").get(productId) as { m: number | null } | undefined;
+  if (!has || has.m) return;
+  if (db().prepare("SELECT 1 FROM pin_photos WHERE product_id = ?").get(productId)) return;
+  // marca já na hora, para não buscar duas vezes
+  db().prepare("INSERT OR IGNORE INTO pin_photos (product_id, url, path, width, height, status) VALUES (?, 'searching', '', 0, 0, 'rejected')").run(productId);
+  chain = chain.then(async () => {
+    try {
+      const n = await findPinPhotos(productId, 10);
+      const ok = (db().prepare("SELECT COUNT(*) n FROM pin_photos WHERE product_id = ? AND status = 'pending' AND flags IS NULL").get(productId) as { n: number }).n;
+      log("info", `Pinterest (${why}): ${n} opção(ões), ${ok} conferida(s), esperando você escolher na tela Fotos`);
+    } catch (e) {
+      log("warn", `Pinterest: ${(e as Error).message}`);
+    }
+  });
+}
+
+/** Os próximos da fila (os 5 melhores elegíveis ou quase) já ganham as opções antes de serem postados. */
+let lastPrefetch = 0;
+export async function prefetchNext() {
+  if (!process.env.APIFY_TOKEN || Date.now() - lastPrefetch < 5 * 60e3) return;
+  lastPrefetch = Date.now();
+  const { ranking } = await import("./curation.ts");
+  const next = ranking().filter((i) => i.best && (i.eligible || /foto/.test(i.why))).slice(0, 5);
+  for (const i of next) ensurePins(i.productId, "entre os próximos posts");
+}

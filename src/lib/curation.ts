@@ -413,6 +413,8 @@ export function bestImagePath(productId: number): string | null {
  */
 export async function createCuratedPost(item: RankItem, s: Settings = getSettings()): Promise<{ id: number; status: string; reason: string | null }> {
   if (!item.best) throw new Error("Esse perfume não tem oferta recente");
+  // sem foto principal: já busca as opções do Pinterest para o Arthur escolher a foto fixa
+  import("./pinterest.ts").then((m) => m.ensurePins(item.productId)).catch(() => undefined);
   // import tardio para evitar ciclo pipeline ↔ curation
   const { buildPost } = await import("./pipeline.ts");
   const bankPath = bestImagePath(item.productId);
@@ -661,7 +663,7 @@ export function startCuration() {
         setState("radarHubAt", String(Date.now()));
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
-      import("./pinterest.ts").then((m) => m.pinAutoStep()).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
+      import("./pinterest.ts").then(async (m) => { await m.prefetchNext(); await m.pinAutoStep(); }).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
       if (s.mode !== "curated") return;
       // "me avisa quando baixar": chamada no grupo 2x por dia
       {
