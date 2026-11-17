@@ -39,6 +39,7 @@ export const STATUS: Record<string, { label: string; tone: keyof typeof tones }>
   sending: { label: "Enviando", tone: "info" },
   sent: { label: "Enviado", tone: "success" },
   photo: { label: "Esperando foto", tone: "warning" },
+  review: { label: "Para aprovar", tone: "warning" },
   failed: { label: "Falhou", tone: "danger" },
   skipped: { label: "Descartado pelo agente", tone: "neutral" },
   duplicate: { label: "Duplicado", tone: "neutral" },

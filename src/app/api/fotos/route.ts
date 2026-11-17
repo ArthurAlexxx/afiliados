@@ -59,10 +59,11 @@ export async function GET(req: Request) {
 export async function PATCH(req: Request) {
   const b = (await req.json()) as { id?: number; disabled?: boolean; productId?: number; mainImageId?: number | null; blocked?: boolean; crop?: unknown };
   if (b.productId && typeof b.blocked === "boolean") {
-    db().prepare("UPDATE products SET blocked = ? WHERE id = ?").run(b.blocked ? 1 : 0, b.productId);
+    // liberar = entra no leque (aprovado); bloquear = sai
+    db().prepare("UPDATE products SET blocked = ?, approved = ? WHERE id = ?").run(b.blocked ? 1 : 0, b.blocked ? 0 : 1, b.productId);
     // o que estava na fila desse perfume sai
     if (b.blocked)
-      db().prepare("UPDATE posts SET status = 'skipped', reason = 'Não postar (marcado por você)' WHERE product_id = ? AND status IN ('queued','pending','photo')").run(b.productId);
+      db().prepare("UPDATE posts SET status = 'skipped', reason = 'Não postar (marcado por você)' WHERE product_id = ? AND status IN ('queued','pending','photo','review')").run(b.productId);
     return Response.json({ ok: true });
   }
   if (b.productId) {
@@ -75,6 +76,7 @@ export async function PATCH(req: Request) {
     }
     learnPrefs(); // cada escolha ensina a escolha automática
     // já estava na fila para sair: refaz a imagem do post com a foto/enquadramento novo
+    db().prepare("UPDATE products SET approved = 1 WHERE id = ? AND approved IS NULL").run(b.productId);
     await import("@/lib/curation").then((m) => m.refreshQueuedMedia(b.productId!)).catch(() => 0);
     const rel = b.mainImageId ? await releaseWaiting(b.productId).catch(() => "") : "";
     return Response.json({ ok: true, learned: prefsSummary(), msg: rel });

@@ -54,6 +54,7 @@ export async function POST(req: Request) {
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(img.id, pid);
     learnPrefs();
     // já estava na fila para sair: refaz a imagem do post com a foto/enquadramento novo
+    db().prepare("UPDATE products SET approved = 1 WHERE id = ? AND approved IS NULL").run(pid);
     await import("@/lib/curation").then((m) => m.refreshQueuedMedia(pid!)).catch(() => 0);
     // noRelease: a tela abre o enquadramento 1:1 antes; o post sai quando ele confirmar
     const rel = b.noRelease ? "" : await releaseWaiting(pid).catch(() => "");

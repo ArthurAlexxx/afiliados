@@ -40,11 +40,19 @@ export async function PATCH(req: Request, ctx: Ctx) {
     case "restore": {
       // volta um post descartado/rejeitado: libera o perfume e põe em "esperando foto" (sai na hora se já tem foto escolhida)
       const r = db().prepare("SELECT product_id FROM posts WHERE id = ?").get(id) as { product_id: number | null } | undefined;
-      if (r?.product_id) db().prepare("UPDATE products SET blocked = 0 WHERE id = ?").run(r.product_id);
+      if (r?.product_id) db().prepare("UPDATE products SET blocked = 0, approved = 1 WHERE id = ?").run(r.product_id);
       db().prepare("UPDATE posts SET status = 'photo', reason = 'Recolocado por você', created_at = datetime('now') WHERE id = ?").run(id);
       const { releaseWaiting } = await import("@/lib/curation");
       const msg = r?.product_id ? await releaseWaiting(r.product_id).catch(() => "") : "";
       return Response.json({ ok: true, msg: msg || "Voltou para Esperando foto" });
+    }
+    case "approve_new": {
+      const { approveReview } = await import("@/lib/curation");
+      return Response.json({ ok: true, msg: await approveReview(id) });
+    }
+    case "reject_new": {
+      const { rejectReview } = await import("@/lib/curation");
+      return Response.json({ ok: true, msg: rejectReview(id) });
     }
     case "hold":
       // segura o post para ajustar a foto: volta para "esperando foto" (sai quando a foto for escolhida/ajustada)

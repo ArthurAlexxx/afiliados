@@ -3,7 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 
-type W = { post: number; id: number; name: string; photos?: number; searched?: number };
+type W = { post: number; id: number; name: string; photos?: number; searched?: number; review?: number };
 
 /** Bipe curto (sem arquivo de som). */
 function beep() {
@@ -63,7 +63,7 @@ export function WaitingWatch() {
         if (fresh.length) {
           beep();
           for (const x of fresh)
-            toast.warning(`Post esperando foto: ${x.name}${x.photos ? ` · ${x.photos} foto(s) do Fragrantica` : " · procurando fotos no Fragrantica…"}`, {
+            toast.warning(x.review ? `Perfume novo para aprovar: ${x.name}` : `Post esperando foto: ${x.name}${x.photos ? ` · ${x.photos} foto(s) do Fragrantica` : " · procurando fotos no Fragrantica…"}`, {
               duration: 15000,
               action: { label: "Escolher", onClick: () => (window.location.href = "/fila") },
             });

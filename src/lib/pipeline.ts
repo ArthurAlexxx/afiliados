@@ -547,6 +547,17 @@ export function startWorker() {
       setState("fragRoyalV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL AND lower(name) LIKE '%royal collection%'").run();
     }
+    if (getState("approvalV1") !== "1") {
+      setState("approvalV1", "1");
+      // Arthur (17/nov): perfume novo só sai depois que ele aprova. O que já saiu ou já tem foto escolhida é do nosso leque.
+      const n = db()
+        .prepare(
+          `UPDATE products SET approved = 1 WHERE approved IS NULL AND COALESCE(blocked,0) = 0
+           AND (main_image_id IS NOT NULL OR EXISTS (SELECT 1 FROM posts q WHERE q.product_id = products.id AND q.status = 'sent'))`,
+        )
+        .run().changes;
+      log("info", `Aprovação: ${n} perfume(s) já do nosso leque marcados como aprovados`);
+    }
     if (getState("fragNoRepeatV1") !== "1") {
       setState("fragNoRepeatV1", "1");
       // Arthur (17/nov): perfume já procurado no Fragrantica não é procurado de novo (gasto à toa).

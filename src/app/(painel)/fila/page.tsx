@@ -49,6 +49,7 @@ type QPost = {
 };
 type QueueResp = {
   queued: QPost[];
+  review: (QPost & { img: number | null; expires: string })[];
   waiting: QPost[];
   sent: QPost[];
   intervalSeconds: number;
@@ -282,6 +283,94 @@ function QueueItem({ p, first, onChanged, onCrop }: { p: QPost; first: boolean; 
   );
 }
 
+
+/* ---------- Para aprovar (perfume novo, fora do nosso leque) ---------- */
+
+function ReviewCard({ p, onChanged }: { p: QPost & { img: number | null; expires: string }; onChanged: () => void }) {
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [open, setOpen] = React.useState(false);
+  const d = p.detail;
+  const src = d?.source;
+  const old = src?.old_price && p.price && src.old_price > p.price ? src.old_price : null;
+  const run = async (a: string) => {
+    setBusy(a);
+    try {
+      const r = await act(p.id, a);
+      toast.success(a === "approve_new" ? r.msg || "Aprovado" : "Rejeitado: está em Rejeitados");
+      onChanged();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const left = Math.max(0, Math.round((new Date(p.expires).getTime() - Date.now()) / 60000));
+  return (
+    <Card className="flex flex-col overflow-hidden p-0">
+      <div className="flex gap-3 p-3">
+        <div className="size-24 shrink-0 overflow-hidden rounded-lg border bg-muted">
+          {p.img ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={`/api/fotos/square?img=${p.img}&w=240`} alt="" loading="lazy" className="size-full object-cover" />
+          ) : (
+            <div className="flex size-full items-center justify-center p-2 text-center text-[11px] text-muted-foreground">sem foto ainda</div>
+          )}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="line-clamp-2 text-[14px] leading-snug font-semibold">{p.name || titleOf(p.formatted_text)}</div>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2">
+            {p.price ? <span className="text-[18px] font-bold tabular-nums">{brl(p.price)}</span> : null}
+            {old ? <span className="text-[12px] text-muted-foreground line-through tabular-nums">{brl(old)}</span> : null}
+            {p.discount ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-300">-{p.discount}%</span> : null}
+          </div>
+          <div className="mt-1 truncate text-[12px] text-muted-foreground">
+            veio de <b className="font-semibold text-foreground">{src?.group_name || p.source_name}</b>
+            {src ? ` · ${timeAgo(src.created_at)}` : ""}
+            {d?.groups.length && d.groups.length > 1 ? ` · em ${d.groups.length} grupos` : ""}
+          </div>
+        </div>
+      </div>
+      {open && d ? (
+        <div className="grid gap-2 px-3 pb-3 sm:grid-cols-2">
+          <Info label="Preço">
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 tabular-nums">
+              <span className="text-muted-foreground">Agora</span>
+              <span className="text-right font-semibold">{brl(p.price) || "?"}</span>
+              {d.realRef ? (<><span className="text-muted-foreground">Normal nos grupos</span><span className="text-right">{brl(d.realRef)}</span></>) : null}
+              {src?.coupon ? (<><span className="text-muted-foreground">Cupom</span><span className="text-right font-mono">{src.coupon}</span></>) : null}
+            </div>
+          </Info>
+          <Info label="Grupos que postaram (24h)">
+            {d.groups.length ? d.groups.slice(0, 5).map((g) => (
+              <div key={g.g} className="flex gap-2"><span className="min-w-0 flex-1 truncate">{g.g}</span><span className="text-muted-foreground tabular-nums">{brl(g.price)}</span></div>
+            )) : "Só nesse grupo"}
+          </Info>
+          <div className="sm:col-span-2">
+            <WaPreview text={p.formatted_text} className="max-w-md" />
+          </div>
+        </div>
+      ) : null}
+      <div className="mt-auto flex flex-wrap items-center gap-1.5 border-t border-[var(--border-soft)] px-3 py-2">
+        <Button size="sm" className="h-8 bg-emerald-600 text-[12.5px] text-white hover:bg-emerald-700" loading={busy === "approve_new"} onClick={() => run("approve_new")}>
+          <Check className="size-4" /> Aprovar
+        </Button>
+        <Button size="sm" variant="outline" className="h-8 text-[12.5px] text-rose-600" loading={busy === "reject_new"} onClick={() => run("reject_new")}>
+          <X className="size-4" /> Rejeitar
+        </Button>
+        {p.link ? (
+          <a href={p.link} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center rounded-lg px-2 text-[12px] font-medium text-violet-600 hover:underline dark:text-violet-400">
+            Ver no ML ↗
+          </a>
+        ) : null}
+        <button onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
+          <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} /> Detalhes
+        </button>
+        <span className="w-full text-[11px] text-muted-foreground">Descarta sozinho em {left >= 60 ? `${Math.floor(left / 60)}h${String(left % 60).padStart(2, "0")}` : `${left} min`} sem resposta</span>
+      </div>
+    </Card>
+  );
+}
+
 function Section({ title, hint, count, children, right }: { title: string; hint?: string; count?: number; children: React.ReactNode; right?: React.ReactNode }) {
   return (
     <section className="mb-8">
@@ -322,6 +411,20 @@ function QueueTab() {
 
   return (
     <>
+      {data?.review.length ? (
+        <Section
+          title="Para aprovar"
+          hint="Perfumes novos, que ainda não são do nosso leque. Aprovou: ele procura as fotos no Fragrantica e segue para a fila (e os próximos dele saem sozinhos). Rejeitou: não posta mais."
+          count={data.review.length}
+        >
+          <div className="grid gap-3 md:grid-cols-2 2xl:grid-cols-3">
+            {data.review.map((p) => (
+              <ReviewCard key={p.id} p={p} onChanged={reload} />
+            ))}
+          </div>
+        </Section>
+      ) : null}
+
       <Section
         title="Saindo agora"
         hint={
@@ -876,7 +979,7 @@ export default function FilaPage() {
         {TABS.map((t) => {
           const n =
             t.key === "fila"
-              ? (c.queued || 0) + (c.sending || 0) + (c.photo || 0)
+              ? (c.queued || 0) + (c.sending || 0) + (c.photo || 0) + (c.review || 0)
               : t.key === "all"
                 ? null
                 : t.key === "rejected"

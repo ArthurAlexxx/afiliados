@@ -485,7 +485,30 @@ export async function refreshQueuedMedia(productId: number): Promise<number> {
   return posts.length;
 }
 
+/** Arthur aprovou um perfume novo: entra no leque e o post segue (foto escolhida → fila; sem foto → Fragrantica). */
+export async function approveReview(postId: number): Promise<string> {
+  const post = db().prepare("SELECT product_id FROM posts WHERE id = ? AND status = 'review'").get(postId) as { product_id: number } | undefined;
+  if (!post) return "esse post não está esperando aprovação";
+  db().prepare("UPDATE products SET approved = 1, blocked = 0 WHERE id = ?").run(post.product_id);
+  db().prepare("UPDATE posts SET status = 'photo', reason = 'Aprovado por você: esperando foto', created_at = datetime('now') WHERE id = ?").run(postId);
+  if (chosenImagePath(post.product_id)) return (await releaseWaiting(post.product_id)) || "aprovado";
+  import("./fragrantica.ts").then((m) => m.fragranticaStep()).catch((e) => log("warn", `Fragrantica: ${(e as Error).message}`));
+  return "aprovado: procurando as fotos no Fragrantica";
+}
+
+export function rejectReview(postId: number): string {
+  const post = db().prepare("SELECT product_id FROM posts WHERE id = ?").get(postId) as { product_id: number | null } | undefined;
+  if (post?.product_id) db().prepare("UPDATE products SET blocked = 1, approved = 0 WHERE id = ?").run(post.product_id);
+  db().prepare("UPDATE posts SET status = 'skipped', reason = 'Rejeitado por você' WHERE id = ?").run(postId);
+  if (post?.product_id) db().prepare("UPDATE posts SET status = 'skipped', reason = 'Rejeitado por você' WHERE product_id = ? AND status IN ('review','photo','queued')").run(post.product_id);
+  return "rejeitado";
+}
+
 export function expireWaiting() {
+  const r = db()
+    .prepare("UPDATE posts SET status = 'skipped', reason = 'Ficou 3h sem sua aprovação' WHERE status = 'review' AND created_at < datetime('now', ?)")
+    .run(`-${WAIT_HOURS} hours`).changes;
+  if (r) log("info", `${r} perfume(s) novo(s) sem aprovação em ${WAIT_HOURS}h: descartados`);
   const n = db()
     .prepare("UPDATE posts SET status = 'skipped', reason = 'Ficou sem foto escolhida por 3h' WHERE status = 'photo' AND created_at < datetime('now', ?)")
     .run(`-${WAIT_HOURS} hours`).changes;
@@ -589,9 +612,12 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
         },
         s,
       );
-  const waitPhoto = decision.approve && !bankPath && WAIT_FOR_PHOTO;
-  const status = waitPhoto ? "photo" : decision.approve ? "queued" : "skipped";
-  const reason = waitPhoto ? "Esperando você escolher a foto (tela Fotos)" : decision.reason;
+  // Arthur (17/nov): perfume fora do nosso leque espera a aprovação dele (e só então vai ao Fragrantica)
+  const approved = (db().prepare("SELECT approved FROM products WHERE id = ?").get(item.productId) as { approved: number | null } | undefined)?.approved === 1;
+  const review = decision.approve && !approved;
+  const waitPhoto = decision.approve && !review && !bankPath && WAIT_FOR_PHOTO;
+  const status = review ? "review" : waitPhoto ? "photo" : decision.approve ? "queued" : "skipped";
+  const reason = review ? "Perfume novo: esperando sua aprovação" : waitPhoto ? "Esperando você escolher a foto (tela Fotos)" : decision.reason;
 
   const info = db()
     .prepare(
@@ -712,7 +738,7 @@ export async function followPost(productId: number, groupJid: string): Promise<s
   if (!p) return "";
   if (p.last_posted_at && Date.now() - new Date(p.last_posted_at.replace(" ", "T") + "Z").getTime() < FOLLOW_DEDUP_HOURS * 3600e3)
     return `cópia: já postado nas últimas ${FOLLOW_DEDUP_HOURS}h`;
-  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now', ?) AND status IN ('queued','sending','sent','photo')").get(productId, `-${FOLLOW_DEDUP_HOURS} hours`);
+  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now', ?) AND status IN ('queued','sending','sent','photo','review')").get(productId, `-${FOLLOW_DEDUP_HOURS} hours`);
   if (busy) return "cópia: já na fila/postado";
   const item = ranking(s).find((i) => i.productId === productId);
   if (!item?.best) return "cópia: sem oferta com link";
