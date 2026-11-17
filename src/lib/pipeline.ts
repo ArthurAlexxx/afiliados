@@ -206,7 +206,10 @@ async function ingestMessage(d: UpsertData): Promise<string> {
     );
     if (s.mode === "curated") {
       const pid = r.match(/produto #(\d+)/)?.[1];
-      const now = pid ? await evaluateInstant(Number(pid)).catch((e) => `erro: ${(e as Error).message}`) : "";
+      const { followPost } = await import("./curation.ts");
+      const copied = pid ? await followPost(Number(pid), jid).catch((e) => `erro na cópia: ${(e as Error).message}`) : "";
+      if (copied) log("info", `Copiar grupos: ${copied}`);
+      const now = pid && !copied ? await evaluateInstant(Number(pid)).catch((e) => `erro: ${(e as Error).message}`) : "";
       return `curadoria: ${r}${now ? ` · ${now}` : ""}`;
     }
   }
@@ -424,6 +427,14 @@ export function startWorker() {
       saveSettings({ curationPerHour: Number(perHour) });
       setState("envPerHour", perHour);
       log("info", `Ritmo ajustado para ${perHour} posts por hora`);
+    }
+    // Arthur (nov/2026): copiar 5 grupos (postou lá, posta aqui, sem repetir perfume)
+    if (getState("followV1") !== "1") {
+      const names = ["RP PROMOS", "MD Links", "Promos Clube do Perfume", "Fragrancemen", "Herói do Perfume"];
+      for (const n of names) db().prepare("UPDATE groups SET follow = 1 WHERE role = 'source' AND upper(name) LIKE ?").run(`%${n.toUpperCase()}%`);
+      const on = db().prepare("SELECT name FROM groups WHERE follow = 1").all() as { name: string }[];
+      setState("followV1", "1");
+      log("info", `Copiar grupos ligado para: ${on.map((g) => g.name).join(", ")}`);
     }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {

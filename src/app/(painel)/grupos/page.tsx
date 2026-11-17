@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils";
 
 type Group = {
   jid: string; name: string; size: number; role: "none" | "source" | "destination"; captured: number; sent: number;
-  watermark: number; promo?: number; photo_priority?: number; offers: number; photos: number;
+  watermark: number; promo?: number; follow?: number; photo_priority?: number; offers: number; photos: number;
 };
 
 const ROLES = [
@@ -113,6 +113,17 @@ export default function GruposPage() {
     }
   };
 
+  const setFollow = async (g: Group, follow: boolean) => {
+    setData((d) => (d ? { rows: d.rows.map((x) => (x.jid === g.jid ? { ...x, follow: follow ? 1 : 0 } : x)) } : d));
+    try {
+      await api("/api/groups", { method: "PATCH", json: { jid: g.jid, follow } });
+      toast.success(follow ? "Postou lá, posta aqui: cada perfume desse grupo vai para o nosso (sem repetir)" : "Esse grupo não é mais copiado");
+    } catch (e) {
+      toast.error((e as Error).message);
+      reload();
+    }
+  };
+
   const addManual = async () => {
     const jid = manual.trim();
     if (!/@g\.us$/.test(jid)) return toast.error("O ID do grupo termina com @g.us");
@@ -187,6 +198,18 @@ export default function GruposPage() {
                       </div>
                     </div>
                   </div>
+                  {g.role === "source" && (
+                    <button
+                      onClick={() => setFollow(g, !g.follow)}
+                      title="Copiar: cada perfume que esse grupo postar vai para o nosso grupo na hora, com o nosso link (sem repetir perfume entre os grupos copiados)"
+                      className={cn(
+                        "flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[12px] font-medium transition-colors",
+                        g.follow ? "border-accent/40 bg-accent/15 text-foreground" : "text-muted-foreground hover:text-foreground",
+                      )}
+                    >
+                      {g.follow ? "Copiando" : "Copiar"}
+                    </button>
+                  )}
                   {g.role === "source" && (
                     <button
                       onClick={() => setPromo(g, g.promo === 0)}

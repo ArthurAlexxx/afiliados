@@ -420,7 +420,7 @@ export function bestImagePath(productId: number): string | null {
  * Cria o post do perfume escolhido: converte o link da melhor oferta para o seu link de afiliado,
  * monta o texto no seu template e prepara a melhor foto com as etiquetas.
  */
-export async function createCuratedPost(item: RankItem, s: Settings = getSettings()): Promise<{ id: number; status: string; reason: string | null }> {
+export async function createCuratedPost(item: RankItem, s: Settings = getSettings(), opts: { follow?: string } = {}): Promise<{ id: number; status: string; reason: string | null }> {
   if (!item.best) throw new Error("Esse perfume não tem oferta recente");
   // busca as opções do Pinterest (uma vez por perfume) para o Arthur escolher a foto fixa
   import("./pinterest.ts").then((m) => m.ensurePins(item.productId)).catch(() => undefined);
@@ -461,7 +461,12 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   const offerAgeMin = (Date.now() - new Date(item.best.created_at.replace(" ", "T") + "Z").getTime()) / 60e3;
   const decision = built.status === "skipped" || built.status === "duplicate"
     ? { approve: false, reason: `Descartado: ${built.reason || "bloqueado"}`, checks: [], by: "regras" as const }
-    : await judge(
+    : opts.follow
+      ? // cópia de grupo seguido: só as travas que não podem falhar (nosso link e preço lido)
+        data.link && item.bestPrice
+        ? { approve: true, reason: `Copiado de ${opts.follow}`, checks: [{ ok: true, label: `Postado em ${opts.follow}` }], by: "regras" as const }
+        : { approve: false, reason: `Descartado: ${data.link ? "sem preço" : "o link do ML não virou o nosso link"}`, checks: [], by: "regras" as const }
+      : await judge(
         {
           productId: item.productId, name: item.name, price: item.bestPrice, medianPrice: item.medianPrice, minPrice: item.minPrice,
           groups: item.groups, recentGroups: item.recentGroups, score: item.score, link: data.link, hasImage: Boolean(mediaPath),
@@ -510,6 +515,40 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     `Curadoria escolheu "${item.name}" por R$ ${item.bestPrice != null ? formatPrice(item.bestPrice) : "?"} (${item.groups} grupos, nota ${item.score}) → post #${id} ${status}${reason ? ` (${reason})` : ""}`,
   );
   return { id, status, reason };
+}
+
+/* ------------------------------------------------------------------ */
+/* Copiar grupos (pedido do Arthur): postou num grupo seguido, posta no nosso                */
+/* ------------------------------------------------------------------ */
+
+export const FOLLOW_DEDUP_HOURS = Number(process.env.FOLLOW_DEDUP_HOURS || 4);
+
+export function followMode(): boolean {
+  return Boolean(db().prepare("SELECT 1 FROM groups WHERE role = 'source' AND follow = 1 LIMIT 1").get());
+}
+
+/** Oferta nova de um grupo seguido: posta o perfume no nosso grupo, se ele não saiu nas últimas horas. */
+export async function followPost(productId: number, groupJid: string): Promise<string> {
+  const s = getSettings();
+  const g = db().prepare("SELECT name, follow FROM groups WHERE jid = ?").get(groupJid) as { name: string; follow: number } | undefined;
+  if (!g?.follow) return "";
+  const { inActiveWindow } = await import("./pipeline.ts");
+  if (!inActiveWindow(s)) return "cópia: fora do horário";
+  const p = db().prepare("SELECT name, last_posted_at FROM products WHERE id = ?").get(productId) as { name: string; last_posted_at: string | null } | undefined;
+  if (!p) return "";
+  if (p.last_posted_at && Date.now() - new Date(p.last_posted_at.replace(" ", "T") + "Z").getTime() < FOLLOW_DEDUP_HOURS * 3600e3)
+    return `cópia: já postado nas últimas ${FOLLOW_DEDUP_HOURS}h`;
+  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now', ?) AND status IN ('queued','sending','sent')").get(productId, `-${FOLLOW_DEDUP_HOURS} hours`);
+  if (busy) return "cópia: já na fila/postado";
+  const item = ranking(s).find((i) => i.productId === productId);
+  if (!item?.best) return "cópia: sem oferta com link";
+  if (notPerfume(`${item.name}\n${item.best.text.split("\n").find((l) => l.trim()) || ""}`)) return "cópia: não é perfume";
+  const r = await createCuratedPost(item, s, { follow: g.name });
+  if (r.status === "queued") {
+    const { processQueue } = await import("./pipeline.ts");
+    void processQueue();
+  }
+  return `cópia de ${g.name}: #${r.id} ${item.name} → ${r.status}${r.reason ? ` (${r.reason})` : ""}`;
 }
 
 /** Escolhe o melhor perfume do momento e coloca na fila. */
@@ -595,7 +634,7 @@ export function slotOpen(s: Settings) {
 
 export async function evaluateInstant(productId: number): Promise<string> {
   const s = getSettings();
-  if (s.mode !== "curated" || !s.curationInstantScore) return "";
+  if (s.mode !== "curated" || !s.curationInstantScore || followMode()) return "";
   const { inActiveWindow } = await import("./pipeline.ts");
   if (!inActiveWindow(s)) return "fora do horário";
   const item = ranking(s).find((r) => r.productId === productId);
@@ -740,6 +779,7 @@ export function startCuration() {
       // garante o ritmo mínimo: se a vaga abriu e em 2 min não chegou nada com nota alta,
       // posta a melhor promoção que estiver valendo
       const since = sinceLastCuratedMs();
+      if (followMode()) return; // modo cópia: só posta o que os grupos seguidos postam
       const p = pace(s);
       if (p.mirror && Date.now() - Number(getState("paceLogAt") || 0) > 10 * 60e3) {
         setState("paceLogAt", String(Date.now()));

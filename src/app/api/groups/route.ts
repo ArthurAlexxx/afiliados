@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export function GET() {
   const rows = db()
     .prepare(
-      `SELECT g.jid, g.name, g.size, g.role, g.watermark, g.promo, g.photo_priority,
+      `SELECT g.jid, g.name, g.size, g.role, g.watermark, g.promo, g.follow, g.photo_priority,
          (SELECT COUNT(*) FROM offers o WHERE o.group_jid = g.jid) offers,
          (SELECT COUNT(*) FROM images i WHERE i.group_jid = g.jid) photos,
          (SELECT COUNT(*) FROM posts p WHERE p.source_jid = g.jid) captured,
@@ -31,9 +31,13 @@ export async function POST() {
 
 /** Atualiza o papel de um grupo: none | source | destination. Também permite adicionar um JID manual. */
 export async function PATCH(req: Request) {
-  const { jid, role, name, watermark, wmCorner, promo } = (await req.json()) as {
-    jid: string; role?: string; name?: string; watermark?: boolean; wmCorner?: string; promo?: boolean;
+  const { jid, role, name, watermark, wmCorner, promo, follow } = (await req.json()) as {
+    jid: string; role?: string; name?: string; watermark?: boolean; wmCorner?: string; promo?: boolean; follow?: boolean;
   };
+  if (jid && typeof follow === "boolean" && !role) {
+    db().prepare("UPDATE groups SET follow = ? WHERE jid = ?").run(follow ? 1 : 0, jid);
+    return Response.json({ ok: true });
+  }
   if (jid && typeof promo === "boolean" && !role) {
     db().prepare("UPDATE groups SET promo = ? WHERE jid = ?").run(promo ? 1 : 0, jid);
     return Response.json({ ok: true });
