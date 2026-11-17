@@ -477,7 +477,7 @@ export function startWorker() {
   });
   // Pinterest (teste): busca fotos para ~10 perfumes das promoções com menos de 2 fotos; tudo espera aprovação.
   import("./settings.ts").then(({ getState, setState }) => {
-    import("./pinterest.ts").then((m) => m.importPinSeed()).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
+    import("./pinterest.ts").then(async (m) => { await m.importPinSeed(); await m.recheckAllPins(); }).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
     if (getState("pinTestV1") || !process.env.APIFY_TOKEN) return;
     setTimeout(() => {
       setState("pinTestV1", "1");

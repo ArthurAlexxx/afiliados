@@ -149,12 +149,13 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
   );
 }
 
-type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number };
+type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number; flags: string | null };
 
 function PinReview() {
   const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean }>("/api/pinterest");
   const [busy, setBusy] = React.useState<number | null>(null);
   const [big, setBig] = React.useState<PinPhoto | null>(null);
+  const [showSus, setShowSus] = React.useState<Record<number, boolean>>({});
   const decide = async (p: PinPhoto, ok: boolean) => {
     setBusy(p.id);
     try {
@@ -196,29 +197,49 @@ function PinReview() {
       ) : !groups.size ? (
         <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhuma foto do Pinterest esperando aprovação.</Card>
       ) : (
-        [...groups.values()].map((list) => (
-          <div key={list[0].product_id} className="mb-6">
-            <div className="mb-2 text-[14px] font-semibold">
-              {list[0].name} <span className="font-normal text-muted-foreground">· {list[0].bank} foto(s) no banco hoje</span>
-            </div>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-              {list.map((p) => (
-                <div key={p.id} className="overflow-hidden rounded-xl border bg-card">
-                  <button onClick={() => setBig(p)} className="block w-full" title={p.title || "Ver maior"}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={`/api/pinterest/${p.id}?w=600`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain" />
-                  </button>
-                  <div className="flex items-center gap-1.5 border-t px-2 py-2 text-[11.5px] text-muted-foreground">
-                    <span className="tabular-nums">{p.width}×{p.height}</span>
-                    {p.pick ? <Badge tone="success">maior nota</Badge> : null}
-                    <Button size="sm" variant="outline" className="ml-auto" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar"><X className="size-3.5" /></Button>
-                    <Button size="sm" variant="accent" disabled={busy === p.id} onClick={() => decide(p, true)}><Check className="size-3.5" /> Escolher</Button>
+        [...groups.values()].map((list) => {
+          const pid = list[0].product_id;
+          const ok = list.filter((p) => !p.flags);
+          const sus = list.filter((p) => p.flags);
+          const shown = showSus[pid] ? list : ok;
+          return (
+            <div key={pid} className="mb-8">
+              <div className="mb-2 flex flex-wrap items-center gap-3">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/pinterest/${pid}?ref=1&w=160`} alt="" className="size-14 rounded-lg border bg-white object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} title="Referência: foto do perfume certo (grupos ou anúncio do ML)" />
+                <div className="min-w-0">
+                  <div className="text-[14px] font-semibold">{list[0].name}</div>
+                  <div className="text-[12px] text-muted-foreground">
+                    {ok.length} foto(s) conferidas · à esquerda, a referência do perfume certo · {list[0].bank} foto(s) no banco hoje
                   </div>
                 </div>
-              ))}
+                {sus.length ? (
+                  <Button size="sm" variant="outline" className="ml-auto" onClick={() => setShowSus((m) => ({ ...m, [pid]: !m[pid] }))}>
+                    {showSus[pid] ? "Esconder suspeitas" : `Ver ${sus.length} suspeita(s) de outro perfume`}
+                  </Button>
+                ) : null}
+              </div>
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+                {shown.map((p) => (
+                  <div key={p.id} className={cn("overflow-hidden rounded-xl border bg-card", p.flags && "border-warning opacity-80")}>
+                    <button onClick={() => setBig(p)} className="block w-full" title={p.title || "Ver maior"}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={`/api/pinterest/${p.id}?w=600`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain" />
+                    </button>
+                    {p.flags ? <div className="border-t px-2 py-1 text-[11px] text-warning">{p.flags}</div> : null}
+                    <div className="flex items-center gap-1.5 border-t px-2 py-2 text-[11.5px] text-muted-foreground">
+                      <span className="tabular-nums">{p.width}×{p.height}</span>
+                      {p.pick ? <Badge tone="success">maior nota</Badge> : null}
+                      <Button size="sm" variant="outline" className="ml-auto" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar"><X className="size-3.5" /></Button>
+                      <Button size="sm" variant="accent" disabled={busy === p.id} onClick={() => decide(p, true)}><Check className="size-3.5" /> Escolher</Button>
+                    </div>
+                  </div>
+                ))}
+                {!shown.length && <div className="col-span-full text-[12.5px] text-muted-foreground">Nenhuma foto com certeza de ser esse perfume. Veja as suspeitas ou recuse.</div>}
+              </div>
             </div>
-          </div>
-        ))
+          );
+        })
       )}
       {big && (
         <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={() => setBig(null)}>

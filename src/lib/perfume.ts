@@ -15,7 +15,7 @@ export type PerfumeInfo = {
   key: string;
 };
 
-const BRAND_WORDS = new Set(
+export const BRAND_WORDS = new Set(
   `lattafa rasasi armaf wataniah lipx boticario natura hugo boss jean paul gaultier jpg azzaro calvin klein ck
   ysl yves saint laurent rabanne paco armani giorgio versace ralph lauren carolina herrera ch french avenue khadlaj
   maison alhambra afnan bidaya mawwal dior chanel prada montblanc mont blanc ferrari antonio banderas givenchy lancome
@@ -24,7 +24,7 @@ const BRAND_WORDS = new Set(
   swiss arabian ajmal jacques bogart nina ricci benetton shakira`.split(/\s+/).filter(Boolean),
 );
 
-const STOP = new Set(
+export const STOP = new Set(
   `perfume perfumes eau de du des la le_ toilette parfum edp edt edc extrait colonia colonias desodorante deo
   masculino masculina feminino feminina unissex unisex original originais arabe arabes importado importada lacrado
   refil refillable recarregavel spray natural vaporisateur vapo o a e and com para por no na em men man homme

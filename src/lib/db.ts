@@ -192,6 +192,8 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE groups ADD COLUMN promo INTEGER NOT NULL DEFAULT 1",
     "ALTER TABLE image_fixes ADD COLUMN box TEXT",
     "ALTER TABLE image_fixes ADD COLUMN usage TEXT",
+    "ALTER TABLE pin_photos ADD COLUMN ref_sim REAL",
+    "ALTER TABLE pin_photos ADD COLUMN flags TEXT",
   ]) {
     try {
       db.exec(sql);
