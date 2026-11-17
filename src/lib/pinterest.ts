@@ -21,18 +21,20 @@ type Pin = { url: string; title: string };
  * Busca pins pelo Apify (robô "thescrappa/pinterest-search-scraper", ~US$0,0002 por pin).
  * Precisa de APIFY_TOKEN nas variáveis do Railway.
  */
-export async function searchPins(query: string, limit = 40): Promise<Pin[]> {
+export async function searchPins(query: string | string[], limit = 40): Promise<Pin[]> {
+  const queries = Array.isArray(query) ? query : [query];
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("falta APIFY_TOKEN nas variáveis do Railway");
   const r = await fetch(
     `https://api.apify.com/v2/acts/thescrappa~pinterest-search-scraper/run-sync-get-dataset-items?token=${encodeURIComponent(token)}&timeout=120`,
-    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ queries: [query], limit }), signal: AbortSignal.timeout(150000) },
+    { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ queries, limit }), signal: AbortSignal.timeout(150000) },
   );
   if (!r.ok) throw new Error(`Apify respondeu ${r.status}: ${(await r.text()).slice(0, 200)}`);
   const items = (await r.json()) as { title?: string; description?: string; image_url?: string; images?: Record<string, { url?: string }> }[];
+  const seen = new Set<string>();
   return items
     .map((x) => ({ url: x.images?.orig?.url || x.image_url || "", title: [x.title, x.description].filter(Boolean).join(" · ") }))
-    .filter((x) => x.url);
+    .filter((x) => x.url && !seen.has(x.url) && (seen.add(x.url), true));
 }
 
 /** Mesma palavra com até 2 letras de diferença (Shyaaka x Shiyaaka). */
@@ -63,8 +65,10 @@ function titleMatches(product: string, title: string) {
 export async function findPinPhotos(productId: number, max = 10): Promise<number> {
   const p = db().prepare("SELECT name FROM products WHERE id = ?").get(productId) as { name: string } | undefined;
   if (!p) return 0;
-  const query = `${p.name.replace(/\b\d{2,4}\s*ml\b/gi, "").replace(/\s+/g, " ").trim()} perfume`;
-  const pins = (await searchPins(query)).filter((x) => titleMatches(p.name, x.title));
+  const base = p.name.replace(/\b\d{2,4}\s*ml\b/gi, "").replace(/\b(eau de (parfum|toilette)|edp|edt|masculino|feminino|perfume|árabe|arabe|original)\b/gi, " ").replace(/[-|]/g, " ").replace(/\s+/g, " ").trim();
+  const query = `${base} perfume`;
+  // nome de nicho às vezes não acha com "perfume": tenta também só o nome e "fragrance", na mesma busca
+  const pins = (await searchPins([query, base, `${base} fragrance`], 25)).filter((x) => titleMatches(p.name, x.title));
   const n = await savePins(productId, pins, max);
   await checkPins(productId).catch(() => undefined);
   log("info", `Pinterest: "${query}" → ${pins.length} pin(s) do mesmo perfume, ${n} foto(s) boas para você aprovar`);
@@ -113,7 +117,7 @@ export async function pinTestBatch(limit = 10) {
   log("info", `Pinterest (teste): ${total} foto(s) de ${items.length} perfume(s) esperando aprovação na tela Fotos`);
 }
 
-export function listPins(status = "pending") {
+export function listPins(status = "pending", productId?: number) {
   return db()
     .prepare(
       `SELECT f.id, f.product_id, p.name, f.width, f.height, f.title, f.status, f.created_at, f.score, f.flags, f.ref_sim,
@@ -121,9 +125,9 @@ export function listPins(status = "pending") {
         (SELECT COUNT(*) FROM images i WHERE i.product_id = f.product_id AND i.disabled = 0) bank,
         p.last_posted_at,
         (SELECT 1 FROM posts q WHERE q.product_id = f.product_id AND q.status IN ('queued','sending') LIMIT 1) queued
-       FROM pin_photos f JOIN products p ON p.id = f.product_id WHERE f.status = ? AND lower(p.name) NOT LIKE '%body splash%' AND lower(p.name) NOT LIKE '%body mist%' ORDER BY f.product_id, f.flags IS NOT NULL, f.score DESC LIMIT 300`,
+       FROM pin_photos f JOIN products p ON p.id = f.product_id WHERE f.status = ? AND (? IS NULL OR f.product_id = ?) AND lower(p.name) NOT LIKE '%body splash%' AND lower(p.name) NOT LIKE '%body mist%' ORDER BY f.product_id, f.flags IS NOT NULL, f.score DESC LIMIT 300`,
     )
-    .all(status);
+    .all(status, productId ?? null, productId ?? null);
 }
 
 export function pinFile(id: number): string | null {

@@ -76,6 +76,95 @@ function Lightbox({ imgs, index, onIndex, onClose, onToggle, mainId, onMain }: {
   );
 }
 
+/** Opções do Pinterest de um perfume, na página dele: buscar, ver e escolher sem sair da tela. */
+function PinOptions({ productId, onChosen }: { productId: number; onChosen: () => void }) {
+  const { data, reload } = useApi<{ rows: PinPhoto[] }>(`/api/pinterest?productId=${productId}`);
+  const [searching, setSearching] = React.useState(false);
+  const [busy, setBusy] = React.useState<number | null>(null);
+  const [big, setBig] = React.useState<PinPhoto | null>(null);
+  const rows = data?.rows || [];
+  const search = async () => {
+    setSearching(true);
+    try {
+      const r = await api<{ msg: string }>("/api/pinterest", { method: "POST", json: { productId } });
+      toast.success(r.msg);
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setSearching(false);
+    }
+  };
+  const decide = async (p: PinPhoto, ok: boolean) => {
+    setBusy(p.id);
+    try {
+      await api("/api/pinterest", { method: "POST", json: ok ? { id: p.id, main: true } : { id: p.id, ok: false } });
+      toast.success(ok ? "Escolhida: é a foto principal desse perfume nos próximos posts" : "Recusada");
+      setBig(null);
+      reload();
+      if (ok) onChosen();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  return (
+    <div className="mb-6 rounded-xl border bg-card p-4">
+      <div className="mb-3 flex flex-wrap items-center gap-3">
+        <div className="min-w-0 flex-1">
+          <div className="text-[14px] font-semibold">Opções do Pinterest</div>
+          <div className="text-[12px] text-muted-foreground">
+            {searching
+              ? "Buscando no Pinterest… leva uns 20 a 60 segundos."
+              : rows.length
+                ? `${rows.length} opção(ões). Clique em Escolher na melhor: ela vira a foto principal desse perfume.`
+                : "Nenhuma opção ainda. Clique em Buscar para trazer fotos do Pinterest."}
+          </div>
+        </div>
+        <Button size="sm" variant="accent" disabled={searching} onClick={search}>
+          <Search className="size-4" /> {searching ? "Buscando…" : rows.length ? "Buscar mais" : "Buscar no Pinterest"}
+        </Button>
+      </div>
+      {searching && !rows.length ? <div className="h-40 animate-pulse rounded-lg bg-muted" /> : null}
+      {rows.length ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
+          {rows.map((p) => (
+            <div key={p.id} className={cn("overflow-hidden rounded-xl border bg-card", p.flags && "border-warning opacity-80")}>
+              <button onClick={() => setBig(p)} className="block w-full" title={p.title || "Ver maior"}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={`/api/pinterest/${p.id}?w=600`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain" />
+              </button>
+              {p.flags ? <div className="border-t px-2 py-1 text-[11px] text-warning">{p.flags}</div> : null}
+              <div className="px-2 pt-2 text-[11.5px] text-muted-foreground tabular-nums">{p.width}×{p.height}</div>
+              <div className="grid grid-cols-[auto_1fr] gap-1.5 px-2 pt-1.5 pb-2">
+                <Button size="sm" variant="outline" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar" title="Recusar"><X className="size-3.5" /></Button>
+                <Button size="sm" variant="accent" disabled={busy === p.id} onClick={() => decide(p, true)}><Check className="size-3.5" /> Escolher</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+      {big && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={() => setBig(null)}>
+          <div className="flex items-center gap-2 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
+            <span className="min-w-0 truncate opacity-90">{big.width}×{big.height}px{big.flags ? ` · ${big.flags}` : ""}</span>
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
+              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
+              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-[10px] bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/pinterest/${big.id}`} alt="" className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
   const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
   const mainId = data?.product?.main_image_id ?? null;
@@ -104,15 +193,6 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
     <>
       <div className="mb-4 flex items-center gap-3">
         <Button variant="outline" size="sm" onClick={onBack}><ChevronLeft className="size-4" /> Todos os perfumes</Button>
-        <Button variant="outline" size="sm" className="order-last ml-auto" onClick={async () => {
-          toast.info("Buscando no Pinterest…");
-          try {
-            const r = await api<{ msg: string }>("/api/pinterest", { method: "POST", json: { productId: id } });
-            toast.success(`${r.msg}. Veja na aba "Pinterest: aprovar".`);
-          } catch (e) {
-            toast.error((e as Error).message);
-          }
-        }}><Search className="size-4" /> Buscar no Pinterest</Button>
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold">{data?.product?.name || "…"}</div>
           <div className="text-[12px] text-muted-foreground">
@@ -123,6 +203,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
           </div>
         </div>
       </div>
+      <PinOptions productId={id} onChosen={reload} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {imgs.map((img, i) => (
           <div key={img.id} className={cn("group overflow-hidden rounded-xl border bg-card text-left", mainId === img.id && "ring-2 ring-accent", img.disabled && "opacity-50")}>

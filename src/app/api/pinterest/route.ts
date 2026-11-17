@@ -2,8 +2,9 @@ import { chooseMain, decidePin, findPinPhotos, listPins } from "@/lib/pinterest"
 import { getState, setState } from "@/lib/settings";
 
 /** Fotos achadas no Pinterest esperando aprovação. */
-export async function GET() {
-  return Response.json({ rows: listPins(), auto: getState("pinAuto") === "1" });
+export async function GET(req: Request) {
+  const pid = Number(new URL(req.url).searchParams.get("productId") || 0) || undefined;
+  return Response.json({ rows: listPins("pending", pid), auto: getState("pinAuto") === "1" });
 }
 
 /** { id, ok } aprova/recusa; { productId } busca agora para um perfume. */
@@ -14,7 +15,10 @@ export async function POST(req: Request) {
       setState("pinAuto", b.auto ? "1" : "0");
       return Response.json({ msg: b.auto ? "automático ligado" : "automático desligado" });
     }
-    if (b.productId) return Response.json({ msg: `${await findPinPhotos(Number(b.productId))} foto(s) novas para aprovar` });
+    if (b.productId) {
+      const n = await findPinPhotos(Number(b.productId));
+      return Response.json({ msg: n ? `${n} foto(s) nova(s) do Pinterest` : "O Pinterest não trouxe fotos novas desse perfume (perfume pouco conhecido ou já buscado)" });
+    }
     if (b.main) return Response.json({ msg: await chooseMain(Number(b.id)) });
     return Response.json({ msg: await decidePin(Number(b.id), !!b.ok) });
   } catch (e) {
