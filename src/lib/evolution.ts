@@ -30,6 +30,11 @@ export class Evolution {
     return json as T;
   }
 
+  /** Sai do grupo no WhatsApp (Arthur pediu, 17/nov). */
+  leaveGroup(jid: string) {
+    return this.call("DELETE", `/group/leaveGroup/${this.inst}?groupJid=${encodeURIComponent(jid)}`);
+  }
+
   private get inst() {
     return encodeURIComponent(this.s.evolutionInstance);
   }
