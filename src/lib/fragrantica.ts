@@ -20,6 +20,7 @@ const VARIANT = new Set([...FLANKERS, "elixir", "intense", "extrait", "parfum", 
 const prep = (s: string) =>
   s
     .replace(/['’`´]/g, "")
+    .replace(/([a-z])\.([a-z])/gi, "$1$2") // Natura "Evolut.io", "Cor.Agio"
     .replace(/\b(1|one)\s+million\b/gi, "million")
     .replace(/\b(eau de parfum|eau de toilette|edp|edt)\s+intense\b/gi, "$1")
     .replace(/\b(masc|fem|tradicional|original)\b/gi, " ");
@@ -140,9 +141,14 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     // palavras de anúncio que a Fragrantica não usa ("Belgravia Royal Collection" = "Belgravia") não contam contra
     const soft = ours.filter((t) => !(has(nameToks, t) || has(brandToks, t) || isBrand(t)) && SOFT.has(t)).length;
     if (explained / Math.max(1, ours.length - (brandIn ? soft : 0)) < 0.6) continue;
+    // palavra do nosso nome (fora a marca) que a Fragrantica não tem: "Homem Evolutio" ≠ "Homem"
+    const unexpl = ours.filter((t) => !(has(nameToks, t) || has(brandToks, t) || isBrand(t) || BRAND_WORDS.has(t)) && !SOFT.has(t));
+    if (key.length === 1 && unexpl.length) continue;
+    if (unexpl.length > 1) continue;
     // sem a marca no nosso nome: só aceita nome com 2+ palavras e perfume conhecido
     if (!brandIn && (key.length < 2 || (h.ratingCount || 0) < 300)) continue;
-    const sc = key.length * 10 + explained + Math.log10(1 + (h.ratingCount || 0)) / 10;
+    // nosso nome sem gênero: o nome sem "For Her/For Him" é o original ("Million Gold" e não "Million Gold For Her")
+    const sc = key.length * 10 + explained + Math.log10(1 + (h.ratingCount || 0)) / 10 - (!ourG && hg ? 15 : 0) - unexpl.length * 3;
     ok.push(h);
     if (sc > bestScore) (bestScore = sc), (best = h);
   }
@@ -154,7 +160,7 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
   return best;
 }
 
-const SOFT = new Set(["beauty", "royal", "collection", "colecao", "original", "importado", "lacrado", "novo", "masculino", "feminino", "unissex", "perfume", "fragrance"]);
+const SOFT = new Set(["niche", "beauty", "royal", "collection", "colecao", "original", "importado", "lacrado", "novo", "masculino", "feminino", "unissex", "perfume", "fragrance"]);
 
 const CONC: Record<string, string> = { edp: "EDP", edt: "EDT", extrait: "Extrait de Parfum", parfum: "Parfum", deo: "Deo Parfum", colonia: "Colônia" };
 

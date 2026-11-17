@@ -535,6 +535,14 @@ export function startWorker() {
       setState("fragPrepV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
     }
+    if (getState("fragFixWrongV1") !== "1") {
+      setState("fragFixWrongV1", "1");
+      // casados errado antes da regra nova: volta o nome original e procura de novo
+      const undo = db().prepare("UPDATE products SET name = ?, frag_url = NULL, frag_name = NULL, frag_brand = NULL, frag_data = NULL, frag_checked_at = NULL, fragram_at = NULL WHERE name = ?");
+      undo.run("Rabanne 1 Million Gold Eau de Parfum Intense 100ml", "Rabanne Million Gold For Her 100ml");
+      undo.run("Natura Homem Evolutio 100ml", "Natura Homem 100ml");
+      db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
+    }
     if (getState("fragRoyalV1") !== "1") {
       setState("fragRoyalV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL AND lower(name) LIKE '%royal collection%'").run();
