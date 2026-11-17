@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { Check, ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, Star, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, EyeOff, Eye, ImagePlus, Search, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -165,6 +165,87 @@ function PinOptions({ productId, onChosen }: { productId: number; onChosen: () =
   );
 }
 
+/** Lê o que foi arrastado/colado: arquivo de imagem, ou o endereço da imagem (Google manda o link ou o HTML com a <img>). */
+async function readDrop(dt: DataTransfer): Promise<{ data?: string; url?: string } | null> {
+  const file = [...dt.files].find((f) => f.type.startsWith("image/")) || [...(dt.items || [])].find((i) => i.kind === "file" && i.type.startsWith("image/"))?.getAsFile();
+  if (file)
+    return new Promise((res) => {
+      const r = new FileReader();
+      r.onload = () => res({ data: String(r.result) });
+      r.onerror = () => res(null);
+      r.readAsDataURL(file);
+    });
+  const html = dt.getData("text/html");
+  const fromHtml = html.match(/<img[^>]+src=["']([^"']+)["']/i)?.[1]?.replace(/&amp;/g, "&");
+  const uri = (dt.getData("text/uri-list") || dt.getData("text/plain") || "").split("\n").map((x) => x.trim()).find((x) => /^(https?:|data:image)/.test(x));
+  // o Google às vezes manda o link da página de resultados: o da <img> é o certo
+  const pick = fromHtml && (!uri || /google\.[^/]+\/(imgres|search)/.test(uri)) ? fromHtml : uri || fromHtml;
+  if (!pick) return null;
+  const real = pick.match(/[?&]imgurl=([^&]+)/)?.[1];
+  const url = real ? decodeURIComponent(real) : pick;
+  return url.startsWith("data:") ? { data: url } : { url };
+}
+
+function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => void }) {
+  const [over, setOver] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const input = React.useRef<HTMLInputElement>(null);
+  const send = async (dt: DataTransfer | null) => {
+    if (!dt) return;
+    const got = await readDrop(dt);
+    if (!got) return toast.error("Não achei imagem no que foi solto. Arraste a própria foto (ou copie a imagem e cole aqui com Ctrl+V)");
+    setBusy(true);
+    try {
+      const r = await api<{ msg: string }>("/api/fotos/upload", { method: "POST", json: { productId, ...got } });
+      toast.success(r.msg);
+      onAdded();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  React.useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && /INPUT|TEXTAREA/.test(t.tagName)) return;
+      if (e.clipboardData) void send(e.clipboardData);
+    };
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  });
+  return (
+    <div
+      onDragOver={(e) => (e.preventDefault(), setOver(true))}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => (e.preventDefault(), setOver(false), void send(e.dataTransfer))}
+      onClick={() => input.current?.click()}
+      className={cn(
+        "mb-4 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-4 text-[13px] transition-colors",
+        over ? "border-accent bg-accent/10" : "border-border text-muted-foreground hover:border-accent/60",
+      )}
+    >
+      <ImagePlus className="size-6 shrink-0" />
+      <div className="min-w-0">
+        <div className="font-medium text-foreground">{busy ? "Baixando a foto…" : "Arraste aqui uma foto do Google (ou cole com Ctrl+V, ou clique para escolher)"}</div>
+        <div>No Google Imagens, clique na foto, espere ela abrir grande ao lado e arraste a grande para cá. Ela é baixada e vira a principal desse perfume.</div>
+      </div>
+      <input
+        ref={input}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const dt = new DataTransfer();
+          for (const f of e.target.files || []) dt.items.add(f);
+          void send(dt);
+          e.target.value = "";
+        }}
+      />
+    </div>
+  );
+}
+
 function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
   const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
   const mainId = data?.product?.main_image_id ?? null;
@@ -203,6 +284,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
           </div>
         </div>
       </div>
+      <DropPhoto productId={id} onAdded={reload} />
       <PinOptions productId={id} onChosen={reload} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {imgs.map((img, i) => (
@@ -219,6 +301,8 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
               <span>nota {img.score}</span>
               {data?.used === img.id ? <Badge tone="success">{mainId ? "Usada nos posts" : "Usada nos posts (automática)"}</Badge> : null}
               {img.message_id?.startsWith("fix:") ? <Badge tone="info">IA</Badge> : null}
+              {img.message_id?.startsWith("manual:") ? <Badge tone="info">Você colocou</Badge> : null}
+              {img.message_id?.startsWith("pin:") ? <Badge tone="info">Pinterest</Badge> : null}
               {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
               <span className="ml-auto truncate">{timeAgo(img.created_at)}</span>
             </div>
