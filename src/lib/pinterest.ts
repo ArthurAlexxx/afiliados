@@ -13,7 +13,7 @@ import { analyzeImage } from "./images.ts";
 
 const DIR = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "pinterest");
 const UA_ = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
-const MIN_SIDE = 800;
+const MIN_SIDE = 700;
 
 type Pin = { url: string; title: string };
 
@@ -41,7 +41,16 @@ function titleMatches(product: string, title: string) {
   const want = nameTokens(product);
   const t = new Set(norm(title).split(" "));
   if (!want.length) return true;
-  const hit = want.filter((w) => t.has(w)).length;
+  const near = (a: string, b: string) => {
+    if (a === b) return true;
+    if (a.length < 5 || Math.abs(a.length - b.length) > 2) return false;
+    const d = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+    for (let j = 1; j <= b.length; j++) d[0][j] = j;
+    for (let i = 1; i <= a.length; i++)
+      for (let j = 1; j <= b.length; j++) d[i][j] = Math.min(d[i - 1][j] + 1, d[i][j - 1] + 1, d[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    return d[a.length][b.length] <= 2;
+  };
+  const hit = want.filter((w) => [...t].some((x) => near(w, x))).length;
   if (hit / want.length < 0.6) return false;
   for (const f of FLANKERS) if (want.includes(f) !== t.has(f)) return false;
   return true;
@@ -53,6 +62,13 @@ export async function findPinPhotos(productId: number, max = 10): Promise<number
   if (!p) return 0;
   const query = `${p.name.replace(/\b\d{2,4}\s*ml\b/gi, "").replace(/\s+/g, " ").trim()} perfume`;
   const pins = (await searchPins(query)).filter((x) => titleMatches(p.name, x.title));
+  const n = await savePins(productId, pins, max);
+  log("info", `Pinterest: "${query}" → ${pins.length} pin(s) do mesmo perfume, ${n} foto(s) boas para você aprovar`);
+  return n;
+}
+
+/** Baixa as fotos dos pins e guarda como candidatas do perfume. */
+export async function savePins(productId: number, pins: Pin[], max = 10): Promise<number> {
   fs.mkdirSync(DIR, { recursive: true });
   let n = 0;
   for (const pin of pins) {
@@ -79,7 +95,6 @@ export async function findPinPhotos(productId: number, max = 10): Promise<number
       /* foto que não baixa: pula */
     }
   }
-  log("info", `Pinterest: "${query}" → ${pins.length} pin(s) do mesmo perfume, ${n} foto(s) boas para você aprovar`);
   return n;
 }
 
@@ -192,4 +207,32 @@ export async function decidePin(id: number, ok: boolean, asMain = false): Promis
     if (img) db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(img.id, r.product_id);
   }
   return msg;
+}
+
+/** Fotos do Pinterest já buscadas (pelo Apify, fora do servidor) para o primeiro teste: entram para aprovação. */
+export async function importPinSeed() {
+  const { getState, setState } = await import("./settings.ts");
+  if (getState("pinSeedV1")) return;
+  setState("pinSeedV1", "1");
+  const seed = (await import("../data/pin-seed.json")).default as { name: string; pins: Pin[] }[];
+  let total = 0, found = 0;
+  for (const e of seed) {
+    let p = db().prepare("SELECT id FROM products WHERE name = ?").get(e.name) as { id: number } | undefined;
+    if (!p) {
+      const want = nameTokens(e.name);
+      const rows = db().prepare("SELECT id, name FROM products").all() as { id: number; name: string }[];
+      let best = 0;
+      for (const r of rows) {
+        const t = nameTokens(r.name);
+        const inter = want.filter((w) => t.includes(w)).length;
+        const sc = inter / Math.max(1, new Set([...want, ...t]).size);
+        if (sc > best) { best = sc; p = { id: r.id }; }
+      }
+      if (best < 0.6) p = undefined;
+    }
+    if (!p) { log("warn", `Pinterest (teste): perfume não achado no banco: ${e.name}`); continue; }
+    found++;
+    total += await savePins(p.id, e.pins, 10);
+  }
+  log("info", `Pinterest (teste): ${total} foto(s) de ${found} perfume(s) esperando você na tela Fotos → "Pinterest: aprovar"`);
 }
