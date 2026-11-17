@@ -267,6 +267,8 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     if (!best) why = `sem oferta nos últimos ${s.curationLookbackMinutes} min`;
     else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
+    // regra do Arthur: perfume com só 1 foto no banco não é postado
+    else if (pimgs.length < 2) why = pimgs.length ? "só 1 foto no banco (precisa de 2 ou mais)" : "sem foto no banco";
     else if (rejected.has(pid)) why = "descartado pelo agente há pouco";
     else if (rp && best?.price && 1 - best.price / rp.ref < 0.08)
       why = `preço normal: R$ ${formatPrice(best.price)} contra R$ ${formatPrice(rp.ref)} de preço real`;
