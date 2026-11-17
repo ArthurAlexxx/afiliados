@@ -413,7 +413,7 @@ export function bestImagePath(productId: number): string | null {
  */
 export async function createCuratedPost(item: RankItem, s: Settings = getSettings()): Promise<{ id: number; status: string; reason: string | null }> {
   if (!item.best) throw new Error("Esse perfume não tem oferta recente");
-  // sem foto principal: já busca as opções do Pinterest para o Arthur escolher a foto fixa
+  // busca as opções do Pinterest (uma vez por perfume) para o Arthur escolher a foto fixa
   import("./pinterest.ts").then((m) => m.ensurePins(item.productId)).catch(() => undefined);
   // import tardio para evitar ciclo pipeline ↔ curation
   const { buildPost } = await import("./pipeline.ts");

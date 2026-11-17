@@ -395,14 +395,13 @@ export async function recheckAllPins() {
 }
 
 /**
- * Perfume escolhido para a fila (ou entre os próximos) sem foto principal: busca as opções no Pinterest uma vez,
+ * Perfume escolhido para a fila (ou entre os próximos), com ou sem foto: busca as opções no Pinterest uma vez,
  * para o Arthur escolher a foto fixa. Uma busca por vez.
  */
 let chain: Promise<unknown> = Promise.resolve();
 export function ensurePins(productId: number, why = "próximo da fila") {
   if (!process.env.APIFY_TOKEN) return;
-  const has = db().prepare("SELECT main_image_id m FROM products WHERE id = ?").get(productId) as { m: number | null } | undefined;
-  if (!has || has.m) return;
+  // todo perfume que vai para a fila ganha opções do Pinterest uma vez, mesmo já tendo foto: monta o nosso banco
   if (db().prepare("SELECT 1 FROM pin_photos WHERE product_id = ?").get(productId)) return;
   // marca já na hora, para não buscar duas vezes
   db().prepare("INSERT OR IGNORE INTO pin_photos (product_id, url, path, width, height, status) VALUES (?, 'searching', '', 0, 0, 'rejected')").run(productId);
