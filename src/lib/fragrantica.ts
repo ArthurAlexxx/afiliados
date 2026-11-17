@@ -153,7 +153,14 @@ export async function standardize(productId: number): Promise<string> {
   const q = core(p.name).join(" ");
   db().prepare("UPDATE products SET frag_checked_at = datetime('now') WHERE id = ?").run(p.id);
   if (!q) return "nome vazio";
-  const hits = await search(q);
+  let hits: Hit[];
+  try {
+    hits = await search(q);
+  } catch (e) {
+    // falha do Apify (limite, rede): tenta de novo numa próxima rodada
+    db().prepare("UPDATE products SET frag_checked_at = NULL WHERE id = ?").run(p.id);
+    throw e;
+  }
   const h = pick(p.name, hits);
   if (!h) {
     log("info", `Fragrantica: não achei com certeza "${p.name}" (${hits.slice(0, 3).map((x) => `${x.brand} ${x.name}`).join(" | ") || "nada"})`);
