@@ -398,7 +398,6 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
       </div>
       {data?.product?.frag_data ? <FragCard raw={data.product.frag_data} /> : null}
       <DropPhoto productId={id} onAdded={reload} />
-      <PinOptions productId={id} onChosen={reload} />
       {data?.fragram?.length ? <Fragram productId={id} photos={data.fragram} onChosen={reload} /> : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {imgs.map((img, i) => (
@@ -572,7 +571,7 @@ export default function FotosPage() {
   // link direto: /fotos#pinterest abre a aba de escolha
   const [tab, setTabState] = React.useState<"board" | "fotos" | "pin">("board");
   React.useEffect(() => {
-    if (window.location.hash === "#pinterest") setTabState("pin");
+    if (window.location.hash === "#pinterest") setTabState("board");
     if (window.location.hash === "#perfumes") setTabState("fotos");
   }, []);
   const setTab = (t: "board" | "fotos" | "pin") => {
@@ -597,7 +596,6 @@ export default function FotosPage() {
       <div className="mb-4 flex gap-2">
         <Button size="sm" variant={tab === "board" ? "accent" : "outline"} onClick={() => setTab("board")}>Escolher fotos</Button>
         <Button size="sm" variant={tab === "fotos" ? "accent" : "outline"} onClick={() => setTab("fotos")}>Perfume por perfume</Button>
-        <Button size="sm" variant={tab === "pin" ? "accent" : "outline"} onClick={() => setTab("pin")}>Pinterest: aprovar</Button>
       </div>
       {tab === "board" ? (
         <PhotoBoard onOpen={(id) => { setSel(id); setTab("fotos"); }} Drop={DropPhoto} />
@@ -628,10 +626,8 @@ export default function FotosPage() {
             };
             const opts: [typeof filter, string][] = [
               ["all", `Todos (${c.all})`],
-              ["pin", `★ Escolhida do Pinterest (${c.pin})`],
-              ["own", `★ Escolhida sem Pinterest (${c.own})`],
+              ["own", `★ Com foto escolhida (${c.own + c.pin})`],
               ["none", `Sem principal (${c.none})`],
-              ["choose", `Com opções do Pinterest para escolher (${c.choose})`],
             ];
             return (
               <div className="mb-4 flex flex-wrap gap-2">
@@ -645,7 +641,7 @@ export default function FotosPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
               {data.rows
                 .filter((p) =>
-                  filter === "pin" ? p.main && p.main_pin : filter === "own" ? p.main && !p.main_pin : filter === "none" ? !p.main : filter === "choose" ? p.pin_pending > 0 : true,
+                  filter === "pin" ? p.main && p.main_pin : filter === "own" ? !!p.main : filter === "none" ? !p.main : filter === "choose" ? p.pin_pending > 0 : true,
                 )
                 .map((p) => (
                 <button key={p.id} onClick={() => setSel(p.id)} className="group overflow-hidden rounded-xl border bg-card text-left">
@@ -660,11 +656,7 @@ export default function FotosPage() {
                     <div className="mt-0.5 text-[11.5px] text-muted-foreground">
                       {p.active} foto(s){p.n > p.active ? ` · ${p.n - p.active} desligada(s)` : ""} · {p.main ? (p.main_pin ? "★ escolhida do Pinterest" : "★ escolhida") : "automática"}
                     </div>
-                    {p.pin_pending > 0 ? (
-                      <div className="mt-1"><Badge tone="warning">{p.pin_pending} opção(ões) do Pinterest para escolher</Badge></div>
-                    ) : !p.pin_searched ? (
-                      <div className="mt-1 text-[11px] text-muted-foreground">ainda não buscado no Pinterest</div>
-                    ) : null}
+{null}
                   </div>
                 </button>
               ))}

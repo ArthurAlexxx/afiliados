@@ -23,7 +23,11 @@ type Pin = { url: string; title: string };
  * Busca pins pelo Apify (robô "thescrappa/pinterest-search-scraper", ~US$0,0002 por pin).
  * Precisa de APIFY_TOKEN nas variáveis do Railway.
  */
+/** Arthur (17/nov/2026): "nada mais de Pinterest", fotos só do Fragrantica. Nenhuma busca nova no Pinterest. */
+export const PINTEREST_OFF = true;
+
 export async function searchPins(query: string | string[], limit = 40): Promise<Pin[]> {
+  if (PINTEREST_OFF) return [];
   const queries = Array.isArray(query) ? query : [query];
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("falta APIFY_TOKEN nas variáveis do Railway");

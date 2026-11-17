@@ -22,7 +22,7 @@ export async function apifyFail(what: string, r: Response): Promise<Error> {
   if ((r.status === 402 || r.status === 403) && /usage|actor-disabled|limit|plan/i.test(body)) {
     const first = !apifyOff();
     pausedUntil = Date.now() + 60 * 60 * 1000;
-    reason = "Apify sem saldo neste mês: busca no Fragrantica e no Pinterest pausada";
+    reason = "Apify sem saldo neste mês: busca no Fragrantica pausada";
     if (first) log("error", `${reason} (tento de novo em 1h)`);
     return new Error(reason);
   }

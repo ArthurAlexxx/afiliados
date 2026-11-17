@@ -493,7 +493,6 @@ export function bestImagePath(productId: number): string | null {
 export async function createCuratedPost(item: RankItem, s: Settings = getSettings(), opts: { follow?: string } = {}): Promise<{ id: number; status: string; reason: string | null }> {
   if (!item.best) throw new Error("Esse perfume não tem oferta recente");
   // busca as opções do Pinterest (uma vez por perfume) para o Arthur escolher a foto fixa
-  import("./pinterest.ts").then((m) => m.ensurePins(item.productId)).catch(() => undefined);
   // import tardio para evitar ciclo pipeline ↔ curation
   const { buildPost } = await import("./pipeline.ts");
   const bankPath = bestImagePath(item.productId);
@@ -551,7 +550,6 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   const waitPhoto = decision.approve && !bankPath && WAIT_FOR_PHOTO;
   const status = waitPhoto ? "photo" : decision.approve ? "queued" : "skipped";
   const reason = waitPhoto ? "Esperando você escolher a foto (tela Fotos)" : decision.reason;
-  if (waitPhoto) import("./pinterest.ts").then((m) => m.findPinPhotos(item.productId)).catch(() => undefined);
 
   const info = db()
     .prepare(
@@ -893,7 +891,6 @@ export function startCuration() {
       }
       expireWaiting();
       import("./fragrantica.ts").then((m) => m.fragranticaStep()).catch((e) => log("warn", `Fragrantica: ${(e as Error).message}`));
-      import("./pinterest.ts").then(async (m) => { await m.prefetchNext(); await m.pinAutoStep(); }).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
       if (s.mode !== "curated") return;
       // "me avisa quando baixar": chamada no grupo 2x por dia
       {

@@ -146,7 +146,6 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
     ["wait", `⏳ Posts esperando foto${c ? ` (${c.wait})` : ""}`],
     ["fragram", `Com fotos do Fragrantica${c ? ` (${c.fragram})` : ""}`],
     ["none", `Sem foto escolhida${c ? ` (${c.none})` : ""}`],
-    ["pin", `Com opções do Pinterest${c ? ` (${c.pin})` : ""}`],
     ["all", `Todos${c ? ` (${c.all})` : ""}`],
   ];
 
@@ -192,7 +191,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
     <>
       {data?.apifyOff && (
         <div className="mb-3 rounded-lg border border-amber-400/50 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
-          ⚠️ {data.apifyOff}. Fotos novas do Fragrantica e do Pinterest não chegam até o saldo voltar; as que já estão aqui continuam valendo.
+          ⚠️ {data.apifyOff}. Fotos novas do Fragrantica não chegam até o saldo voltar; as que já estão aqui continuam valendo.
         </div>
       )}
       <div className="sticky top-0 z-10 -mx-1 mb-4 flex flex-wrap items-center gap-2 bg-background/95 px-1 py-2 backdrop-blur">
@@ -256,10 +255,9 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                 ) : null}
                 <div className="flex gap-4 overflow-x-auto pb-2">
                   {strip(row, "fragram", row.fragram, "Fragrantica")}
-                  {strip(row, "pin", row.pins, "Pinterest")}
                   {strip(row, "bank", row.bank, "Banco")}
                 </div>
-                {row.waiting && !row.fragram.length && !row.pins.length && !row.bank.length ? (
+                {row.waiting && !row.fragram.length && !row.bank.length ? (
                   <div className="max-w-md">
                     <Drop productId={row.id} onAdded={() => refreshRow(row.id)} />
                   </div>
