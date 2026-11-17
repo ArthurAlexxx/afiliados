@@ -232,6 +232,7 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE images ADD COLUMN crop TEXT",
     "ALTER TABLE products ADD COLUMN approved INTEGER",
     "ALTER TABLE pin_photos ADD COLUMN chosen_by TEXT",
+    "ALTER TABLE products ADD COLUMN frag_accords TEXT",
   ]) {
     try {
       db.exec(sql);

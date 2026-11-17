@@ -420,55 +420,52 @@ export function withFragTitle(text: string, productId: number, oldTitle: string)
 }
 
 /**
- * Perfil do Fragrantica no pé do post (Arthur, 17/nov): dia ou noite, estações, notas principais e fixação.
- * Vem dos votos da comunidade na ficha do perfume.
+ * Notas principais do Fragrantica no pé do post (Arthur, 17/nov, opção A): "🎯 cítrico, aromático, marinho".
+ * Vêm da mesma página lida para as fotos (sem custo extra); se o perfume já tem a ficha, usa as notas dela.
  */
 export function fragProfileLines(productId: number): string[] {
-  const row = db().prepare("SELECT frag_data FROM products WHERE id = ?").get(productId) as { frag_data: string | null } | undefined;
-  let d: { seasons?: Record<string, number>; accords?: { name: string }[]; longevity?: number | null } | null = null;
+  const row = db().prepare("SELECT frag_accords, frag_data FROM products WHERE id = ?").get(productId) as { frag_accords: string | null; frag_data: string | null } | undefined;
+  let acc: string[] = [];
   try {
-    d = row?.frag_data ? JSON.parse(row.frag_data) : null;
+    acc = row?.frag_accords ? JSON.parse(row.frag_accords) : [];
   } catch {}
-  if (!d) return [];
-  // uma linha só (Arthur): "☀️ Pro dia · cítrico, aromático, marinho"
-  const sv = d.seasons || {};
-  const day = Number(sv.day) || 0, night = Number(sv.night) || 0;
-  const when = day + night >= 10 ? (day / (day + night) >= 0.65 ? "☀️ Pro dia" : day / (day + night) <= 0.35 ? "🌙 Pra noite" : "🌗 Dia e noite") : "";
-  const acc = (d.accords || []).slice(0, 3).map((a) => a.name.toLowerCase()).filter(Boolean).join(", ");
-  const line = [when, acc].filter(Boolean).join(" · ");
-  return line ? [line] : [];
+  if (!acc.length) {
+    try {
+      const d = row?.frag_data ? JSON.parse(row.frag_data) : null;
+      acc = (d?.accords || []).map((a: { name: string }) => String(a.name || "").toLowerCase()).filter(Boolean);
+    } catch {}
+  }
+  if (!acc.length) {
+    // mesmo perfume em outro anúncio (outro ml) já leu a página
+    const sib = db()
+      .prepare("SELECT s.frag_accords FROM products s, products p WHERE p.id = ? AND s.frag_url = p.frag_url AND s.frag_accords IS NOT NULL LIMIT 1")
+      .get(productId) as { frag_accords: string } | undefined;
+    try {
+      acc = sib ? JSON.parse(sib.frag_accords) : [];
+    } catch {}
+  }
+  const line = acc.slice(0, 3).join(", ");
+  return line ? [`🎯 ${line}`] : [];
 }
 
-/** Linha do perfil no post: desligada até o Arthur decidir o formato (preview). */
-export const FRAG_PROFILE = process.env.FRAG_PROFILE === "1";
+/** Linha das notas no post (pode desligar com FRAG_PROFILE=0). */
+export const FRAG_PROFILE = process.env.FRAG_PROFILE !== "0";
 
-/** Põe o perfil do Fragrantica antes do link do produto (uma vez só). */
+/** Põe as notas do Fragrantica antes do link do produto (uma vez só). */
 export function withFragProfile(text: string, productId: number): string {
   if (!FRAG_PROFILE) return text;
-  if (/☀️ Pro dia|🌙 Pra noite|🌗 Dia e noite/.test(text)) return text;
+  if (/^🎯 /m.test(text)) return text;
   const lines = fragProfileLines(productId);
   if (!lines.length) return text;
   const all = text.split("\n");
   const at = all.findIndex((l) => /LINK DO PRODUTO|https?:\/\//i.test(l));
-  const block = [...lines, ""];
   if (at < 0) return `${text.trimEnd()}\n\n${lines.join("\n")}`;
-  all.splice(at, 0, ...block);
+  all.splice(at, 0, ...lines, "");
   return all.join("\n");
 }
 
-/** Ficha do Fragrantica (notas, dia/noite) só do perfume que vai sair agora, se ainda não tiver. ~US$ 0,002. */
-async function ensureFragData(productId: number) {
-  if (!FRAG_PROFILE) return;
-  const p = db().prepare("SELECT frag_url, frag_data FROM products WHERE id = ?").get(productId) as { frag_url: string | null; frag_data: string | null } | undefined;
-  if (!p?.frag_url || p.frag_data) return;
-  const sib = db().prepare("SELECT frag_data FROM products WHERE frag_url = ? AND frag_data IS NOT NULL AND frag_data != '{}' LIMIT 1").get(p.frag_url) as { frag_data: string } | undefined;
-  if (sib) {
-    db().prepare("UPDATE products SET frag_data = ? WHERE id = ?").run(sib.frag_data, productId);
-    return;
-  }
-  const { fetchDetails } = await import("./fragrantica.ts");
-  await fetchDetails(productId).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`));
-}
+/** Sem custo extra: não chama a ficha; só aproveita o que já foi lido. */
+async function ensureFragData(_productId: number) {}
 
 /** Sem foto boa no banco, o post fica esperando a escolha do Arthur (status 'photo') em vez de sair com a foto do anúncio. */
 export const WAIT_FOR_PHOTO = true;

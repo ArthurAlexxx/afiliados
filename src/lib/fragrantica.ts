@@ -401,6 +401,34 @@ export async function fetchFragram(productId: number, force = false): Promise<nu
   }
 }
 
+const ACCORD_PT: Record<string, string> = {
+  citrus: "cítrico", aromatic: "aromático", marine: "marinho", "fresh spicy": "fresco especiado", "warm spicy": "especiado quente",
+  "soft spicy": "especiado suave", woody: "amadeirado", floral: "floral", "white floral": "floral branco", "yellow floral": "floral amarelo",
+  fresh: "fresco", sweet: "doce", amber: "âmbar", vanilla: "baunilha", powdery: "atalcado", green: "verde", fruity: "frutado",
+  leather: "couro", oud: "oud", musky: "almiscarado", aquatic: "aquático", ozonic: "ozônico", earthy: "terroso", balsamic: "balsâmico",
+  rose: "rosa", lavender: "lavanda", tobacco: "tabaco", smoky: "defumado", coffee: "café", cacao: "cacau", chocolate: "chocolate",
+  honey: "mel", caramel: "caramelo", lactonic: "lactônico", coconut: "coco", tropical: "tropical", herbal: "herbal", tuberose: "tuberosa",
+  iris: "íris", violet: "violeta", patchouli: "patchouli", mossy: "musgo", animalic: "animálico", cinnamon: "canela", almond: "amêndoa",
+  aldehydic: "aldeídico", salty: "salgado", "fresh floral": "floral fresco", anis: "anis", rum: "rum", whiskey: "uísque", wine: "vinho",
+  "sand": "areia", metallic: "metálico", mineral: "mineral", camphor: "cânfora", nutty: "amendoado", bitter: "amargo", sour: "ácido",
+  "tuberose ": "tuberosa", vinyl: "vinil", plastic: "plástico", conifer: "conífera", cherry: "cereja", beeswax: "cera de abelha",
+};
+
+/** Acordes principais da página (link "accords-search/?citrus=100&aromatic=51..."), em português e por força. */
+export function parseAccords(html: string): string[] {
+  const m = html.match(/accords-search\/?\?([^"'<>\s]+)/);
+  if (!m) return [];
+  const q = m[1].replace(/&amp;/g, "&");
+  const out: { n: string; v: number }[] = [];
+  for (const part of q.split("&")) {
+    const [k, v] = part.split("=");
+    if (!k) continue;
+    const name = decodeURIComponent(k.replace(/\+/g, " ")).trim().toLowerCase();
+    if (name) out.push({ n: ACCORD_PT[name] || name, v: Number(v) || 0 });
+  }
+  return out.sort((a, b) => b.v - a.v).map((a) => a.n).slice(0, 6);
+}
+
 async function fetchFragramRaw(fragUrl: string): Promise<number> {
   const p = { frag_url: fragUrl };
   checkApify();
@@ -423,6 +451,9 @@ async function fetchFragramRaw(fragUrl: string): Promise<number> {
   for (const m of html.matchAll(/https:\/\/fimgs\.net\/mdimg\/secundar\/[a-z]+\.(\d+)\.jpg/g))
     found.set(`https://fimgs.net/mdimg/secundar/o.${m[1]}.jpg`, `https://fimgs.net/mdimg/secundar/fit.${m[1]}.jpg`);
   const urls = [...found.keys()];
+  // notas principais (acordes) vêm na mesma página, de graça (Arthur, 17/nov: opção A)
+  const acc = parseAccords(html);
+  if (acc.length) db().prepare("UPDATE products SET frag_accords = ? WHERE frag_url = ?").run(JSON.stringify(acc), p.frag_url);
   const ins = db().prepare("INSERT OR IGNORE INTO frag_photos (frag_url, url, thumb) VALUES (?, ?, ?)");
   let n = 0;
   for (const u of urls) n += Number(ins.run(p.frag_url, u, found.get(u)!).changes);
