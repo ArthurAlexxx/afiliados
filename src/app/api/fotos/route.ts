@@ -1,3 +1,4 @@
+import { parseCrop } from "@/lib/crop";
 import { db } from "@/lib/db";
 import { bestImagePath, releaseWaiting } from "@/lib/curation";
 import { learnPrefs, prefsSummary } from "@/lib/photoprefs";
@@ -56,7 +57,7 @@ export async function GET(req: Request) {
  * { productId, mainImageId }: define a foto principal do perfume (null volta para a escolha automática).
  */
 export async function PATCH(req: Request) {
-  const b = (await req.json()) as { id?: number; disabled?: boolean; productId?: number; mainImageId?: number | null; blocked?: boolean };
+  const b = (await req.json()) as { id?: number; disabled?: boolean; productId?: number; mainImageId?: number | null; blocked?: boolean; crop?: unknown };
   if (b.productId && typeof b.blocked === "boolean") {
     db().prepare("UPDATE products SET blocked = ? WHERE id = ?").run(b.blocked ? 1 : 0, b.productId);
     // o que estava na fila desse perfume sai
@@ -66,6 +67,11 @@ export async function PATCH(req: Request) {
   if (b.productId) {
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(b.mainImageId ?? null, b.productId);
     if (b.mainImageId) db().prepare("UPDATE images SET disabled = 0 WHERE id = ?").run(b.mainImageId);
+    // enquadramento 1:1 escolhido na tela (arrastar/aproximar o quadrado)
+    if (b.mainImageId && b.crop !== undefined) {
+      const c = parseCrop(b.crop);
+      db().prepare("UPDATE images SET crop = ? WHERE id = ?").run(c ? JSON.stringify(c) : null, b.mainImageId);
+    }
     learnPrefs(); // cada escolha ensina a escolha automática
     const rel = b.mainImageId ? await releaseWaiting(b.productId).catch(() => "") : "";
     return Response.json({ ok: true, learned: prefsSummary(), msg: rel });

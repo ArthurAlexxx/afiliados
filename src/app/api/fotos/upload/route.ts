@@ -3,6 +3,7 @@ import { db, log } from "@/lib/db";
 import { addImage, releaseWaiting } from "@/lib/curation";
 import { analyzeImage, hammingHex } from "@/lib/images";
 import { learnPrefs } from "@/lib/photoprefs";
+import { parseCrop } from "@/lib/crop";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML,
  * Vira a foto principal do perfume na hora.
  */
 export async function POST(req: Request) {
-  const b = (await req.json()) as { productId?: number; data?: string; url?: string };
+  const b = (await req.json()) as { productId?: number; data?: string; url?: string; crop?: unknown };
   const pid = Number(b.productId);
   if (!pid || !db().prepare("SELECT 1 FROM products WHERE id = ?").get(pid)) return Response.json({ error: "perfume não encontrado" }, { status: 400 });
   try {
@@ -46,6 +47,10 @@ export async function POST(req: Request) {
     }
     if (!img) throw new Error(msg);
     db().prepare("UPDATE images SET disabled = 0 WHERE id = ?").run(img.id);
+    if (b.crop !== undefined) {
+      const c = parseCrop(b.crop);
+      db().prepare("UPDATE images SET crop = ? WHERE id = ?").run(c ? JSON.stringify(c) : null, img.id);
+    }
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(img.id, pid);
     learnPrefs();
     const rel = await releaseWaiting(pid).catch(() => "");

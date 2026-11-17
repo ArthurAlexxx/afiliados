@@ -8,8 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/client";
 import { cn } from "@/lib/utils";
+import { CropSquare, type Crop } from "@/components/crop-square";
 
-type Opt = { id: number; url?: string; thumb?: string | null; message_id?: string | null };
+type Opt = { id: number; url?: string; thumb?: string | null; message_id?: string | null; crop?: string | null };
 type Row = {
   id: number;
   name: string;
@@ -17,6 +18,7 @@ type Row = {
   blocked: number;
   fragUrl: string | null;
   current: number | null;
+  currentCrop: string | null;
   waiting: string | null;
   expires: string | null;
   ml: { url: string; title: string; group_name: string } | null;
@@ -30,7 +32,7 @@ type Kind = "bank" | "pin" | "fragram";
 
 // prévia já no formato do post (quadrada 1:1), igual sai no grupo
 const src = (k: Kind, o: Opt, big = false) =>
-  k === "bank" ? `/api/fotos/square?img=${o.id}&w=${big ? 640 : 240}` : k === "pin" ? `/api/pinterest/${o.id}?w=${big ? 900 : 300}` : `/api/fotos/square?frag=${o.id}&w=${big ? 640 : 240}`;
+  k === "bank" ? `/api/fotos/square?img=${o.id}&w=${big ? 640 : 240}&c=${encodeURIComponent(o.crop || "")}` : k === "pin" ? `/api/pinterest/${o.id}?w=${big ? 900 : 300}` : `/api/fotos/square?frag=${o.id}&w=${big ? 640 : 240}`;
 
 /**
  * Tela única: todos os perfumes, um por linha, com a foto que vai no post à esquerda
@@ -68,6 +70,15 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
   const [busy, setBusy] = React.useState<string | null>(null);
   const [preview, setPreview] = React.useState<string | null>(null);
   const [editing, setEditing] = React.useState<number | null>(null);
+  // foto aberta no enquadramento 1:1 antes de virar a do post
+  const [cropFor, setCropFor] = React.useState<{ row: Row; k: Kind; o: Opt; src: string; initial: Crop | null; adjust?: boolean } | null>(null);
+  const parse = (c?: string | null): Crop | null => {
+    try {
+      return c ? (JSON.parse(c) as Crop) : null;
+    } catch {
+      return null;
+    }
+  };
   const sentinel = React.useRef<HTMLDivElement>(null);
 
   React.useEffect(() => {
@@ -150,13 +161,19 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
     else if (nr) setData((d) => (d ? { ...d, rows: d.rows.map((x) => (x.id === id ? nr : x)) } : d));
   }
 
-  async function choose(row: Row, k: Kind, o: Opt) {
+  function openCrop(row: Row, k: Kind, o: Opt) {
+    setPreview(null);
+    if (k === "pin") return void choose(row, k, o);
+    setCropFor({ row, k, o, initial: parse(o.crop), src: k === "bank" ? `/api/fotos/${o.id}?w=1200` : o.url! });
+  }
+
+  async function choose(row: Row, k: Kind, o: Opt, crop?: Crop) {
     const key = `${k}:${o.id}`;
     setBusy(key);
     try {
-      if (k === "bank") await api("/api/fotos", { method: "PATCH", json: { productId: row.id, mainImageId: o.id } });
+      if (k === "bank") await api("/api/fotos", { method: "PATCH", json: { productId: row.id, mainImageId: o.id, crop } });
       else if (k === "pin") await api("/api/pinterest", { method: "POST", json: { id: o.id, main: true } });
-      else await api("/api/fotos/upload", { method: "POST", json: { productId: row.id, url: o.url } });
+      else await api("/api/fotos/upload", { method: "POST", json: { productId: row.id, url: o.url, crop } });
       toast.success(row.waiting ? `Foto escolhida: o post de ${row.name} está saindo agora` : `Foto principal de ${row.name} trocada`);
       setPreview(null);
       // post resolvido: sai da lista de esperando na hora, sem precisar atualizar a página
@@ -196,7 +213,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
               key={key}
               title="Clique para usar como foto do post"
               disabled={!!busy}
-              onClick={() => choose(row, k, o)}
+              onClick={() => openCrop(row, k, o)}
               onMouseEnter={() => setPreview(src(k, o, true))}
               onMouseLeave={() => setPreview(null)}
               className={cn(
@@ -290,7 +307,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                     <div className={cn("relative aspect-square overflow-hidden rounded-lg border bg-white", !row.current && "border-dashed bg-muted/40")}>
                       {row.current ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={`/api/fotos/square?img=${row.current}&w=400`} alt="" className="size-full object-cover" />
+                        <img src={`/api/fotos/square?img=${row.current}&w=400&c=${encodeURIComponent(row.currentCrop || "")}`} alt="" className="size-full object-cover" />
                       ) : (
                         <div className="flex size-full flex-col items-center justify-center gap-1 p-3 text-center text-[11.5px] text-muted-foreground">
                           <Star className="size-5 opacity-40" />
@@ -303,6 +320,18 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                         </div>
                       ) : null}
                     </div>
+                    {row.current ? (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 h-7 w-full text-[11.5px]"
+                        onClick={() =>
+                          setCropFor({ row, k: "bank", o: { id: row.current! }, src: `/api/fotos/${row.current}?w=1200`, initial: parse(row.currentCrop), adjust: true })
+                        }
+                      >
+                        Ajustar enquadramento
+                      </Button>
+                    ) : null}
                   </div>
                   <div className="min-w-0 flex-1 space-y-3">
                     {/* situação no Fragrantica */}
@@ -328,7 +357,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                     {/* opções de foto */}
                     {row.fragram.length ? (
                       <div>
-                        <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-gray-400 uppercase">Fotos do Fragrantica · já no formato do post (1:1) · clique para usar</div>
+                        <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-gray-400 uppercase">Fotos do Fragrantica · clique para enquadrar e usar</div>
                         <div className="flex gap-2 overflow-x-auto pb-1">{tiles(row, "fragram", row.fragram)}</div>
                       </div>
                     ) : busyFrag ? (
@@ -344,7 +373,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                     ) : null}
                     {row.bank.length ? (
                       <div>
-                        <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-gray-400 uppercase">Fotos dos grupos · clique para usar</div>
+                        <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-gray-400 uppercase">Fotos dos grupos · clique para enquadrar e usar</div>
                         <div className="flex gap-2 overflow-x-auto pb-1">{tiles(row, "bank", row.bank)}</div>
                       </div>
                     ) : null}
@@ -390,6 +419,25 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
           </div>
         </div>
       )}
+      {cropFor ? (
+        <CropSquare
+          key={cropFor.src}
+          src={cropFor.src}
+          title={cropFor.row.name}
+          initial={cropFor.initial}
+          confirmLabel={cropFor.adjust ? "Salvar enquadramento" : cropFor.row.waiting ? "Usar e postar" : "Usar esta foto"}
+          onCancel={() => setCropFor(null)}
+          onConfirm={async (c) => {
+            const x = cropFor;
+            setCropFor(null);
+            if (x.adjust) {
+              await api("/api/fotos", { method: "PATCH", json: { productId: x.row.id, mainImageId: x.o.id, crop: c } }).catch((e) => toast.error((e as Error).message));
+              toast.success("Enquadramento salvo");
+              await refreshRow(x.row.id);
+            } else await choose(x.row, x.k, x.o, c);
+          }}
+        />
+      ) : null}
       {preview ? (
         <div className="pointer-events-none fixed right-6 bottom-6 z-50 hidden overflow-hidden rounded-xl border bg-white shadow-2xl lg:block">
           {/* eslint-disable-next-line @next/next/no-img-element */}

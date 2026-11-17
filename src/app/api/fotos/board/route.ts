@@ -59,7 +59,7 @@ export async function GET(req: Request) {
   };
   const idOf = db().prepare("SELECT id FROM images WHERE path = ?");
   const imgs = db().prepare(
-    "SELECT id, width, height, message_id FROM images WHERE product_id = ? AND disabled = 0 AND COALESCE(message_id,'') NOT LIKE 'frag:%' ORDER BY score DESC LIMIT 20",
+    "SELECT id, width, height, message_id, crop FROM images WHERE product_id = ? AND disabled = 0 AND COALESCE(message_id,'') NOT LIKE 'frag:%' ORDER BY score DESC LIMIT 20",
   );
   const pins = db().prepare("SELECT id, width, height FROM pin_photos WHERE product_id = ? AND status = 'pending' AND url NOT IN ('none','searching') ORDER BY score DESC LIMIT 20");
   const frags = db().prepare("SELECT id, url, thumb FROM frag_photos WHERE frag_url = ? ORDER BY id");
@@ -101,6 +101,7 @@ export async function GET(req: Request) {
       blocked: r.blocked,
       fragUrl: r.frag_url,
       current: cur,
+      currentCrop: cur ? ((db().prepare("SELECT crop FROM images WHERE id = ?").get(cur) as { crop: string | null } | undefined)?.crop ?? null) : null,
       waiting: r.waiting,
       expires: r.waiting ? new Date(new Date(r.waiting.replace(" ", "T") + "Z").getTime() + 3 * 3600e3).toISOString() : null,
       frag: fragOf(r),

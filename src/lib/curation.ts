@@ -438,7 +438,7 @@ export async function releaseWaiting(productId: number): Promise<string> {
   try {
     pct = JSON.parse(post.data_json)?.curation?.discount ?? null;
   } catch {}
-  const out = await brand(fs.readFileSync(bank), pct, s);
+  const out = await brand(await readPostPhoto(bank), pct, s);
   const mediaPath = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, `curadoria_${productId}_${Date.now()}.jpg`);
   fs.writeFileSync(mediaPath, out);
   // o perfume pode ter sido achado no Fragrantica enquanto esperava: título no formato novo
@@ -464,6 +464,13 @@ export function expireWaiting() {
     .prepare("UPDATE posts SET status = 'skipped', reason = 'Ficou sem foto escolhida por 3h' WHERE status = 'photo' AND created_at < datetime('now', ?)")
     .run(`-${WAIT_HOURS} hours`).changes;
   if (n) log("info", `${n} post(s) desistidos: ficaram ${WAIT_HOURS}h sem foto escolhida`);
+}
+
+/** Lê a foto do banco já com o enquadramento 1:1 que o Arthur escolheu (se escolheu). */
+export async function readPostPhoto(p: string): Promise<Buffer> {
+  const { applyCrop, parseCrop } = await import("./crop.ts");
+  const row = db().prepare("SELECT crop FROM images WHERE path = ? ORDER BY id DESC LIMIT 1").get(p) as { crop: string | null } | undefined;
+  return applyCrop(fs.readFileSync(p), parseCrop(row?.crop ?? null));
 }
 
 /** Foto escolhida pelo Arthur como principal (tela Fotos), ou nada. */
@@ -521,7 +528,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
 
   let mediaPath: string | null = null;
   try {
-    let raw: Buffer | null = bankPath ? fs.readFileSync(bankPath) : null;
+    let raw: Buffer | null = bankPath ? await readPostPhoto(bankPath) : null;
     // Arthur (nov/2026): sem foto boa no banco não usa a foto do anúncio; o post espera ele escolher
     if (!raw && built.productImage && !WAIT_FOR_PHOTO) {
       const r = await fetch(built.productImage, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(15000) });
@@ -642,7 +649,7 @@ export async function redoPost(postId: number): Promise<string> {
   if (!bank) throw new Error(`apaguei ${deleted} mensagem(ns), mas o perfume não tem foto no banco para repostar`);
   const data = (JSON.parse(post.data_json || "{}").data || {}) as Record<string, string>;
   const pct = Number(data.desconto_pct) || null;
-  const out = await brand(fs.readFileSync(bank), pct, s);
+  const out = await brand(await readPostPhoto(bank), pct, s);
   const mediaPath = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, `curadoria_${post.product_id}_${Date.now()}.jpg`);
   fs.writeFileSync(mediaPath, out);
   db().prepare("UPDATE posts SET status = 'skipped', reason = ? WHERE id = ?").run(`Apagado no grupo e refeito com a foto nova`, post.id);

@@ -3,6 +3,7 @@ import path from "node:path";
 import sharp from "sharp";
 import { db, MEDIA_DIR } from "@/lib/db";
 import { squareCanvas } from "@/lib/branding";
+import { applyCrop, parseCrop } from "@/lib/crop";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,9 @@ export async function GET(req: Request) {
   const w = Math.min(1080, Math.max(80, Number(u.searchParams.get("w") || 300)));
   const dir = path.join(MEDIA_DIR, "square");
   fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `${V}-${img ? `i${img}` : `f${frag}`}.jpg`);
+  const crop = img ? parseCrop((db().prepare("SELECT crop FROM images WHERE id = ?").get(img) as { crop: string | null } | undefined)?.crop ?? null) : null;
+  const ck = crop ? `-${Math.round(crop.l * 1e4)}_${Math.round(crop.t * 1e4)}_${Math.round(crop.w * 1e4)}` : "";
+  const file = path.join(dir, `${V}-${img ? `i${img}` : `f${frag}`}${ck}.jpg`);
   try {
     let sq: Buffer;
     if (fs.existsSync(file)) sq = fs.readFileSync(file);
@@ -29,7 +32,7 @@ export async function GET(req: Request) {
       if (img) {
         const r = db().prepare("SELECT path FROM images WHERE id = ?").get(img) as { path: string } | undefined;
         if (!r || !fs.existsSync(r.path)) return new Response("not found", { status: 404 });
-        raw = fs.readFileSync(r.path);
+        raw = await applyCrop(fs.readFileSync(r.path), crop);
       } else {
         const r = db().prepare("SELECT url FROM frag_photos WHERE id = ?").get(frag) as { url: string } | undefined;
         if (!r) return new Response("not found", { status: 404 });
