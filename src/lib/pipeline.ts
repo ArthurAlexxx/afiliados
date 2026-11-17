@@ -587,7 +587,16 @@ export function startWorker() {
   });
   // fotos: medidas das fotos antigas (para a escolha automática aprender com as principais)
   setTimeout(() => import("./photoprefs.ts").then((m) => m.backfillFeatures()).catch((e) => log("warn", `Fotos: ${(e as Error).message}`)), 90e3);
-  // "Parfum" separado da versão comum (Arthur, 17/nov: Stronger With You Parfum foi postado com o nome do comum)
+  // notas com lixo do link ("🎯 f_from_perfume_id, ...") nos posts que ainda não saíram
+  {
+    const rows = db().prepare("SELECT id, formatted_text FROM posts WHERE status IN ('queued','photo','review','failed') AND formatted_text LIKE '%f_from_perfume_id%'").all() as { id: number; formatted_text: string }[];
+    for (const r of rows) {
+      const t = r.formatted_text.replace(/f_from_perfume_id,\s*/g, "").replace(/,\s*f_from_perfume_id/g, "").replace(/^🎯 f_from_perfume_id\s*\n\n?/m, "");
+      db().prepare("UPDATE posts SET formatted_text = ? WHERE id = ?").run(t, r.id);
+    }
+    if (rows.length) log("info", `Notas: ${rows.length} post(s) da fila corrigido(s)`);
+  }
+    // "Parfum" separado da versão comum (Arthur, 17/nov: Stronger With You Parfum foi postado com o nome do comum)
   import("./curation.ts").then(({ splitParfum, fixParfumSplit }) => {
     if (!getState("splitParfumV1")) {
       try {
