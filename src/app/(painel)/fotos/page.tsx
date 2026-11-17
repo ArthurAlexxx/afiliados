@@ -600,7 +600,7 @@ export default function FotosPage() {
         <Button size="sm" variant={tab === "pin" ? "accent" : "outline"} onClick={() => setTab("pin")}>Pinterest: aprovar</Button>
       </div>
       {tab === "board" ? (
-        <PhotoBoard onOpen={(id) => { setSel(id); setTab("fotos"); }} />
+        <PhotoBoard onOpen={(id) => { setSel(id); setTab("fotos"); }} Drop={DropPhoto} />
       ) : tab === "pin" ? (
         <PinReview />
       ) : sel ? (

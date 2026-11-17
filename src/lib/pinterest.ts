@@ -232,7 +232,8 @@ export async function chooseMain(id: number, by: "arthur" | "auto" = "arthur"): 
   const { learnPrefs } = await import("./photoprefs.ts");
   learnPrefs();
   if (by === "arthur") afterChoice(r.product_id, id, sys);
-  return msg;
+  const rel = await (await import("./curation.ts")).releaseWaiting(r.product_id).catch(() => "");
+  return rel ? `${msg} · ${rel}` : msg;
 }
 
 export async function decidePin(id: number, ok: boolean, asMain = false): Promise<string> {

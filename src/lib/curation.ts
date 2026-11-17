@@ -399,6 +399,47 @@ export function isHistoricLow(productId: number, price: number | null, messageId
  * Melhor foto do perfume para o post: nota da foto, mas quadrada vale mais
  * (foto em pé ou deitada gera bordas laterais no quadrado).
  */
+/** Sem foto boa no banco, o post fica esperando a escolha do Arthur (status 'photo') em vez de sair com a foto do anúncio. */
+export const WAIT_FOR_PHOTO = true;
+const WAIT_HOURS = 3;
+
+/**
+ * Arthur escolheu a foto de um perfume: o post dele que estava esperando foto sai agora
+ * (só o mais recente, e só se tiver menos de WAIT_HOURS horas).
+ */
+export async function releaseWaiting(productId: number): Promise<string> {
+  const post = db()
+    .prepare("SELECT id, data_json FROM posts WHERE product_id = ? AND status = 'photo' AND created_at >= datetime('now', ?) ORDER BY id DESC LIMIT 1")
+    .get(productId, `-${WAIT_HOURS} hours`) as { id: number; data_json: string } | undefined;
+  if (!post) return "";
+  const bank = bestImagePath(productId);
+  if (!bank) return "";
+  const s = getSettings();
+  let pct: number | null = null;
+  try {
+    pct = JSON.parse(post.data_json)?.curation?.discount ?? null;
+  } catch {}
+  const out = await brand(fs.readFileSync(bank), pct, s);
+  const mediaPath = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, `curadoria_${productId}_${Date.now()}.jpg`);
+  fs.writeFileSync(mediaPath, out);
+  db()
+    .prepare("UPDATE posts SET media_path = ?, media_mime = 'image/jpeg', status = 'queued', reason = 'Foto escolhida por você' WHERE id = ? AND status = 'photo'")
+    .run(mediaPath, post.id);
+  db().prepare("UPDATE posts SET status = 'skipped', reason = 'Saiu outro post com a foto escolhida' WHERE product_id = ? AND status = 'photo'").run(productId);
+  db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(productId);
+  log("info", `Post #${post.id} saiu da espera: foto escolhida`);
+  const { processQueue } = await import("./pipeline.ts");
+  void processQueue();
+  return `post #${post.id} enviado com a foto escolhida`;
+}
+
+export function expireWaiting() {
+  const n = db()
+    .prepare("UPDATE posts SET status = 'skipped', reason = 'Ficou sem foto escolhida por 3h' WHERE status = 'photo' AND created_at < datetime('now', ?)")
+    .run(`-${WAIT_HOURS} hours`).changes;
+  if (n) log("info", `${n} post(s) desistidos: ficaram ${WAIT_HOURS}h sem foto escolhida`);
+}
+
 export function bestImagePath(productId: number): string | null {
   // foto escolhida como principal na tela Fotos: sempre ela
   const main = db()
@@ -447,7 +488,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   let mediaPath: string | null = null;
   try {
     let raw: Buffer | null = bankPath ? fs.readFileSync(bankPath) : null;
-    if (!raw && built.productImage) {
+    // Arthur (nov/2026): sem foto boa no banco não usa a foto do anúncio; o post espera ele escolher
+    if (!raw && built.productImage && !WAIT_FOR_PHOTO) {
       const r = await fetch(built.productImage, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(15000) });
       if (r.ok) raw = Buffer.from(await r.arrayBuffer());
     }
@@ -472,7 +514,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
       : await judge(
         {
           productId: item.productId, name: item.name, price: item.bestPrice, medianPrice: item.medianPrice, minPrice: item.minPrice,
-          groups: item.groups, recentGroups: item.recentGroups, score: item.score, link: data.link, hasImage: Boolean(mediaPath),
+          groups: item.groups, recentGroups: item.recentGroups, score: item.score, link: data.link, hasImage: Boolean(mediaPath) || (WAIT_FOR_PHOTO && !bankPath),
           historicLow: Boolean(data.historico), salesNote: item.sales?.note, offerAgeMin, text: item.best.text,
           origin: item.origin, discountPct: discount,
           realPrice: item.real?.ref ?? null, realDiscount: item.real?.discount ?? null, inflated: item.real?.inflated ?? false,
@@ -480,8 +522,10 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
         },
         s,
       );
-  const status = decision.approve ? "queued" : "skipped";
-  const reason = decision.reason;
+  const waitPhoto = decision.approve && !bankPath && WAIT_FOR_PHOTO;
+  const status = waitPhoto ? "photo" : decision.approve ? "queued" : "skipped";
+  const reason = waitPhoto ? "Esperando você escolher a foto (tela Fotos)" : decision.reason;
+  if (waitPhoto) import("./pinterest.ts").then((m) => m.findPinPhotos(item.productId)).catch(() => undefined);
 
   const info = db()
     .prepare(
@@ -600,7 +644,7 @@ export async function followPost(productId: number, groupJid: string): Promise<s
   if (!p) return "";
   if (p.last_posted_at && Date.now() - new Date(p.last_posted_at.replace(" ", "T") + "Z").getTime() < FOLLOW_DEDUP_HOURS * 3600e3)
     return `cópia: já postado nas últimas ${FOLLOW_DEDUP_HOURS}h`;
-  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now', ?) AND status IN ('queued','sending','sent')").get(productId, `-${FOLLOW_DEDUP_HOURS} hours`);
+  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now', ?) AND status IN ('queued','sending','sent','photo')").get(productId, `-${FOLLOW_DEDUP_HOURS} hours`);
   if (busy) return "cópia: já na fila/postado";
   const item = ranking(s).find((i) => i.productId === productId);
   if (!item?.best) return "cópia: sem oferta com link";
@@ -821,6 +865,7 @@ export function startCuration() {
         setState("radarHubAt", String(Date.now()));
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
+      expireWaiting();
       import("./fragrantica.ts").then((m) => m.fragranticaStep()).catch((e) => log("warn", `Fragrantica: ${(e as Error).message}`));
       import("./pinterest.ts").then(async (m) => { await m.prefetchNext(); await m.pinAutoStep(); }).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
       if (s.mode !== "curated") return;

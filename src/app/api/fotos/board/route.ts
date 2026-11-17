@@ -4,7 +4,7 @@ import { notPerfume } from "@/lib/perfume";
 
 export const dynamic = "force-dynamic";
 
-type Row = { id: number; name: string; main: number | null; blocked: number; frag_url: string | null; last: string | null };
+type Row = { id: number; name: string; main: number | null; blocked: number; frag_url: string | null; last: string | null; waiting: string | null };
 
 /**
  * Tela única de escolha: cada perfume com a foto que vai no post e todas as opções
@@ -24,18 +24,20 @@ export async function GET(req: Request) {
               MAX(COALESCE((SELECT MAX(o.created_at) FROM offers o WHERE o.product_id = p.id), ''), COALESCE((SELECT MAX(i.created_at) FROM images i WHERE i.product_id = p.id), '')) last,
               (SELECT COUNT(*) FROM frag_photos g WHERE g.frag_url = p.frag_url) nfrag,
               (SELECT COUNT(*) FROM pin_photos x WHERE x.product_id = p.id AND x.status = 'pending' AND x.url NOT IN ('none','searching')) npin,
-              (SELECT COUNT(*) FROM images i WHERE i.product_id = p.id AND i.disabled = 0 AND COALESCE(i.message_id,'') NOT LIKE 'frag:%') nimg
+              (SELECT COUNT(*) FROM images i WHERE i.product_id = p.id AND i.disabled = 0 AND COALESCE(i.message_id,'') NOT LIKE 'frag:%') nimg,
+              (SELECT MAX(q.created_at) FROM posts q WHERE q.product_id = p.id AND q.status = 'photo') waiting
        FROM products p WHERE p.name LIKE ?
-       ORDER BY last DESC`,
+       ORDER BY waiting IS NULL, waiting DESC, last DESC`,
     )
-    .all(q) as (Row & { nfrag: number; npin: number; nimg: number })[];
+    .all(q) as (Row & { nfrag: number; npin: number; nimg: number; waiting: string | null })[];
   const list = all
-    .filter((r) => !notPerfume(r.name) && (r.nfrag || r.npin || r.nimg))
+    .filter((r) => !notPerfume(r.name) && (r.nfrag || r.npin || r.nimg || r.waiting))
     .filter((r) => !one || r.id === one)
-    .filter((r) => one || (f === "none" ? !r.main : f === "fragram" ? r.nfrag > 0 : f === "pin" ? r.npin > 0 : true));
-  const base = all.filter((r) => !notPerfume(r.name) && (r.nfrag || r.npin || r.nimg));
+    .filter((r) => one || (f === "wait" ? !!r.waiting : f === "none" ? !r.main : f === "fragram" ? r.nfrag > 0 : f === "pin" ? r.npin > 0 : true));
+  const base = all.filter((r) => !notPerfume(r.name) && (r.nfrag || r.npin || r.nimg || r.waiting));
   const counts = {
     all: base.length,
+    wait: base.filter((r) => r.waiting).length,
     none: base.filter((r) => !r.main).length,
     fragram: base.filter((r) => r.nfrag > 0).length,
     pin: base.filter((r) => r.npin > 0).length,
@@ -56,6 +58,7 @@ export async function GET(req: Request) {
       blocked: r.blocked,
       fragUrl: r.frag_url,
       current: cur,
+      waiting: r.waiting,
       bank: imgs.all(r.id),
       pins: pins.all(r.id),
       fragram: r.frag_url ? frags.all(r.frag_url) : [],

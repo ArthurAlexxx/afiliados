@@ -1,6 +1,6 @@
 import sharp from "sharp";
 import { db, log } from "@/lib/db";
-import { addImage } from "@/lib/curation";
+import { addImage, releaseWaiting } from "@/lib/curation";
 import { analyzeImage, hammingHex } from "@/lib/images";
 import { learnPrefs } from "@/lib/photoprefs";
 
@@ -48,8 +48,9 @@ export async function POST(req: Request) {
     db().prepare("UPDATE images SET disabled = 0 WHERE id = ?").run(img.id);
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(img.id, pid);
     learnPrefs();
+    const rel = await releaseWaiting(pid).catch(() => "");
     log("info", `Foto colocada à mão no perfume #${pid} (${meta.width}×${meta.height}) virou a principal`);
-    return Response.json({ ok: true, id: img.id, msg: `Foto adicionada e definida como principal (${meta.width}×${meta.height})` });
+    return Response.json({ ok: true, id: img.id, msg: `Foto adicionada e definida como principal (${meta.width}×${meta.height})${rel ? ` · ${rel}` : ""}` });
   } catch (e) {
     return Response.json({ error: (e as Error).message }, { status: 400 });
   }

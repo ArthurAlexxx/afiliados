@@ -17,11 +17,12 @@ type Row = {
   blocked: number;
   fragUrl: string | null;
   current: number | null;
+  waiting: string | null;
   bank: Opt[];
   pins: Opt[];
   fragram: Opt[];
 };
-type Resp = { rows: Row[]; total: number; more: boolean; counts: { all: number; none: number; fragram: number; pin: number } };
+type Resp = { rows: Row[]; total: number; more: boolean; counts: { all: number; wait: number; none: number; fragram: number; pin: number } };
 type Kind = "bank" | "pin" | "fragram";
 
 const src = (k: Kind, o: Opt, big = false) =>
@@ -31,10 +32,15 @@ const src = (k: Kind, o: Opt, big = false) =>
  * Tela única: todos os perfumes, um por linha, com a foto que vai no post à esquerda
  * e todas as opções ao lado. Clicou numa opção, ela vira a principal na hora.
  */
-export function PhotoBoard({ onOpen }: { onOpen: (id: number) => void }) {
+export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Drop: React.ComponentType<{ productId: number; onAdded: () => void }> }) {
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
-  const [f, setF] = React.useState<"all" | "none" | "fragram" | "pin">("fragram");
+  const [f, setFState] = React.useState<"wait" | "all" | "none" | "fragram" | "pin">("wait");
+  const picked = React.useRef(false);
+  const setF = (v: typeof f) => {
+    picked.current = true;
+    setFState(v);
+  };
   const [data, setData] = React.useState<Resp | null>(null);
   const [loadingMore, setLoadingMore] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -51,7 +57,13 @@ export function PhotoBoard({ onOpen }: { onOpen: (id: number) => void }) {
   React.useEffect(() => {
     let alive = true;
     setData(null);
-    api<Resp>(url(0)).then((r) => alive && setData(r)).catch((e) => toast.error((e as Error).message));
+    api<Resp>(url(0))
+      .then((r) => {
+        if (!alive) return;
+        // nada esperando foto: abre direto nos que têm fotos do Fragrantica
+        if (!picked.current && f === "wait" && !r.counts.wait) return setFState("fragram");
+        setData(r);
+      }).catch((e) => toast.error((e as Error).message));
     return () => {
       alive = false;
     };
@@ -81,7 +93,8 @@ export function PhotoBoard({ onOpen }: { onOpen: (id: number) => void }) {
   async function refreshRow(id: number) {
     const r = await api<Resp>(`/api/fotos/board?id=${id}`);
     const nr = r.rows[0];
-    if (nr) setData((d) => (d ? { ...d, rows: d.rows.map((x) => (x.id === id ? nr : x)) } : d));
+    if (nr && f === "wait" && !nr.waiting) setData((d) => (d ? { ...d, rows: d.rows.filter((x) => x.id !== id), counts: { ...d.counts, wait: d.counts.wait - 1 } } : d));
+    else if (nr) setData((d) => (d ? { ...d, rows: d.rows.map((x) => (x.id === id ? nr : x)) } : d));
   }
 
   async function choose(row: Row, k: Kind, o: Opt) {
@@ -91,7 +104,7 @@ export function PhotoBoard({ onOpen }: { onOpen: (id: number) => void }) {
       if (k === "bank") await api("/api/fotos", { method: "PATCH", json: { productId: row.id, mainImageId: o.id } });
       else if (k === "pin") await api("/api/pinterest", { method: "POST", json: { id: o.id, main: true } });
       else await api("/api/fotos/upload", { method: "POST", json: { productId: row.id, url: o.url } });
-      toast.success(`Foto principal de ${row.name} trocada`);
+      toast.success(row.waiting ? `Foto escolhida: o post de ${row.name} está saindo agora` : `Foto principal de ${row.name} trocada`);
       await refreshRow(row.id);
     } catch (e) {
       toast.error((e as Error).message);
@@ -108,6 +121,7 @@ export function PhotoBoard({ onOpen }: { onOpen: (id: number) => void }) {
 
   const c = data?.counts;
   const filters: [typeof f, string][] = [
+    ["wait", `⏳ Posts esperando foto${c ? ` (${c.wait})` : ""}`],
     ["fragram", `Com fotos do Fragrantica${c ? ` (${c.fragram})` : ""}`],
     ["none", `Sem foto escolhida${c ? ` (${c.none})` : ""}`],
     ["pin", `Com opções do Pinterest${c ? ` (${c.pin})` : ""}`],
@@ -175,7 +189,7 @@ export function PhotoBoard({ onOpen }: { onOpen: (id: number) => void }) {
       ) : (
         <div className="space-y-3">
           {data.rows.map((row) => (
-            <Card key={row.id} className={cn("flex gap-4 p-3", row.blocked && "opacity-50")}>
+            <Card key={row.id} className={cn("flex gap-4 p-3", row.blocked && "opacity-50", row.waiting && "ring-2 ring-warning")}>
               <div className="w-36 shrink-0">
                 <div className="relative aspect-square overflow-hidden rounded-lg border bg-white">
                   {row.current ? (
@@ -203,11 +217,21 @@ export function PhotoBoard({ onOpen }: { onOpen: (id: number) => void }) {
                     <Ban className="size-3.5" /> {row.blocked ? "Liberar" : "Não postar"}
                   </Button>
                 </div>
+                {row.waiting ? (
+                  <div className="mb-2 rounded-md bg-warning/10 px-2 py-1 text-[12px] text-warning">
+                    Post pronto esperando foto. Clique numa opção (ou arraste uma foto do Google abaixo) e ele sai na hora. Sem escolha em 3h, ele é descartado.
+                  </div>
+                ) : null}
                 <div className="flex gap-4 overflow-x-auto pb-2">
                   {strip(row, "fragram", row.fragram, "Fragrantica")}
                   {strip(row, "pin", row.pins, "Pinterest")}
                   {strip(row, "bank", row.bank, "Banco")}
                 </div>
+                {row.waiting && !row.fragram.length && !row.pins.length && !row.bank.length ? (
+                  <div className="max-w-md">
+                    <Drop productId={row.id} onAdded={() => refreshRow(row.id)} />
+                  </div>
+                ) : null}
                 {!row.fragram.length ? (
                   <div className="text-[11.5px] text-muted-foreground">
                     {row.fragUrl ? "Sem fotos no Fragram Photos do Fragrantica." : "Ainda não achado no Fragrantica."}

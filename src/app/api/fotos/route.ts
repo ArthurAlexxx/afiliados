@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { bestImagePath } from "@/lib/curation";
+import { bestImagePath, releaseWaiting } from "@/lib/curation";
 import { learnPrefs, prefsSummary } from "@/lib/photoprefs";
 import { notPerfume } from "@/lib/perfume";
 
@@ -67,7 +67,8 @@ export async function PATCH(req: Request) {
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(b.mainImageId ?? null, b.productId);
     if (b.mainImageId) db().prepare("UPDATE images SET disabled = 0 WHERE id = ?").run(b.mainImageId);
     learnPrefs(); // cada escolha ensina a escolha automática
-    return Response.json({ ok: true, learned: prefsSummary() });
+    const rel = b.mainImageId ? await releaseWaiting(b.productId).catch(() => "") : "";
+    return Response.json({ ok: true, learned: prefsSummary(), msg: rel });
   }
   db().prepare("UPDATE images SET disabled = ? WHERE id = ?").run(b.disabled ? 1 : 0, b.id!);
   if (b.disabled) db().prepare("UPDATE products SET main_image_id = NULL WHERE main_image_id = ?").run(b.id!);
