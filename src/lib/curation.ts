@@ -265,6 +265,8 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
 
     let why = "";
     if (!best) why = `sem oferta nos últimos ${s.curationLookbackMinutes} min`;
+    // regra do Arthur: body splash (e body mist) não é postado
+    else if (/body[\s-]*(splash|mist)/i.test(`${p.name}\n${best.text.slice(0, 300)}`)) why = "body splash não é postado";
     else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
     // regra do Arthur: perfume com só 1 foto no banco não é postado
