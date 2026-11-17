@@ -495,6 +495,20 @@ export function startWorker() {
       const n = db().prepare("UPDATE images SET disabled = 1 WHERE message_id LIKE 'frag:%'").run().changes;
       log("info", `Fragrantica: ${n} foto(s) de capa tiradas do banco`);
     }
+    // Arthur (nov/2026): nome simples = Marca + nome da Fragrantica + ml; e tenta de novo os não achados
+    if (getState("fragSimpleNameV1") !== "1") {
+      setState("fragSimpleNameV1", "1");
+      import("./fragrantica.ts").then(({ canonicalName }) => {
+        const rows = db().prepare("SELECT id, name, ml, frag_name, frag_brand FROM products WHERE frag_name IS NOT NULL AND frag_brand IS NOT NULL").all() as { id: number; name: string; ml: number; frag_name: string; frag_brand: string }[];
+        let n = 0;
+        for (const r of rows) {
+          const nm = canonicalName({ brand: r.frag_brand, name: r.frag_name }, r.ml);
+          if (nm !== r.name) (db().prepare("UPDATE products SET name = ? WHERE id = ?").run(nm, r.id), n++);
+        }
+        const retry = db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run().changes;
+        log("info", `Fragrantica: ${n} nome(s) simplificado(s); ${retry} não achado(s) vão ser procurados de novo`);
+      });
+    }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {
       saveSettings({ activeTo: "23:00" });

@@ -115,7 +115,9 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     if (extraVariant.length) continue;
     // a maior parte das nossas palavras explicada pela marca + nome
     const explained = ours.filter((t) => has(nameToks, t) || has(brandToks, t) || isBrand(t)).length;
-    if (explained / Math.max(1, ours.length) < 0.6) continue;
+    // palavras de anúncio que a Fragrantica não usa ("Belgravia Royal Collection" = "Belgravia") não contam contra
+    const soft = ours.filter((t) => !(has(nameToks, t) || has(brandToks, t) || isBrand(t)) && SOFT.has(t)).length;
+    if (explained / Math.max(1, ours.length - (brandIn ? soft : 0)) < 0.6) continue;
     // sem a marca no nosso nome: só aceita nome com 2+ palavras e perfume conhecido
     if (!brandIn && (key.length < 2 || (h.ratingCount || 0) < 300)) continue;
     const sc = key.length * 10 + explained + Math.log10(1 + (h.ratingCount || 0)) / 10;
@@ -130,15 +132,18 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
   return best;
 }
 
+const SOFT = new Set(["royal", "collection", "colecao", "original", "importado", "lacrado", "novo", "masculino", "feminino", "unissex", "perfume", "fragrance"]);
+
 const CONC: Record<string, string> = { edp: "EDP", edt: "EDT", extrait: "Extrait de Parfum", parfum: "Parfum", deo: "Deo Parfum", colonia: "Colônia" };
 
-export function canonicalName(h: Hit, ml: number, conc: string | null) {
-  const brand = h.brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim();
+/** Nome simples (pedido do Arthur): Marca + nome como está na Fragrantica + ml. */
+export function canonicalName(h: Pick<Hit, "brand" | "name">, ml: number, _conc?: string | null) {
+  // "MAISON ASRAR" → "Maison Asrar"
+  const cap = (s: string) => (s === s.toUpperCase() && /[A-Z]{3}/.test(s) ? s.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : s);
+  const brand = cap(h.brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim());
   let name = h.name.trim();
   if (!norm(name).startsWith(norm(brand))) name = `${brand} ${name}`;
-  const c = conc ? CONC[conc] : "";
-  const already = c && norm(name).includes(norm(c).split(" ")[0]);
-  return `${name}${c && !already ? ` ${c}` : ""} ${ml}ml`.replace(/\s+/g, " ").trim();
+  return `${name}${ml ? ` ${ml}ml` : ""}`.replace(/\s+/g, " ").trim();
 }
 
 /** Procura um perfume na Fragrantica e, se achar com certeza, troca o nome dele pelo padrão. */
