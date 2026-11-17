@@ -16,7 +16,7 @@ export type PerfumeInfo = {
 };
 
 export const BRAND_WORDS = new Set(
-  `lattafa rasasi armaf wataniah lipx boticario natura hugo boss jean paul gaultier jpg azzaro calvin klein ck
+  `emporio lattafa rasasi armaf wataniah lipx boticario natura hugo boss jean paul gaultier jpg azzaro calvin klein ck
   ysl yves saint laurent rabanne paco armani giorgio versace ralph lauren carolina herrera ch french avenue khadlaj
   maison alhambra afnan bidaya mawwal dior chanel prada montblanc mont blanc ferrari antonio banderas givenchy lancome
   kenzo issey miyake diesel dolce gabbana tommy hilfiger lacoste nautica ellis eudora avon jequiti zara mancera

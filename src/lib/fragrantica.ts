@@ -26,13 +26,13 @@ const has = (list: string[], t: string) => list.some((x) => near(x, t));
 async function runActor(input: Record<string, unknown>): Promise<Record<string, unknown>[]> {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("falta APIFY_TOKEN");
-  const r = await fetch(`https://api.apify.com/v2/acts/${ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=120`, {
+  const r = await fetch(`https://api.apify.com/v2/acts/${ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=120&memory=256`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
     signal: AbortSignal.timeout(150_000),
   });
-  if (!r.ok) throw new Error(`Apify ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw new Error(`Apify ${r.status}: ${(await r.text()).replace(/\s+/g, " ").slice(0, 300)}`);
   return (await r.json()) as Record<string, unknown>[];
 }
 
@@ -114,7 +114,8 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     const key = nameToks.filter((t) => !GENERIC.has(t));
     if (!key.length) continue;
     // todas as palavras do nome da Fragrantica têm que estar no nosso (gênero só se estiver escrito)
-    const missing = nameToks.filter((t) => !has(ourAll, t) && !(STOP.has(t) && !VARIANT.has(t)) && !["men", "women", "her", "him", "femme", "homme", "le", "la"].includes(t));
+    // "Emporio Armani Stronger With You": palavra de marca no nome da Fragrantica não precisa estar no nosso
+    const missing = nameToks.filter((t) => !has(ourAll, t) && !isBrand(t) && !BRAND_WORDS.has(t) && !has(brandToks, t) && !(STOP.has(t) && !VARIANT.has(t)) && !["men", "women", "her", "him", "femme", "homme", "le", "la"].includes(t));
     if (missing.length) continue;
     // e o nosso não pode ter uma variação que a Fragrantica não tem (Salvo ≠ Salvo Intense)
     const extraVariant = ours.filter((t) => VARIANT.has(t) && !has(nameToks, t) && !has(brandToks, t));
@@ -166,7 +167,7 @@ export async function standardize(productId: number): Promise<string> {
 }
 
 /** Fila: perfumes ainda não conferidos, os com promoção recente primeiro. Um por vez. */
-export async function fragranticaStep(max = 6) {
+export async function fragranticaStep(max = 4) {
   if (!process.env.APIFY_TOKEN || process.env.FRAGRANTICA === "0") return;
   const g = globalThis as { __fragBusy?: boolean };
   if (g.__fragBusy) return;
