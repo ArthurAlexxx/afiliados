@@ -7,7 +7,7 @@
  * O scraper do GitHub (jc855/fragrantica-scraper) tem a base só até 2017 e baixa direto do site, que hoje bloqueia.
  */
 import { db, log } from "./db.ts";
-import { apifyFail, checkApify } from "./apify.ts";
+import { apifyFail, checkApify, refreshTier, tracked } from "./apify.ts";
 import { BRAND_WORDS, FLANKERS, STOP, dist, isBrand, norm } from "./perfume.ts";
 
 const ACTOR = "unfenced-group~fragrantica-perfume-scraper";
@@ -57,7 +57,12 @@ export type FragData = {
 export async function fetchDetails(productId: number): Promise<FragData | null> {
   const p = db().prepare("SELECT frag_url FROM products WHERE id = ?").get(productId) as { frag_url: string | null } | undefined;
   if (!p?.frag_url) return null;
-  const [d] = (await runActor({ startUrls: [{ url: p.frag_url }], scrapeDetails: true, includeCommunityVotes: true, includeReviews: false, maxResults: 1, language: "pt" })) as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  const [d] = (await tracked(
+    "frag_details",
+    { productId, label: decodeURIComponent(new URL(p.frag_url).pathname.split("/").pop() || "").replace(/-\d+\.html$/, "").replace(/-/g, " ") },
+    () => runActor({ startUrls: [{ url: p.frag_url }], scrapeDetails: true, includeCommunityVotes: true, includeReviews: false, maxResults: 1, language: "pt" }),
+    (r) => ({ items: r.length, result: r.length ? "ficha lida" : "página sem ficha" }),
+  )) as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (!d) return null;
   const notes = (l: unknown) => (Array.isArray(l) ? l.map((n: { name?: string }) => String(n.name || "")).filter(Boolean) : []);
   const data: FragData = {
@@ -85,8 +90,14 @@ export async function fetchDetails(productId: number): Promise<FragData | null> 
   return data;
 }
 
-async function search(q: string): Promise<Hit[]> {
-  return ((await runActor({ searchQueries: [q], scrapeDetails: false, maxResults: 8 })) as unknown as Hit[]).filter((h) => h.name && h.brand);
+async function search(q: string, productId?: number): Promise<Hit[]> {
+  const items = await tracked("frag_search", { productId, label: q }, () => runActor({ searchQueries: [q], scrapeDetails: false, maxResults: 8 }), (r) => ({ items: r.length, result: `${r.length} resultado(s)` }));
+  return (items as unknown as Hit[]).filter((h) => h.name && h.brand);
+}
+
+/** Depois de decidir, escreve na última puxada do perfume o que ela achou (aparece na lista da página Scraping). */
+function noteResult(kind: string, productId: number, result: string) {
+  db().prepare("UPDATE api_calls SET result = ? WHERE id = (SELECT MAX(id) FROM api_calls WHERE kind = ? AND product_id = ?)").run(result.slice(0, 300), kind, productId);
 }
 
 /** Palavras que identificam o perfume no nosso nome (sem ml, concentração, gênero, "árabe"…). */
@@ -228,8 +239,12 @@ export function hitFromUrl(url: string): Hit | null {
 }
 
 /** Busca no Google só dentro do Fragrantica (Apify Web Search), com o nome que veio do anúncio. */
-async function searchGoogle(name: string): Promise<Hit[]> {
+async function searchGoogle(name: string, productId?: number): Promise<Hit[]> {
   if (!process.env.APIFY_TOKEN) return [];
+  return tracked("frag_google", { productId, label: name }, () => searchGoogleRaw(name), (r) => ({ items: r.length, result: `${r.length} página(s) do Fragrantica` }));
+}
+
+async function searchGoogleRaw(name: string): Promise<Hit[]> {
   checkApify();
   const q = name.replace(/\b\d{2,4}\s*ml\b/gi, " ").replace(/\s+/g, " ").trim();
   const r = await fetch("https://apify--web-search.apify.actor/", {
@@ -257,18 +272,20 @@ export async function standardize(productId: number): Promise<string> {
   if (!q) return "nome vazio";
   let hits: Hit[];
   try {
-    hits = await search(q);
+    hits = await search(q, p.id);
   } catch (e) {
     // falha do Apify (limite, rede): tenta de novo numa próxima rodada
     db().prepare("UPDATE products SET frag_checked_at = NULL WHERE id = ?").run(p.id);
     throw e;
   }
   let h = pick(p.name, hits);
+  noteResult("frag_search", p.id, h ? `achou: ${h.brand} ${h.name}` : `${hits.length} resultado(s), nenhum com certeza`);
   // a busca do Fragrantica se perde com palavras de anúncio ("Armani Beauty ..."): tenta pelo Google, só páginas do Fragrantica
   if (!h) {
-    const g = await searchGoogle(p.name).catch((e) => (log("warn", `Fragrantica (Google): ${(e as Error).message}`), [] as Hit[]));
+    const g = await searchGoogle(p.name, p.id).catch((e) => (log("warn", `Fragrantica (Google): ${(e as Error).message}`), [] as Hit[]));
     if (g.length) {
       h = pick(p.name, g);
+      noteResult("frag_google", p.id, h ? `achou: ${h.brand} ${h.name}` : `${g.length} página(s), nenhuma com certeza`);
       if (h) log("info", `Fragrantica: "${p.name}" achado pelo Google → ${h.brand} ${h.name}`);
       else hits = [...g, ...hits];
     }
@@ -295,6 +312,12 @@ export async function standardize(productId: number): Promise<string> {
 export async function fetchFragram(productId: number): Promise<number> {
   const p = db().prepare("SELECT frag_url FROM products WHERE id = ?").get(productId) as { frag_url: string | null } | undefined;
   if (!p?.frag_url || !process.env.APIFY_TOKEN) return 0;
+  const label = decodeURIComponent(new URL(p.frag_url).pathname.split("/").pop() || "").replace(/-\d+\.html$/, "").replace(/-/g, " ");
+  return tracked("frag_photos", { productId, label }, () => fetchFragramRaw(p.frag_url!), (n) => ({ items: 1, result: `${n} foto(s)` }));
+}
+
+async function fetchFragramRaw(fragUrl: string): Promise<number> {
+  const p = { frag_url: fragUrl };
   checkApify();
   const page = "https://www.fragrantica.com" + new URL(p.frag_url).pathname;
   const r = await fetch(`https://apify--web-fetch.apify.actor/?formats=html&url=${encodeURIComponent(page)}`, {
@@ -329,6 +352,7 @@ export async function fragranticaStep(max = 4) {
   if (g.__fragBusy) return;
   g.__fragBusy = true;
   try {
+    await refreshTier();
     const rows = db()
       .prepare(
         `SELECT p.id FROM products p WHERE p.frag_checked_at IS NULL

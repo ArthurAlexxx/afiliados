@@ -171,6 +171,20 @@ function migrate(db: DatabaseSync) {
     CREATE INDEX IF NOT EXISTS idx_pin_photos_status ON pin_photos(status, product_id);
 
     -- fotos da seção "Fragram Photos" do Fragrantica (só a URL; baixa quando o Arthur usa)
+    CREATE TABLE IF NOT EXISTS api_calls (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      at          TEXT NOT NULL DEFAULT (datetime('now')),
+      kind        TEXT NOT NULL,
+      product_id  INTEGER,
+      label       TEXT,
+      items       INTEGER,
+      cost_usd    REAL NOT NULL DEFAULT 0,
+      ok          INTEGER NOT NULL DEFAULT 1,
+      ms          INTEGER,
+      result      TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_api_calls_at ON api_calls(at);
+
     CREATE TABLE IF NOT EXISTS frag_photos (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       frag_url    TEXT NOT NULL,
