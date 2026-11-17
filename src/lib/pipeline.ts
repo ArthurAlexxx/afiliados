@@ -488,6 +488,13 @@ export function startWorker() {
       setState("fragFixNycV1", "1");
       db().prepare("UPDATE products SET name = '212 NYC Men EDT 200ml', frag_name = NULL, frag_brand = NULL, frag_url = NULL, frag_data = NULL, frag_checked_at = NULL WHERE frag_brand = 'Nutrimetics'").run();
     }
+    // Arthur (nov/2026): tira do banco as fotos de capa do Fragrantica (ele quer só as do Fragram Photos)
+    if (getState("fragNoCoverV1") !== "1") {
+      setState("fragNoCoverV1", "1");
+      db().prepare("UPDATE products SET main_image_id = NULL WHERE main_image_id IN (SELECT id FROM images WHERE message_id LIKE 'frag:%')").run();
+      const n = db().prepare("UPDATE images SET disabled = 1 WHERE message_id LIKE 'frag:%'").run().changes;
+      log("info", `Fragrantica: ${n} foto(s) de capa tiradas do banco`);
+    }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {
       saveSettings({ activeTo: "23:00" });

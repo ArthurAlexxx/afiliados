@@ -71,19 +71,7 @@ export async function fetchDetails(productId: number): Promise<FragData | null> 
     at: new Date().toISOString(),
   };
   db().prepare("UPDATE products SET frag_data = ? WHERE id = ?").run(JSON.stringify(data), productId);
-  // foto oficial do frasco vai para o banco do perfume (não vira principal sozinha)
-  if (data.image) {
-    try {
-      const r = await fetch(data.image, { headers: { "user-agent": "Mozilla/5.0" }, signal: AbortSignal.timeout(20000) });
-      if (r.ok) {
-        const { addImage } = await import("./curation.ts");
-        const msg = await addImage(productId, Buffer.from(await r.arrayBuffer()), `frag:${productId}`);
-        log("info", `Fragrantica: foto do frasco de ${data.brand} ${data.name}: ${msg}`);
-      } else log("info", `Fragrantica: foto do frasco não baixou (${r.status})`);
-    } catch (e) {
-      log("warn", `Fragrantica: foto do frasco: ${(e as Error).message}`);
-    }
-  }
+  // Arthur (nov/2026): a foto de capa do Fragrantica NÃO entra no banco; só as do "Fragram Photos" (api/fragram)
   return data;
 }
 

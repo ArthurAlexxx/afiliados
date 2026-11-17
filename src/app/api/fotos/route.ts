@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     const images = db()
       .prepare(
         `SELECT i.id, i.path, i.width, i.height, i.score, i.disabled, i.created_at, i.message_id, COALESCE(g.name, '') group_name
-         FROM images i LEFT JOIN groups g ON g.jid = i.group_jid WHERE i.product_id = ? ORDER BY i.disabled, i.score DESC`,
+         FROM images i LEFT JOIN groups g ON g.jid = i.group_jid WHERE i.product_id = ? AND i.message_id NOT LIKE 'frag:%' ORDER BY i.disabled, i.score DESC`,
       )
       .all(id) as { id: number; path?: string }[];
     const usedPath = bestImagePath(id);
