@@ -27,8 +27,9 @@ type Row = {
 type Resp = { rows: Row[]; total: number; more: boolean; apifyOff?: string | null; counts: { all: number; wait: number; none: number; fragram: number; pin: number } };
 type Kind = "bank" | "pin" | "fragram";
 
+// prévia já no formato do post (quadrada 1:1), igual sai no grupo
 const src = (k: Kind, o: Opt, big = false) =>
-  k === "bank" ? `/api/fotos/${o.id}?w=${big ? 900 : 300}` : k === "pin" ? `/api/pinterest/${o.id}?w=${big ? 900 : 300}` : big ? o.url! : o.thumb || o.url!;
+  k === "bank" ? `/api/fotos/square?img=${o.id}&w=${big ? 640 : 240}` : k === "pin" ? `/api/pinterest/${o.id}?w=${big ? 900 : 300}` : `/api/fotos/square?frag=${o.id}&w=${big ? 640 : 240}`;
 
 /**
  * Tela única: todos os perfumes, um por linha, com a foto que vai no post à esquerda
@@ -156,7 +157,11 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
       else if (k === "pin") await api("/api/pinterest", { method: "POST", json: { id: o.id, main: true } });
       else await api("/api/fotos/upload", { method: "POST", json: { productId: row.id, url: o.url } });
       toast.success(row.waiting ? `Foto escolhida: o post de ${row.name} está saindo agora` : `Foto principal de ${row.name} trocada`);
-      await refreshRow(row.id);
+      setPreview(null);
+      // post resolvido: sai da lista de esperando na hora, sem precisar atualizar a página
+      if (row.waiting && f === "wait")
+        setData((d) => (d ? { ...d, rows: d.rows.filter((x) => x.id !== row.id), counts: { ...d.counts, wait: Math.max(0, d.counts.wait - 1) } } : d));
+      else await refreshRow(row.id);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
@@ -267,7 +272,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                     <div className={cn("relative aspect-square overflow-hidden rounded-lg border bg-white", !row.current && "border-dashed bg-muted/40")}>
                       {row.current ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={`/api/fotos/${row.current}?w=400`} alt="" className="size-full object-contain" />
+                        <img src={`/api/fotos/square?img=${row.current}&w=400`} alt="" className="size-full object-cover" />
                       ) : (
                         <div className="flex size-full flex-col items-center justify-center gap-1 p-3 text-center text-[11.5px] text-muted-foreground">
                           <Star className="size-5 opacity-40" />
@@ -305,7 +310,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
                     {/* opções de foto */}
                     {row.fragram.length ? (
                       <div>
-                        <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-gray-400 uppercase">Fotos do Fragrantica · clique para usar</div>
+                        <div className="mb-1.5 text-[10.5px] font-semibold tracking-wide text-gray-400 uppercase">Fotos do Fragrantica · já no formato do post (1:1) · clique para usar</div>
                         <div className="flex gap-2 overflow-x-auto pb-1">{tiles(row, "fragram", row.fragram)}</div>
                       </div>
                     ) : busyFrag ? (
@@ -370,7 +375,8 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
       {preview ? (
         <div className="pointer-events-none fixed right-6 bottom-6 z-50 hidden overflow-hidden rounded-xl border bg-white shadow-2xl lg:block">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={preview} alt="" referrerPolicy="no-referrer" className="max-h-[70vh] max-w-[420px] object-contain" />
+          <img src={preview} alt="" referrerPolicy="no-referrer" className="size-[420px] object-cover" />
+          <div className="bg-black/70 py-1 text-center text-[11px] text-white">Assim sai no grupo (1:1)</div>
         </div>
       ) : null}
     </>

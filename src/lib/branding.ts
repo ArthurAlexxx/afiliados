@@ -191,6 +191,9 @@ export async function squareCanvas(input: Buffer, size = 1080): Promise<Buffer> 
       .toBuffer();
   }
 
+  // foto quase quadrada (até 4:3 / 3:4) com fundo de cenário: recorta para 1:1 no ponto de interesse, sem bordas
+  if (ratio >= 0.75 && ratio <= 1.34) return sharp(src).resize(size, size, { fit: "cover", position: sharp.strategy.attention }).png().toBuffer();
+
   const bg = await sharp(src).resize(size, size, { fit: "cover" }).blur(40).modulate({ brightness: 0.85, saturation: 1.1 }).png().toBuffer();
   const fg = await sharp(src).resize(size, size, { fit: "inside" }).png().toBuffer();
   const fm = await sharp(fg).metadata();
