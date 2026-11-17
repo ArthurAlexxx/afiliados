@@ -447,7 +447,7 @@ export function fragProfileLines(productId: number): string[] {
       acc = sib ? JSON.parse(sib.frag_accords) : [];
     } catch {}
   }
-  const line = acc.slice(0, 3).join(", ");
+  const line = acc.filter((a) => /^[\p{L} ]+$/u.test(a)).slice(0, 3).join(", ");
   return line ? [`🎯 ${line}`] : [];
 }
 

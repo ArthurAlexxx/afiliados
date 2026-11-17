@@ -428,7 +428,9 @@ export function parseAccords(html: string): string[] {
     const [k, v] = part.split("=");
     if (!k) continue;
     const name = decodeURIComponent(k.replace(/\+/g, " ")).trim().toLowerCase();
-    if (name) out.push({ n: ACCORD_PT[name] || name, v: Number(v) || 0 });
+    // só nomes de acorde (o link traz também "f_from_perfume_id=..."): letras e espaço, força de 1 a 100
+    if (!name || !/^[a-z ]+$/.test(name) || !(Number(v) > 0 && Number(v) <= 100)) continue;
+    out.push({ n: ACCORD_PT[name] || name, v: Number(v) });
   }
   return out.sort((a, b) => b.v - a.v).map((a) => a.n).slice(0, 6);
 }
