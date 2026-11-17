@@ -166,8 +166,11 @@ function noteResult(kind: string, productId: number, result: string) {
 }
 
 /** Palavras que identificam o perfume no nosso nome (sem ml, concentração, gênero, "árabe"…). */
+// palavras de anúncio do Mercado Livre que não fazem parte do nome do perfume ("Frasco 100ml", "Spray")
+const AD_WORDS = new Set(["frasco", "spray", "vaporizador", "vapo", "lacrado", "original", "importado", "novo", "oficial", "lancamento", "unidade", "masculino", "feminino", "masculina", "feminina", "unissex", "perfume"]);
+
 function core(name: string) {
-  return toks(name.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => !/^\d+$/.test(t) && !STOP.has(t) && t.length > 1);
+  return toks(name.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => !/^\d+$/.test(t) && !STOP.has(t) && !AD_WORDS.has(t) && t.length > 1);
 }
 
 /** Concentração escrita no nome: colonia | edt | edp | extrait | parfum (sozinho, "Le Parfum") */
@@ -220,7 +223,8 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     const soft = ours.filter((t) => !(has(nameToks, t) || has(brandToks, t) || isBrand(t)) && SOFT.has(t)).length;
     if (explained / Math.max(1, ours.length - (brandIn ? soft : 0)) < 0.6) continue;
     // palavra do nosso nome (fora a marca) que a Fragrantica não tem: "Homem Evolutio" ≠ "Homem"
-    const unexpl = ours.filter((t) => !(has(nameToks, t) || has(brandToks, t) || isBrand(t) || BRAND_WORDS.has(t)) && !SOFT.has(t));
+    // "the", "de", "for" soltos não são palavra do perfume ("In The Box": a marca perde o "the" no filtro)
+    const unexpl = ours.filter((t) => !(has(nameToks, t) || has(brandToks, t) || isBrand(t) || BRAND_WORDS.has(t)) && !SOFT.has(t) && !GENERIC.has(t));
     if (key.length === 1 && unexpl.length) continue;
     if (unexpl.length > 1) continue;
     // sem a marca no nosso nome: só aceita nome com 2+ palavras e perfume conhecido
