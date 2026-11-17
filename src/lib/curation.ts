@@ -439,8 +439,12 @@ export function fragProfileLines(productId: number): string[] {
   return line ? [line] : [];
 }
 
+/** Linha do perfil no post: desligada até o Arthur decidir o formato (preview). */
+export const FRAG_PROFILE = process.env.FRAG_PROFILE === "1";
+
 /** Põe o perfil do Fragrantica antes do link do produto (uma vez só). */
 export function withFragProfile(text: string, productId: number): string {
+  if (!FRAG_PROFILE) return text;
   if (/☀️ Pro dia|🌙 Pra noite|🌗 Dia e noite/.test(text)) return text;
   const lines = fragProfileLines(productId);
   if (!lines.length) return text;
@@ -454,6 +458,7 @@ export function withFragProfile(text: string, productId: number): string {
 
 /** Ficha do Fragrantica (notas, dia/noite) só do perfume que vai sair agora, se ainda não tiver. ~US$ 0,002. */
 async function ensureFragData(productId: number) {
+  if (!FRAG_PROFILE) return;
   const p = db().prepare("SELECT frag_url, frag_data FROM products WHERE id = ?").get(productId) as { frag_url: string | null; frag_data: string | null } | undefined;
   if (!p?.frag_url || p.frag_data) return;
   const sib = db().prepare("SELECT frag_data FROM products WHERE frag_url = ? AND frag_data IS NOT NULL AND frag_data != '{}' LIMIT 1").get(p.frag_url) as { frag_data: string } | undefined;
