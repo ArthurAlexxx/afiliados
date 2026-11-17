@@ -74,7 +74,9 @@ function rules(i: AgentInput, s: Settings): AgentDecision {
   const fmt = (n: number) => `R$ ${n.toFixed(2).replace(".", ",")}`;
   if (i.price && i.realPrice && i.realDiscount != null) {
     const pct = Math.round(i.realDiscount * 100);
-    const good = i.realDiscount >= 0.08 || i.historicLow;
+    // atrás do RP Promos: preço até o real vale (pedido do Arthur, acompanhar o ritmo deles)
+    const catchUp = Boolean((globalThis as { __catchUp?: boolean }).__catchUp);
+    const good = i.realDiscount >= (catchUp ? 0 : 0.08) || i.historicLow;
     add(good, `Preço real ${fmt(i.realPrice)} · esta oferta está ${pct >= 0 ? `${pct}% abaixo` : `${-pct}% acima`}${pct >= 20 ? " (ótima)" : pct >= 8 ? " (boa)" : " (normal)"}`);
     if (!good) fail(pct >= 0 ? `só ${pct}% abaixo do preço real (${fmt(i.realPrice)}), não é promoção de verdade` : `acima do preço real (${fmt(i.realPrice)})`);
     if (i.inflated) add(true, "O grupo inflou o \"DE\" (bem acima do preço real); a decisão usa o preço real");

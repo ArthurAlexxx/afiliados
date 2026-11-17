@@ -217,7 +217,10 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
 
   const lookbackMs = Math.max(5, s.curationLookbackMinutes) * 60e3;
   const recentSince = Date.now() - lookbackMs;
-  const coolSince = Date.now() - s.curationCooldownHours * 3600e3;
+  // atrás do RP Promos na última hora: libera preço normal e repete perfume depois de 2h (em vez de 5h)
+  const catchUp = catchingUp(s);
+  const coolHours = catchUp ? Math.min(2, s.curationCooldownHours) : s.curationCooldownHours;
+  const coolSince = Date.now() - coolHours * 3600e3;
   const ts = (d: string) => new Date(d.replace(" ", "T") + "Z").getTime();
 
   // descartados pelo agente há pouco: espera 30 min antes de tentar de novo (um preço melhor pode chegar)
@@ -271,12 +274,12 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     // regra do Arthur: só perfume (body splash, creme, loção, hidratante… não)
     else if (notPerfume(`${p.name}\n${best.text.split("\n").find((l) => l.trim()) || ""}`))
       why = `não é perfume (${notPerfume(`${p.name}\n${best.text.split("\n").find((l) => l.trim()) || ""}`)})`;
-    else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
+    else if (coolingDown) why = `já postado nas últimas ${coolHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
     // regra do Arthur: perfume com só 1 foto no banco não é postado
     else if (pimgs.length < 2 && !(p as { main_image_id?: number | null }).main_image_id) why = pimgs.length ? "só 1 foto no banco (precisa de 2 ou mais)" : "sem foto no banco";
     else if (rejected.has(pid)) why = "descartado pelo agente há pouco";
-    else if (rp && best?.price && 1 - best.price / rp.ref < 0.08)
+    else if (rp && best?.price && 1 - best.price / rp.ref < (catchUp ? 0 : 0.08))
       why = `preço normal: R$ ${formatPrice(best.price)} contra R$ ${formatPrice(rp.ref)} de preço real`;
     out.push({
       productId: pid,
@@ -573,6 +576,15 @@ export function exceptional(item: RankItem, s: Settings) {
   const lastHour = (db().prepare("SELECT COUNT(*) n FROM posts WHERE origin='curated' AND status IN ('queued','sending','sent') AND created_at >= datetime('now','-60 minutes')").get() as { n: number }).n;
   const p = pace(s);
   return lastHour < (p.mirror ? p.theirs + 1 : s.curationPerHour + 3) && sinceLastCuratedMs() >= 4 * 60e3;
+}
+
+/** Estamos atrás do RP Promos na última hora (regras de preço e repetição ficam mais leves). */
+export function catchingUp(s: Settings) {
+  if (process.env.MIRROR_RELAX === "0") return false;
+  const p = pace(s);
+  const v = p.mirror && p.ours < p.theirs;
+  (globalThis as { __catchUp?: boolean }).__catchUp = v;
+  return v;
 }
 
 export function slotOpen(s: Settings) {
