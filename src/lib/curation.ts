@@ -459,6 +459,32 @@ export async function releaseWaiting(productId: number): Promise<string> {
   return `post #${post.id} enviado com a foto escolhida`;
 }
 
+/**
+ * Arthur trocou a foto ou o enquadramento de um perfume que já está na fila para sair:
+ * refaz a imagem dos posts dele que ainda não foram enviados.
+ */
+export async function refreshQueuedMedia(productId: number): Promise<number> {
+  const posts = db().prepare("SELECT id, data_json FROM posts WHERE product_id = ? AND status = 'queued'").all(productId) as { id: number; data_json: string }[];
+  if (!posts.length) return 0;
+  const bank = chosenImagePath(productId);
+  if (!bank) return 0;
+  const s = getSettings();
+  const photo = await readPostPhoto(bank);
+  for (const p of posts) {
+    let pct: number | null = null;
+    try {
+      const j = JSON.parse(p.data_json);
+      pct = j?.curation?.discount ?? (Number(j?.data?.desconto_pct) || null);
+    } catch {}
+    const out = await brand(photo, pct, s);
+    const mediaPath = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, `curadoria_${productId}_${Date.now()}_${p.id}.jpg`);
+    fs.writeFileSync(mediaPath, out);
+    db().prepare("UPDATE posts SET media_path = ?, media_mime = 'image/jpeg' WHERE id = ? AND status = 'queued'").run(mediaPath, p.id);
+  }
+  log("info", `Foto do perfume #${productId} ajustada: ${posts.length} post(s) da fila refeitos`);
+  return posts.length;
+}
+
 export function expireWaiting() {
   const n = db()
     .prepare("UPDATE posts SET status = 'skipped', reason = 'Ficou sem foto escolhida por 3h' WHERE status = 'photo' AND created_at < datetime('now', ?)")

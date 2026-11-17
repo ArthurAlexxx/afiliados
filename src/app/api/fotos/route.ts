@@ -73,6 +73,8 @@ export async function PATCH(req: Request) {
       db().prepare("UPDATE images SET crop = ? WHERE id = ?").run(c ? JSON.stringify(c) : null, b.mainImageId);
     }
     learnPrefs(); // cada escolha ensina a escolha automática
+    // já estava na fila para sair: refaz a imagem do post com a foto/enquadramento novo
+    await import("@/lib/curation").then((m) => m.refreshQueuedMedia(b.productId!)).catch(() => 0);
     const rel = b.mainImageId ? await releaseWaiting(b.productId).catch(() => "") : "";
     return Response.json({ ok: true, learned: prefsSummary(), msg: rel });
   }

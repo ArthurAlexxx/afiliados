@@ -56,7 +56,18 @@ function left(iso: string | null) {
   return m >= 60 ? `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}` : `${m} min`;
 }
 
-export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Drop: React.ComponentType<{ productId: number; onAdded: () => void; compact?: boolean }> }) {
+export function PhotoBoard({
+  onOpen,
+  Drop,
+  embedded,
+  onCount,
+}: {
+  onOpen: (id: number) => void;
+  Drop: React.ComponentType<{ productId: number; onAdded: () => void; compact?: boolean }>;
+  /** dentro da página de Posts: só os posts esperando foto, sem barra de filtros */
+  embedded?: boolean;
+  onCount?: (n: number) => void;
+}) {
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
   const [f, setFState] = React.useState<"wait" | "all" | "none" | "fragram" | "pin">("wait");
@@ -95,7 +106,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
       .then((r) => {
         if (!alive) return;
         // nada esperando foto: abre direto nos que têm fotos do Fragrantica
-        if (!picked.current && f === "wait" && !r.counts.wait) return setFState("fragram");
+        if (!embedded && !picked.current && f === "wait" && !r.counts.wait) return setFState("fragram");
         setData(r);
       }).catch((e) => toast.error((e as Error).message));
     return () => {
@@ -125,7 +136,7 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
       if (waitKey.current && key !== waitKey.current) {
         api<Resp>(url(0))
           .then((r) => {
-            if (!picked.current && f === "fragram" && r.counts.wait) return setFState("wait");
+            if (!embedded && !picked.current && f === "fragram" && r.counts.wait) return setFState("wait");
             setData((d) => (d && f !== "wait" ? { ...r, rows: [...r.rows, ...d.rows.filter((x) => !r.rows.some((y) => y.id === x.id))] } : r));
           })
           .catch(() => undefined);
@@ -194,6 +205,10 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
   }
 
   const c = data?.counts;
+  React.useEffect(() => {
+    if (embedded && data) onCount?.(data.rows.filter((r) => r.waiting).length);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
   const filters: [typeof f, string][] = [
     ["wait", `⏳ Posts esperando foto${c ? ` (${c.wait})` : ""}`],
     ["fragram", `Com fotos do Fragrantica${c ? ` (${c.fragram})` : ""}`],
@@ -243,6 +258,8 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
           ⚠️ {data.apifyOff}. Fotos novas do Fragrantica não chegam até o saldo voltar; as que já estão aqui continuam valendo.
         </div>
       )}
+      {embedded ? null : (
+      <>
       <div className="sticky top-0 z-10 -mx-1 mb-4 flex flex-wrap items-center gap-2 bg-background/95 px-1 py-2 backdrop-blur">
         <div className="relative w-full max-w-xs">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -257,10 +274,14 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
       <div className="mb-3 text-[12.5px] text-muted-foreground">
         Só sai post com foto escolhida por você. Sem foto, o post espera aqui enquanto eu procuro no Fragrantica; passe o mouse para ver grande e clique para escolher.
       </div>
+      </>
+      )}
       {!data ? (
         <div className="h-64 animate-pulse rounded-xl bg-muted" />
       ) : !data.rows.length ? (
-        <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhum perfume nesse filtro.</Card>
+        <Card className={cn("px-5 text-center text-[13px] text-muted-foreground", embedded ? "py-6" : "py-12")}>
+          {embedded ? "Nenhum post esperando foto agora." : "Nenhum perfume nesse filtro."}
+        </Card>
       ) : (
         <div className="space-y-3">
           {data.rows.map((row) => {

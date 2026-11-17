@@ -52,7 +52,7 @@ export function WaitingWatch() {
             beep();
             toast.success(`📸 ${x.photos} foto(s) do Fragrantica para ${x.name}`, {
               duration: 20000,
-              action: { label: "Escolher", onClick: () => (window.location.href = "/fotos") },
+              action: { label: "Escolher", onClick: () => (window.location.href = "/fila") },
             });
           } else if (wasSearched === 0 && x.searched && !x.photos) {
             toast.warning(`Fragrantica sem fotos para ${x.name}: arraste uma foto na tela Fotos`, { duration: 15000 });
@@ -65,7 +65,7 @@ export function WaitingWatch() {
           for (const x of fresh)
             toast.warning(`Post esperando foto: ${x.name}${x.photos ? ` · ${x.photos} foto(s) do Fragrantica` : " · procurando fotos no Fragrantica…"}`, {
               duration: 15000,
-              action: { label: "Escolher", onClick: () => (window.location.href = "/fotos") },
+              action: { label: "Escolher", onClick: () => (window.location.href = "/fila") },
             });
         }
       } catch {}

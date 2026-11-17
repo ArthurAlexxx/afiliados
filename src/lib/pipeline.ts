@@ -334,7 +334,7 @@ export async function processQueue(): Promise<string> {
     db()
       .prepare(
         `UPDATE posts SET status='skipped', reason='Oferta ficou velha na fila' WHERE status='queued' AND origin='curated'
-         AND created_at < datetime('now', ?)`,
+         AND created_at < datetime('now', ?) AND COALESCE(reason,'') NOT IN ('Foto escolhida por você', 'Liberado por você')`,
       )
       .run(`-${Math.max(5, s.curationLookbackMinutes)} minutes`);
     const next = db().prepare("SELECT id FROM posts WHERE status = 'queued' ORDER BY id LIMIT 1").get() as

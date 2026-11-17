@@ -90,7 +90,7 @@ function NavItems({ collapsed, onNavigate, waiting }: { collapsed: boolean; onNa
             {section.items.map((item) => {
               const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               const Icon = item.icon;
-              const badge = item.href === "/fotos" && waiting > 0 ? waiting : null;
+              const badge = item.href === "/fila" && waiting > 0 ? waiting : null;
               return (
                 <li key={item.href} className="relative mb-0.5 last:mb-0">
                   {active &&
@@ -199,7 +199,7 @@ function Header({ onMenu, waiting }: { onMenu: () => void; waiting: { id: number
                     waiting.slice(0, 8).map((w) => (
                       <Link
                         key={w.id}
-                        href="/fotos"
+                        href="/fila"
                         onClick={() => setOpen(null)}
                         className="block border-b border-gray-200 px-4 py-2 text-sm last:border-0 hover:bg-gray-50 dark:border-gray-700/60 dark:hover:bg-gray-700/20"
                       >

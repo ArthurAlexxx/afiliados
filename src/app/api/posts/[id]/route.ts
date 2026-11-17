@@ -37,6 +37,18 @@ export async function PATCH(req: Request, ctx: Ctx) {
         return Response.json({ ok: false, error: (e as Error).message }, { status: 400 });
       }
     }
+    case "hold":
+      // segura o post para ajustar a foto: volta para "esperando foto" (sai quando a foto for escolhida/ajustada)
+      db().prepare("UPDATE posts SET status = 'photo', reason = 'Segurado por você para ajustar a foto', created_at = datetime('now') WHERE id = ? AND status = 'queued'").run(id);
+      break;
+    case "release": {
+      // liberar com a foto escolhida como está
+      const r = db().prepare("SELECT product_id FROM posts WHERE id = ?").get(id) as { product_id: number | null } | undefined;
+      const { releaseWaiting } = await import("@/lib/curation");
+      const msg = r?.product_id ? await releaseWaiting(r.product_id).catch((e) => `erro: ${(e as Error).message}`) : "";
+      if (!msg) return Response.json({ ok: false, error: "Esse perfume ainda não tem foto escolhida" }, { status: 400 });
+      return Response.json({ ok: true, msg });
+    }
     case "discard":
       db().prepare("UPDATE posts SET status = 'skipped', reason = 'Descartado manualmente' WHERE id = ?").run(id);
       break;

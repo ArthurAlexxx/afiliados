@@ -53,6 +53,8 @@ export async function POST(req: Request) {
     }
     db().prepare("UPDATE products SET main_image_id = ? WHERE id = ?").run(img.id, pid);
     learnPrefs();
+    // já estava na fila para sair: refaz a imagem do post com a foto/enquadramento novo
+    await import("@/lib/curation").then((m) => m.refreshQueuedMedia(pid!)).catch(() => 0);
     const rel = await releaseWaiting(pid).catch(() => "");
     log("info", `Foto colocada à mão no perfume #${pid} (${meta.width}×${meta.height}) virou a principal`);
     return Response.json({ ok: true, id: img.id, msg: `Foto adicionada e definida como principal (${meta.width}×${meta.height})${rel ? ` · ${rel}` : ""}` });
