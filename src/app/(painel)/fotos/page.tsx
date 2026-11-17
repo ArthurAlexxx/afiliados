@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, useApi, timeAgo } from "@/lib/client";
 import { cn } from "@/lib/utils";
+import { PhotoBoard } from "./board";
 
 type Prod = { id: number; name: string; n: number; active: number; cover: number | null; main: number | null; main_pin: number | null; pin_pending: number; pin_searched: number; last: string };
 type Img = { id: number; width: number; height: number; score: number; disabled: number; created_at: string; message_id: string | null; group_name: string };
@@ -569,13 +570,14 @@ function PinReview() {
 
 export default function FotosPage() {
   // link direto: /fotos#pinterest abre a aba de escolha
-  const [tab, setTabState] = React.useState<"fotos" | "pin">("fotos");
+  const [tab, setTabState] = React.useState<"board" | "fotos" | "pin">("board");
   React.useEffect(() => {
     if (window.location.hash === "#pinterest") setTabState("pin");
+    if (window.location.hash === "#perfumes") setTabState("fotos");
   }, []);
-  const setTab = (t: "fotos" | "pin") => {
+  const setTab = (t: "board" | "fotos" | "pin") => {
     setTabState(t);
-    history.replaceState(null, "", t === "pin" ? "#pinterest" : window.location.pathname);
+    history.replaceState(null, "", t === "pin" ? "#pinterest" : t === "fotos" ? "#perfumes" : window.location.pathname);
   };
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
@@ -593,10 +595,13 @@ export default function FotosPage() {
         description={`O banco de fotos de cada perfume, em resolução original. Clique numa foto para ver em tela cheia e clique de novo para ver em 100% (setas do teclado navegam). Escolha a foto principal de cada perfume: os posts dele sempre saem com ela. ${data ? `${data.total} fotos ativas.` : ""}`}
       />
       <div className="mb-4 flex gap-2">
-        <Button size="sm" variant={tab === "fotos" ? "accent" : "outline"} onClick={() => setTab("fotos")}>Perfumes</Button>
+        <Button size="sm" variant={tab === "board" ? "accent" : "outline"} onClick={() => setTab("board")}>Escolher fotos</Button>
+        <Button size="sm" variant={tab === "fotos" ? "accent" : "outline"} onClick={() => setTab("fotos")}>Perfume por perfume</Button>
         <Button size="sm" variant={tab === "pin" ? "accent" : "outline"} onClick={() => setTab("pin")}>Pinterest: aprovar</Button>
       </div>
-      {tab === "pin" ? (
+      {tab === "board" ? (
+        <PhotoBoard onOpen={(id) => { setSel(id); setTab("fotos"); }} />
+      ) : tab === "pin" ? (
         <PinReview />
       ) : sel ? (
         <ProductPhotos id={sel} onBack={() => { setSel(null); reloadList(); }} />
