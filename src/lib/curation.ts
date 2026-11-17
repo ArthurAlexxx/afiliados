@@ -268,7 +268,7 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
     else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
     // regra do Arthur: perfume com só 1 foto no banco não é postado
-    else if (pimgs.length < 2) why = pimgs.length ? "só 1 foto no banco (precisa de 2 ou mais)" : "sem foto no banco";
+    else if (pimgs.length < 2 && !(p as { main_image_id?: number | null }).main_image_id) why = pimgs.length ? "só 1 foto no banco (precisa de 2 ou mais)" : "sem foto no banco";
     else if (rejected.has(pid)) why = "descartado pelo agente há pouco";
     else if (rp && best?.price && 1 - best.price / rp.ref < 0.08)
       why = `preço normal: R$ ${formatPrice(best.price)} contra R$ ${formatPrice(rp.ref)} de preço real`;
@@ -661,6 +661,7 @@ export function startCuration() {
         setState("radarHubAt", String(Date.now()));
         pullRadarHub().catch((e) => log("warn", `RadarHub: ${(e as Error).message}`));
       }
+      import("./pinterest.ts").then((m) => m.pinAutoStep()).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
       if (s.mode !== "curated") return;
       // "me avisa quando baixar": chamada no grupo 2x por dia
       {

@@ -54,7 +54,7 @@ export function getPrefs(): Prefs | null {
 
 /** Recalcula o gosto a partir das fotos principais escolhidas. */
 export function learnPrefs(): Prefs {
-  const all = db().prepare("SELECT product_id, id, feat FROM images WHERE disabled = 0 AND feat IS NOT NULL").all() as {
+  const all = db().prepare("SELECT product_id, id, feat FROM images WHERE feat IS NOT NULL").all() as {
     product_id: number; id: number; feat: string;
   }[];
   const feats = all.map((r) => JSON.parse(r.feat) as Feat);

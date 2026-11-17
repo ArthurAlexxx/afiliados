@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, Star, X } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
@@ -104,6 +104,15 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
     <>
       <div className="mb-4 flex items-center gap-3">
         <Button variant="outline" size="sm" onClick={onBack}><ChevronLeft className="size-4" /> Todos os perfumes</Button>
+        <Button variant="outline" size="sm" className="order-last ml-auto" onClick={async () => {
+          toast.info("Buscando no Pinterest…");
+          try {
+            const r = await api<{ msg: string }>("/api/pinterest", { method: "POST", json: { productId: id } });
+            toast.success(`${r.msg}. Veja na aba "Pinterest: aprovar".`);
+          } catch (e) {
+            toast.error((e as Error).message);
+          }
+        }}><Search className="size-4" /> Buscar no Pinterest</Button>
         <div className="min-w-0">
           <div className="truncate text-[15px] font-semibold">{data?.product?.name || "…"}</div>
           <div className="text-[12px] text-muted-foreground">
@@ -140,7 +149,99 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
   );
 }
 
+type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number };
+
+function PinReview() {
+  const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean }>("/api/pinterest");
+  const [busy, setBusy] = React.useState<number | null>(null);
+  const [big, setBig] = React.useState<PinPhoto | null>(null);
+  const decide = async (p: PinPhoto, ok: boolean) => {
+    setBusy(p.id);
+    try {
+      await api("/api/pinterest", { method: "POST", json: ok ? { id: p.id, main: true } : { id: p.id, ok: false } });
+      toast.success(ok ? "Escolhida: é a foto principal desse perfume nos próximos posts" : "Recusada");
+      setBig(null);
+      reload();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const groups = new Map<number, PinPhoto[]>();
+  for (const r of data?.rows || []) groups.set(r.product_id, [...(groups.get(r.product_id) || []), r]);
+  return (
+    <>
+      <div className="mb-4 rounded-xl bg-muted px-4 py-3 text-[12.5px] text-muted-foreground">
+        Fotos achadas no Pinterest para perfumes das promoções com poucas fotos. Em cada perfume, clique em <b>Escolher</b> na melhor: ela vira a foto principal dos próximos posts.
+        As outras não vão para os posts, mas ensinam o seu gosto: com as suas escolhas, o sistema aprende e passa a escolher sozinho.
+        Recuse antes as que forem de outro perfume ou tiverem marca, @ ou texto.{" "}
+        {data?.auto
+          ? "Automático LIGADO: perfume das promoções sem foto principal ganha a melhor foto do Pinterest como principal, para sempre (você troca na página do perfume)."
+          : "Automático desligado: nada daqui vai para os posts sem você aprovar."}
+        <div className="mt-2">
+          <Button size="sm" variant={data?.auto ? "outline" : "accent"} onClick={async () => {
+            try {
+              await api("/api/pinterest", { method: "POST", json: { auto: !data?.auto } });
+              toast.success(data?.auto ? "Automático desligado" : "Automático ligado");
+              reload();
+            } catch (e) {
+              toast.error((e as Error).message);
+            }
+          }}>{data?.auto ? "Desligar automático" : "Ligar automático"}</Button>
+        </div>
+      </div>
+      {!data ? (
+        <div className="h-64 animate-pulse rounded-xl bg-muted" />
+      ) : !groups.size ? (
+        <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhuma foto do Pinterest esperando aprovação.</Card>
+      ) : (
+        [...groups.values()].map((list) => (
+          <div key={list[0].product_id} className="mb-6">
+            <div className="mb-2 text-[14px] font-semibold">
+              {list[0].name} <span className="font-normal text-muted-foreground">· {list[0].bank} foto(s) no banco hoje</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+              {list.map((p) => (
+                <div key={p.id} className="overflow-hidden rounded-xl border bg-card">
+                  <button onClick={() => setBig(p)} className="block w-full" title={p.title || "Ver maior"}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={`/api/pinterest/${p.id}?w=600`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain" />
+                  </button>
+                  <div className="flex items-center gap-1.5 border-t px-2 py-2 text-[11.5px] text-muted-foreground">
+                    <span className="tabular-nums">{p.width}×{p.height}</span>
+                    {p.pick ? <Badge tone="success">maior nota</Badge> : null}
+                    <Button size="sm" variant="outline" className="ml-auto" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar"><X className="size-3.5" /></Button>
+                    <Button size="sm" variant="accent" disabled={busy === p.id} onClick={() => decide(p, true)}><Check className="size-3.5" /> Escolher</Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        ))
+      )}
+      {big && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={() => setBig(null)}>
+          <div className="flex items-center gap-2 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
+            <span className="min-w-0 truncate opacity-90">{big.name} · {big.width}×{big.height}px</span>
+            <div className="ml-auto flex gap-2">
+              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
+              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
+              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-[10px] bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
+            </div>
+          </div>
+          <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={`/api/pinterest/${big.id}`} alt="" className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 export default function FotosPage() {
+  const [tab, setTab] = React.useState<"fotos" | "pin">("fotos");
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
   const [sel, setSel] = React.useState<number | null>(null);
@@ -155,7 +256,13 @@ export default function FotosPage() {
         title="Fotos dos perfumes"
         description={`O banco de fotos de cada perfume, em resolução original. Clique numa foto para ver em tela cheia e clique de novo para ver em 100% (setas do teclado navegam). Escolha a foto principal de cada perfume: os posts dele sempre saem com ela. ${data ? `${data.total} fotos ativas.` : ""}`}
       />
-      {sel ? (
+      <div className="mb-4 flex gap-2">
+        <Button size="sm" variant={tab === "fotos" ? "accent" : "outline"} onClick={() => setTab("fotos")}>Perfumes</Button>
+        <Button size="sm" variant={tab === "pin" ? "accent" : "outline"} onClick={() => setTab("pin")}>Pinterest: aprovar</Button>
+      </div>
+      {tab === "pin" ? (
+        <PinReview />
+      ) : sel ? (
         <ProductPhotos id={sel} onBack={() => setSel(null)} />
       ) : (
         <>

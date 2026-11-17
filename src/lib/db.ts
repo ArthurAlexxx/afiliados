@@ -154,6 +154,22 @@ function migrate(db: DatabaseSync) {
     );
     CREATE INDEX IF NOT EXISTS idx_image_fixes_status ON image_fixes(status, created_at);
 
+    -- fotos achadas no Pinterest: só entram no banco do perfume depois da aprovação do Arthur
+    CREATE TABLE IF NOT EXISTS pin_photos (
+      id          INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id  INTEGER NOT NULL,
+      url         TEXT NOT NULL,
+      path        TEXT NOT NULL,
+      width       INTEGER NOT NULL,
+      height      INTEGER NOT NULL,
+      title       TEXT,
+      score       INTEGER NOT NULL DEFAULT 0,
+      status      TEXT NOT NULL DEFAULT 'pending',   -- pending | approved | rejected
+      created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(product_id, url)
+    );
+    CREATE INDEX IF NOT EXISTS idx_pin_photos_status ON pin_photos(status, product_id);
+
     CREATE TABLE IF NOT EXISTS logs (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       level      TEXT NOT NULL,

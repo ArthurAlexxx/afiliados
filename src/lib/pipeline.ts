@@ -475,6 +475,14 @@ export function startWorker() {
         import("./groupsurvey.ts").then((m) => m.surveyGroups()).catch((e) => log("warn", `Levantamento de fotos: ${(e as Error).message}`));
       }, 120_000);
   });
+  // Pinterest (teste): busca fotos para ~10 perfumes das promoções com menos de 2 fotos; tudo espera aprovação.
+  import("./settings.ts").then(({ getState, setState }) => {
+    if (getState("pinTestV1")) return;
+    setTimeout(() => {
+      setState("pinTestV1", "1");
+      import("./pinterest.ts").then((m) => m.pinTestBatch(10)).catch((e) => log("warn", `Pinterest: ${(e as Error).message}`));
+    }, 90_000);
+  });
   // Fotos limpas (teste de marca d'água) que entraram no banco antes da tela de aprovação: voltam para a aprovação.
   import("./settings.ts").then(({ getState, setState }) => {
     if (getState("unwmGateV1")) return;

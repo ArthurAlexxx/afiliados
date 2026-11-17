@@ -106,7 +106,7 @@ export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
   return jaccard(a.tokens, b.tokens) >= 0.75;
 }
 
-const FLANKERS = [
+export const FLANKERS = [
   "vip", "wins", "heroes", "black", "white", "gold", "silver", "rose", "red", "blue", "noir", "night", "nyc", "sexy",
   "elixir", "intense", "intensely", "absolu", "absolute", "extreme", "sport", "fresh", "aqua", "legend", "royal", "lucky",
   "party", "kiss", "privee", "oud", "tobacco", "leather", "fusion", "pure", "platinum", "onyx", "ruby", "sapphire", "bourbon",
