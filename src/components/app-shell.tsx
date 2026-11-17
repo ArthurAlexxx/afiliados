@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Shell do painel. Sidebar baseada no componente "Sidebar" (wensity) do 21st.dev:
- * colapsável em trilho de ícones, pílula ativa animada que desliza entre itens e
- * drawer no mobile.
+ * Shell do painel no estilo do template Mosaic (cruip/tailwind-dashboard-template):
+ * barra lateral branca com cantos arredondados, item ativo com faixa violeta, cabeçalho
+ * fixo com sino de posts esperando foto, tema claro/escuro e conta.
  */
 import * as React from "react";
 import Link from "next/link";
@@ -25,6 +25,8 @@ import {
   Sun,
   X,
   Sparkles,
+  Bell,
+  ChevronDown,
   BadgeDollarSign,
   Images,
   MessageCircle,
@@ -57,86 +59,70 @@ const NAV = [
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
+/** Logo no lugar do símbolo do Mosaic: quadrado violeta com a inicial. */
 function Logo({ collapsed }: { collapsed: boolean }) {
   return (
-    <div className="flex min-w-0 items-center gap-2.5">
-      <div className="flex size-7 shrink-0 items-center justify-center rounded-[8px] bg-accent text-[13px] font-bold text-accent-foreground shadow-sm">
-        A
-      </div>
+    <Link href="/" className="flex min-w-0 items-center gap-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white shadow-xs">A</span>
       {!collapsed && (
-        <div className="min-w-0 leading-none">
-          <div className="truncate text-[14px] font-semibold tracking-tight">Afiliados</div>
-          <div className="mt-1 truncate text-[11px] text-muted-foreground">Promo bot · WhatsApp</div>
-        </div>
+        <span className="min-w-0 leading-none">
+          <span className="block truncate text-[15px] font-bold text-foreground">Afiliados</span>
+          <span className="mt-1 block truncate text-xs text-muted-foreground">Promoções no WhatsApp</span>
+        </span>
       )}
-    </div>
+    </Link>
   );
 }
 
-function NavItems({ collapsed, onNavigate, pending }: { collapsed: boolean; onNavigate?: () => void; pending: number }) {
+function NavItems({ collapsed, onNavigate, waiting }: { collapsed: boolean; onNavigate?: () => void; waiting: number }) {
   const pathname = usePathname();
   const reduce = useReducedMotion();
   return (
-    <div className="scroll-thin min-h-0 flex-1 overflow-y-auto overflow-x-hidden py-2">
+    <div className="scroll-thin min-h-0 flex-1 space-y-8 overflow-x-hidden overflow-y-auto">
       {NAV.map((section) => (
-        <div key={section.label} className="py-1">
-          <div className="flex h-[26px] items-end px-[18px] pb-1.5">
-            {!collapsed && (
-              <span className="text-[10.5px] font-medium tracking-[0.08em] whitespace-nowrap text-muted-foreground uppercase">
-                {section.label}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-col gap-px px-2">
+        <div key={section.label}>
+          <h3 className="pl-3 text-xs font-semibold text-gray-400 uppercase dark:text-gray-500">
+            {collapsed ? <span className="block w-6 text-center" aria-hidden="true">•••</span> : section.label}
+          </h3>
+          <ul className="mt-3">
             {section.items.map((item) => {
               const active = item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
               const Icon = item.icon;
-              const badge = "badgeKey" in item && item.badgeKey === "pending" && pending > 0 ? pending : null;
+              const badge = item.href === "/fotos" && waiting > 0 ? waiting : null;
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  onClick={onNavigate}
-                  title={collapsed ? item.label : undefined}
-                  aria-current={active ? "page" : undefined}
-                  className={cn(
-                    "group relative flex w-full items-center gap-2.5 rounded-[10px] px-3 py-[8px] text-[13.5px] font-medium leading-none whitespace-nowrap outline-none select-none",
-                    "transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
-                    active
-                      ? "text-foreground"
-                      : "text-foreground/70 hover:bg-foreground/[0.04] hover:text-foreground",
-                  )}
-                >
+                <li key={item.href} className="relative mb-0.5 last:mb-0">
                   {active &&
                     (reduce ? (
-                      <span className="pointer-events-none absolute inset-0 rounded-[10px] bg-foreground/[0.06]" />
+                      <span className="pointer-events-none absolute inset-0 rounded-lg bg-linear-to-r from-violet-500/[0.12] to-violet-500/[0.04] dark:from-violet-500/[0.24]" />
                     ) : (
                       <motion.span
                         layoutId="active-pill"
                         transition={{ type: "spring", stiffness: 520, damping: 42 }}
-                        className="pointer-events-none absolute inset-0 rounded-[10px] bg-foreground/[0.06]"
+                        className="pointer-events-none absolute inset-0 rounded-lg bg-linear-to-r from-violet-500/[0.12] to-violet-500/[0.04] dark:from-violet-500/[0.24]"
                       />
                     ))}
-                  <Icon
+                  <Link
+                    href={item.href}
+                    onClick={onNavigate}
+                    title={collapsed ? item.label : undefined}
+                    aria-current={active ? "page" : undefined}
                     className={cn(
-                      "relative z-10 size-[18px] shrink-0",
-                      active ? "text-foreground" : "text-muted-foreground group-hover:text-foreground",
+                      "relative flex items-center rounded-lg py-2 pr-3 pl-4 text-sm font-medium whitespace-nowrap outline-none transition duration-150",
+                      "focus-visible:ring-2 focus-visible:ring-[var(--ring)]",
+                      active ? "text-gray-800 dark:text-gray-100" : "text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white",
                     )}
-                    strokeWidth={1.75}
-                  />
-                  {!collapsed && <span className="relative z-10 min-w-0 flex-1 truncate">{item.label}</span>}
-                  {!collapsed && badge ? (
-                    <span className="relative z-10 rounded-md bg-warning/15 px-1.5 py-0.5 text-[10.5px] font-semibold text-warning tabular-nums">
-                      {badge}
-                    </span>
-                  ) : null}
-                  {collapsed && badge ? (
-                    <span className="absolute top-1.5 right-1.5 size-1.5 rounded-full bg-warning" />
-                  ) : null}
-                </Link>
+                  >
+                    <Icon className={cn("size-4 shrink-0", active ? "text-violet-500" : "text-gray-400 dark:text-gray-500")} strokeWidth={2} />
+                    {!collapsed && <span className="ml-4 min-w-0 flex-1 truncate">{item.label}</span>}
+                    {!collapsed && badge ? (
+                      <span className="ml-2 rounded-sm bg-violet-400 px-2 text-xs font-medium text-white tabular-nums">{badge}</span>
+                    ) : null}
+                    {collapsed && badge ? <span className="absolute top-1.5 right-1.5 size-2 rounded-full bg-violet-500" /> : null}
+                  </Link>
+                </li>
               );
             })}
-          </div>
+          </ul>
         </div>
       ))}
     </div>
@@ -159,129 +145,180 @@ function useTheme() {
   return { dark, toggle };
 }
 
-function Footer({ collapsed }: { collapsed: boolean }) {
+/** Lista dos posts esperando foto, ouvida do aviso em tempo real (WaitingWatch). */
+function useWaiting() {
+  const [rows, setRows] = React.useState<{ id: number; name: string }[]>([]);
+  React.useEffect(() => {
+    const on = (e: Event) => setRows(((e as CustomEvent).detail || []) as { id: number; name: string }[]);
+    window.addEventListener("waiting-photos", on);
+    return () => window.removeEventListener("waiting-photos", on);
+  }, []);
+  return rows;
+}
+
+const ROUND_BTN =
+  "flex size-8 items-center justify-center rounded-full text-gray-500/80 hover:bg-gray-200 dark:text-gray-400/80 dark:hover:bg-gray-800";
+
+function Header({ onMenu, waiting }: { onMenu: () => void; waiting: { id: number; name: string }[] }) {
   const { dark, toggle } = useTheme();
+  const [open, setOpen] = React.useState<null | "bell" | "user">(null);
+  const box = React.useRef<HTMLDivElement>(null);
+  React.useEffect(() => {
+    const close = (e: MouseEvent) => box.current && !box.current.contains(e.target as Node) && setOpen(null);
+    document.addEventListener("click", close);
+    return () => document.removeEventListener("click", close);
+  }, []);
+  async function logout() {
+    await fetch("/api/auth/logout", { method: "POST" }).catch(() => undefined);
+    window.location.href = "/login";
+  }
   return (
-    <div
-      className={cn(
-        "flex shrink-0 items-center border-t py-3",
-        collapsed ? "flex-col gap-1 px-0" : "gap-1 px-3",
-      )}
-    >
-      <button
-        onClick={toggle}
-        className="flex size-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-foreground/[0.05] hover:text-foreground"
-        aria-label="Alternar tema"
-        title="Alternar tema"
-      >
-        {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-      </button>
-    </div>
+    <header className="sticky top-0 z-30 before:absolute before:inset-0 before:-z-10 before:backdrop-blur-md max-lg:shadow-xs max-lg:before:bg-white/90 lg:before:bg-gray-100/90 dark:max-lg:before:bg-gray-800/90 dark:lg:before:bg-gray-900/90">
+      <div className="px-4 sm:px-6 lg:px-8">
+        <div className="flex h-16 items-center justify-between border-gray-200 lg:border-b dark:border-gray-700/60">
+          <button onClick={onMenu} className="text-gray-500 hover:text-gray-600 lg:hidden dark:hover:text-gray-400" aria-label="Abrir menu">
+            <Menu className="size-6" />
+          </button>
+          <div className="hidden lg:block" />
+          <div ref={box} className="flex items-center gap-3">
+            <div className="relative">
+              <button onClick={() => setOpen(open === "bell" ? null : "bell")} className={cn(ROUND_BTN, "relative", open === "bell" && "bg-gray-200 dark:bg-gray-800")} aria-label="Posts esperando foto">
+                <Bell className="size-4" />
+                {waiting.length ? (
+                  <span className="absolute top-0 right-0 flex size-4 items-center justify-center rounded-full border-2 border-gray-100 bg-red-500 text-[9px] font-bold text-white dark:border-gray-900">
+                    {waiting.length}
+                  </span>
+                ) : null}
+              </button>
+              {open === "bell" && (
+                <div className="absolute top-full right-0 z-10 mt-1 w-80 overflow-hidden rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg dark:border-gray-700/60 dark:bg-gray-800">
+                  <div className="px-4 pt-1.5 pb-2 text-xs font-semibold text-gray-400 uppercase dark:text-gray-500">Esperando foto</div>
+                  {waiting.length ? (
+                    waiting.slice(0, 8).map((w) => (
+                      <Link
+                        key={w.id}
+                        href="/fotos"
+                        onClick={() => setOpen(null)}
+                        className="block border-b border-gray-200 px-4 py-2 text-sm last:border-0 hover:bg-gray-50 dark:border-gray-700/60 dark:hover:bg-gray-700/20"
+                      >
+                        <span className="font-medium text-gray-800 dark:text-gray-100">📸 {w.name}</span>
+                        <span className="block text-xs text-gray-500">Escolha a foto para o post sair</span>
+                      </Link>
+                    ))
+                  ) : (
+                    <div className="px-4 py-3 text-sm text-gray-500">Nenhum post esperando foto.</div>
+                  )}
+                </div>
+              )}
+            </div>
+            <button onClick={toggle} className={ROUND_BTN} aria-label="Alternar tema" title="Claro / escuro">
+              {dark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+            </button>
+            <hr className="h-6 w-px border-none bg-gray-200 dark:bg-gray-700/60" />
+            <div className="relative">
+              <button onClick={() => setOpen(open === "user" ? null : "user")} className="group flex items-center gap-2" aria-label="Conta">
+                <span className="flex size-8 items-center justify-center rounded-full bg-violet-500/20 text-sm font-semibold text-violet-600 dark:text-violet-300">A</span>
+                <span className="hidden truncate text-sm font-medium text-gray-600 group-hover:text-gray-800 md:block dark:text-gray-100 dark:group-hover:text-white">Arthur</span>
+                <ChevronDown className="hidden size-3 text-gray-400 md:block" />
+              </button>
+              {open === "user" && (
+                <div className="absolute top-full right-0 z-10 mt-1 min-w-44 overflow-hidden rounded-lg border border-gray-200 bg-white py-1.5 shadow-lg dark:border-gray-700/60 dark:bg-gray-800">
+                  <div className="mb-1 border-b border-gray-200 px-3 pt-0.5 pb-2 dark:border-gray-700/60">
+                    <div className="font-medium text-gray-800 dark:text-gray-100">Arthur</div>
+                    <div className="text-xs text-gray-500 italic">Administrador</div>
+                  </div>
+                  <Link href="/configuracoes" onClick={() => setOpen(null)} className="flex px-3 py-1 text-sm font-medium text-violet-500 hover:text-violet-600">
+                    Configurações
+                  </Link>
+                  <button onClick={logout} className="flex px-3 py-1 text-sm font-medium text-violet-500 hover:text-violet-600">
+                    Sair
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
   );
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [pending, setPending] = React.useState(0);
   const reduce = useReducedMotion();
-  const pathname = usePathname();
+  const waiting = useWaiting();
 
   React.useEffect(() => {
-    let alive = true;
-    const load = () =>
-      fetch("/api/stats")
-        .then((r) => (r.ok ? r.json() : null))
-        .then((j) => alive && j && setPending(0))
-        .catch(() => {});
-    load();
-    const t = setInterval(load, 20000);
-    return () => {
-      alive = false;
-      clearInterval(t);
-    };
-  }, [pathname]);
+    try {
+      setCollapsed(localStorage.getItem("sidebar-collapsed") === "1");
+    } catch {}
+  }, []);
+  const setCol = (v: boolean) => {
+    setCollapsed(v);
+    try {
+      localStorage.setItem("sidebar-collapsed", v ? "1" : "0");
+    } catch {}
+  };
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
       <WaitingWatch />
-      {/* Desktop */}
+      {/* Barra lateral (computador) */}
       <nav
         aria-label="Navegação principal"
-        style={{ width: collapsed ? 64 : 244, transition: reduce ? "none" : "width 240ms cubic-bezier(0.23,1,0.32,1)" }}
-        className="relative hidden h-full shrink-0 flex-col overflow-hidden border-r bg-card md:flex"
+        style={{ width: collapsed ? 80 : 256, transition: reduce ? "none" : "width 200ms ease-in-out" }}
+        className="relative hidden h-full shrink-0 flex-col rounded-r-2xl bg-card p-4 shadow-xs lg:flex"
       >
-        <div className={cn("flex shrink-0 items-center", collapsed ? "h-[60px] justify-center" : "h-[60px] gap-2 px-[16px]")}>
-          {collapsed ? (
-            <button onClick={() => setCollapsed(false)} aria-label="Expandir menu" className="rounded-[10px] p-1 hover:bg-foreground/[0.05]">
-              <Logo collapsed />
-            </button>
-          ) : (
-            <>
-              <Logo collapsed={false} />
-              <button
-                onClick={() => setCollapsed(true)}
-                aria-label="Recolher menu"
-                className="ml-auto flex size-7 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-foreground/[0.06] hover:text-foreground"
-              >
-                <PanelLeftClose className="size-[17px]" strokeWidth={1.75} />
-              </button>
-            </>
-          )}
+        <div className={cn("mb-10 flex shrink-0 items-center", collapsed ? "justify-center" : "pr-3 sm:px-2")}>
+          <Logo collapsed={collapsed} />
         </div>
-        <NavItems collapsed={collapsed} pending={pending} />
-        {collapsed && (
+        <NavItems collapsed={collapsed} waiting={waiting.length} />
+        <div className="mt-auto flex justify-end pt-3">
           <button
-            onClick={() => setCollapsed(false)}
-            aria-label="Expandir menu"
-            className="mx-auto mb-2 flex size-8 items-center justify-center rounded-[10px] text-muted-foreground hover:bg-foreground/[0.06]"
+            onClick={() => setCol(!collapsed)}
+            aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+            className="px-3 py-2 text-gray-400 hover:text-gray-500 dark:text-gray-500 dark:hover:text-gray-400"
           >
-            <PanelLeftOpen className="size-[17px]" strokeWidth={1.75} />
+            {collapsed ? <PanelLeftOpen className="size-5" /> : <PanelLeftClose className="size-5" />}
           </button>
-        )}
-        <Footer collapsed={collapsed} />
+        </div>
       </nav>
 
-      {/* Mobile drawer */}
+      {/* Gaveta (celular) */}
       <AnimatePresence>
         {mobileOpen && (
           <>
             <motion.div
-              className="fixed inset-0 z-40 bg-black/30 backdrop-blur-[2px] md:hidden"
+              className="fixed inset-0 z-40 bg-gray-900/30 lg:hidden"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               onClick={() => setMobileOpen(false)}
             />
             <motion.nav
-              className="fixed inset-y-0 left-0 z-50 flex w-[264px] flex-col border-r bg-card md:hidden"
-              initial={{ x: -280 }}
+              className="fixed inset-y-0 left-0 z-50 flex w-64 flex-col rounded-r-2xl bg-card p-4 shadow-xs lg:hidden"
+              initial={{ x: -272 }}
               animate={{ x: 0 }}
-              exit={{ x: -280 }}
-              transition={{ duration: reduce ? 0 : 0.26, ease: EASE }}
+              exit={{ x: -272 }}
+              transition={{ duration: reduce ? 0 : 0.22, ease: EASE }}
             >
-              <div className="flex h-[60px] items-center px-4">
+              <div className="mb-10 flex items-center justify-between pr-3 sm:px-2">
                 <Logo collapsed={false} />
-                <button onClick={() => setMobileOpen(false)} className="ml-auto rounded-[10px] p-1.5 hover:bg-foreground/[0.05]" aria-label="Fechar menu">
-                  <X className="size-4" />
+                <button onClick={() => setMobileOpen(false)} className="text-gray-500 hover:text-gray-400" aria-label="Fechar menu">
+                  <X className="size-5" />
                 </button>
               </div>
-              <NavItems collapsed={false} pending={pending} onNavigate={() => setMobileOpen(false)} />
-              <Footer collapsed={false} />
+              <NavItems collapsed={false} waiting={waiting.length} onNavigate={() => setMobileOpen(false)} />
             </motion.nav>
           </>
         )}
       </AnimatePresence>
 
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b bg-card px-4 md:hidden">
-          <button onClick={() => setMobileOpen(true)} className="rounded-[10px] p-1.5 hover:bg-foreground/[0.05]" aria-label="Abrir menu">
-            <Menu className="size-5" />
-          </button>
-          <Logo collapsed={false} />
-        </header>
-        <main className="scroll-thin min-h-0 flex-1 overflow-y-auto">
-          <div className="mx-auto w-full max-w-6xl px-4 py-6 md:px-8 md:py-8">{children}</div>
+      <div className="scroll-thin relative flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
+        <Header onMenu={() => setMobileOpen(true)} waiting={waiting} />
+        <main className="grow">
+          <div className="mx-auto w-full max-w-[96rem] px-4 py-8 sm:px-6 lg:px-8">{children}</div>
         </main>
       </div>
     </div>
@@ -298,12 +335,12 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-      <div>
-        <h1 className="text-[22px] font-semibold tracking-tight">{title}</h1>
-        {description ? <p className="mt-1 text-sm text-muted-foreground">{description}</p> : null}
+    <div className="mb-8 sm:flex sm:items-center sm:justify-between">
+      <div className="mb-4 sm:mb-0">
+        <h1 className="text-2xl font-bold text-gray-800 md:text-3xl dark:text-gray-100">{title}</h1>
+        {description ? <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
       </div>
-      {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+      {actions ? <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">{actions}</div> : null}
     </div>
   );
 }

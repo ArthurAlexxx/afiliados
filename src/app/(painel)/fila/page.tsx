@@ -298,7 +298,7 @@ export default function FilaPage() {
 
       {loading && !data ? (
         <div className="flex flex-col gap-3">
-          {[0, 1].map((i) => <div key={i} className="h-56 animate-pulse rounded-2xl bg-muted" />)}
+          {[0, 1].map((i) => <div key={i} className="h-56 animate-pulse rounded-xl bg-muted" />)}
         </div>
       ) : data?.rows.length ? (
         <div className="flex flex-col gap-3">

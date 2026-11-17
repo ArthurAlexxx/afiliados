@@ -39,16 +39,16 @@ function Lightbox({ imgs, index, onIndex, onClose, onToggle, mainId, onMain }: {
         <span className="opacity-90">{img.width}×{img.height}px · nota {img.score}{img.group_name ? ` · ${img.group_name}` : ""}{img.message_id?.startsWith("fix:") ? " · refeita pela IA" : ""}</span>
         {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
         <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => onMain(img)} className={cn("flex h-8 items-center gap-1.5 rounded-[10px] px-3", mainId === img.id ? "bg-accent text-accent-foreground" : "bg-white/10 hover:bg-white/20")}>
+          <button onClick={() => onMain(img)} className={cn("flex h-8 items-center gap-1.5 rounded-lg px-3", mainId === img.id ? "bg-accent text-accent-foreground" : "bg-white/10 hover:bg-white/20")}>
             <Star className="size-4" /> {mainId === img.id ? "Principal (tirar)" : "Definir como principal"}
           </button>
-          <a href={`/api/fotos/${img.id}`} download={`foto-${img.id}.jpg`} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/10 px-3 hover:bg-white/20">
+          <a href={`/api/fotos/${img.id}`} download={`foto-${img.id}.jpg`} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20">
             <Download className="size-4" /> Baixar
           </a>
-          <button onClick={() => onToggle(img)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/10 px-3 hover:bg-white/20">
+          <button onClick={() => onToggle(img)} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20">
             {img.disabled ? <Eye className="size-4" /> : <EyeOff className="size-4" />} {img.disabled ? "Usar nos posts" : "Não usar nos posts"}
           </button>
-          <button onClick={onClose} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-[10px] bg-white/10 hover:bg-white/20">
+          <button onClick={onClose} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20">
             <X className="size-4" />
           </button>
         </div>
@@ -151,9 +151,9 @@ function PinOptions({ productId, onChosen }: { productId: number; onChosen: () =
           <div className="flex items-center gap-2 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
             <span className="min-w-0 truncate opacity-90">{big.width}×{big.height}px{big.flags ? ` · ${big.flags}` : ""}</span>
             <div className="ml-auto flex gap-2">
-              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
-              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
-              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-[10px] bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
+              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
+              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
+              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
             </div>
           </div>
           <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
@@ -552,9 +552,9 @@ function PinReview() {
           <div className="flex items-center gap-2 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
             <span className="min-w-0 truncate opacity-90">{big.name} · {big.width}×{big.height}px</span>
             <div className="ml-auto flex gap-2">
-              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
-              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-[10px] bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
-              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-[10px] bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
+              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
+              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
+              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
             </div>
           </div>
           <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4">

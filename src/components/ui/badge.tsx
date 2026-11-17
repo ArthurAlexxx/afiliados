@@ -1,12 +1,12 @@
 import { cn } from "@/lib/utils";
 
 const tones = {
-  neutral: "bg-muted text-muted-foreground",
-  success: "bg-success/10 text-success",
-  warning: "bg-warning/10 text-warning",
-  danger: "bg-danger/10 text-danger",
-  info: "bg-info/10 text-info",
-  accent: "bg-accent/60 text-accent-foreground",
+  neutral: "bg-gray-400/20 text-gray-600 dark:text-gray-300",
+  success: "bg-green-500/20 text-green-700 dark:text-green-400",
+  warning: "bg-yellow-500/20 text-yellow-700 dark:text-yellow-400",
+  danger: "bg-red-500/20 text-red-700 dark:text-red-400",
+  info: "bg-sky-500/20 text-sky-700 dark:text-sky-400",
+  accent: "bg-violet-500/20 text-violet-700 dark:text-violet-300",
 } as const;
 
 export function Badge({
@@ -23,7 +23,7 @@ export function Badge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[11.5px] font-medium leading-5 whitespace-nowrap",
+        "inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium leading-5 whitespace-nowrap",
         tones[tone],
         className,
       )}

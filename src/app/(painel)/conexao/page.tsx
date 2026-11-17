@@ -113,7 +113,7 @@ export default function ConexaoPage() {
       <PageHeader title="Conectar WhatsApp" description="Conecte o número do WhatsApp Business na sua instância da Evolution API." />
 
       {!status ? (
-        <div className="h-96 animate-pulse rounded-2xl bg-muted" />
+        <div className="h-96 animate-pulse rounded-xl bg-muted" />
       ) : !status.configured ? (
         <Card className="px-6 py-12 text-center">
           <div className="text-[14px] font-medium">Evolution API não encontrada</div>
@@ -135,7 +135,7 @@ export default function ConexaoPage() {
             <CardContent className="flex flex-col gap-4">
               {status.error && <div className="rounded-xl bg-muted px-3 py-2 text-[12.5px] text-muted-foreground">{status.error}</div>}
 
-              <div className="flex rounded-[10px] border bg-background p-0.5">
+              <div className="flex rounded-lg border bg-background p-0.5">
                 {([
                   { k: "qr", label: "QR code", icon: QrCode },
                   { k: "code", label: "Código de pareamento", icon: KeyRound },
@@ -190,7 +190,7 @@ export default function ConexaoPage() {
             <AnimatePresence mode="wait">
               {connected ? (
                 <motion.div key="ok" initial={{ opacity: 0, scale: 0.96 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center text-center">
-                  <div className="flex size-16 items-center justify-center rounded-2xl bg-success/10">
+                  <div className="flex size-16 items-center justify-center rounded-xl bg-success/10">
                     <CheckCircle2 className="size-8 text-success" />
                   </div>
                   <div className="mt-4 text-[16px] font-semibold">WhatsApp conectado</div>
@@ -202,7 +202,7 @@ export default function ConexaoPage() {
                   {mode === "code" && qr.pairingCode ? (
                     <>
                       <div className="text-[13px] text-muted-foreground">Código de pareamento</div>
-                      <div className="mt-3 rounded-2xl border bg-background px-6 py-4 font-mono text-[34px] font-semibold tracking-[0.25em]">
+                      <div className="mt-3 rounded-xl border bg-background px-6 py-4 font-mono text-[34px] font-semibold tracking-[0.25em]">
                         {qr.pairingCode.replace(/(.{4})(?=.)/, "$1-")}
                       </div>
                       <Button size="sm" variant="ghost" className="mt-3" onClick={() => navigator.clipboard.writeText(qr.pairingCode!).then(() => toast.success("Copiado"))}>
@@ -211,7 +211,7 @@ export default function ConexaoPage() {
                     </>
                   ) : qrSrc ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={qrSrc} alt="QR code do WhatsApp" className="size-72 rounded-2xl border bg-white p-3" />
+                    <img src={qrSrc} alt="QR code do WhatsApp" className="size-72 rounded-xl border bg-white p-3" />
                   ) : (
                     <p className="text-[13px] text-muted-foreground">A Evolution não devolveu código de pareamento. Tente o QR code.</p>
                   )}
@@ -222,7 +222,7 @@ export default function ConexaoPage() {
                 </motion.div>
               ) : (
                 <motion.div key="empty" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex flex-col items-center text-center">
-                  <div className="flex size-16 items-center justify-center rounded-2xl bg-muted">
+                  <div className="flex size-16 items-center justify-center rounded-xl bg-muted">
                     {mode === "qr" ? <QrCode className="size-7 text-muted-foreground" /> : <Smartphone className="size-7 text-muted-foreground" />}
                   </div>
                   <div className="mt-4 text-[14px] font-medium">{mode === "qr" ? "Gere o QR code" : "Gere o código"}</div>

@@ -24,7 +24,7 @@ export function WaPreview({
   return (
     <div
       className={cn(
-        "rounded-2xl bg-[#efeae2] p-4 dark:bg-[#0b141a]",
+        "rounded-xl bg-[#efeae2] p-4 dark:bg-[#0b141a]",
         "bg-[radial-gradient(circle_at_1px_1px,rgba(0,0,0,0.05)_1px,transparent_0)] [background-size:14px_14px]",
         className,
       )}

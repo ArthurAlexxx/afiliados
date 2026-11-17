@@ -28,12 +28,12 @@ export function Switch({
         onClick={() => onChange(!checked)}
         className={cn(
           "relative mt-0.5 inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200",
-          checked ? "bg-primary" : "bg-input",
+          checked ? "bg-accent" : "bg-gray-300 dark:bg-gray-600",
         )}
       >
         <span
           className={cn(
-            "inline-block size-4 rounded-full bg-card shadow-sm transition-transform duration-200 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)]",
+            "inline-block size-4 rounded-full bg-white shadow-sm transition-transform duration-200 [transition-timing-function:cubic-bezier(0.23,1,0.32,1)]",
             checked ? "translate-x-[18px]" : "translate-x-0.5",
           )}
         />

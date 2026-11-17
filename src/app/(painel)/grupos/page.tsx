@@ -25,7 +25,7 @@ const ROLES = [
 /** Controle segmentado com pílula animada (mesmo padrão do sidebar do 21st.dev). */
 function RoleSwitch({ jid, value, onChange }: { jid: string; value: Group["role"]; onChange: (r: Group["role"]) => void }) {
   return (
-    <div className="flex rounded-[10px] border bg-background p-0.5">
+    <div className="flex rounded-lg border bg-background p-0.5">
       {ROLES.map((r) => {
         const active = value === r.key;
         return (
@@ -158,7 +158,7 @@ export default function GruposPage() {
         ].map((k) => (
           <button key={k.label} onClick={() => setFilter(k.f)} className="text-left">
             <Card className={cn("flex items-center gap-3 p-4 transition-colors hover:bg-muted/50", filter === k.f && "ring-2 ring-foreground/10")}>
-              <span className="flex size-9 items-center justify-center rounded-[10px] bg-muted">
+              <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
                 <k.icon className="size-4 text-muted-foreground" />
               </span>
               <div>
@@ -203,7 +203,7 @@ export default function GruposPage() {
                       onClick={() => setFollow(g, !g.follow)}
                       title="Copiar: cada perfume que esse grupo postar vai para o nosso grupo na hora, com o nosso link (sem repetir perfume entre os grupos copiados)"
                       className={cn(
-                        "flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[12px] font-medium transition-colors",
+                        "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors",
                         g.follow ? "border-accent/40 bg-accent/15 text-foreground" : "text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -215,7 +215,7 @@ export default function GruposPage() {
                       onClick={() => setPromo(g, g.promo === 0)}
                       title="Grupos de promoção: as ofertas deles podem ir para o nosso grupo. Os outros só ajudam com fotos, preço real e hype."
                       className={cn(
-                        "flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[12px] font-medium transition-colors",
+                        "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors",
                         g.promo !== 0 ? "border-success/30 bg-success/10 text-success" : "text-muted-foreground hover:text-foreground",
                       )}
                     >
@@ -227,7 +227,7 @@ export default function GruposPage() {
                       onClick={() => setWatermark(g, !g.watermark)}
                       title="Grupos com marca d'água: usamos só a promoção, a foto vem do banco dos outros grupos"
                       className={cn(
-                        "flex h-8 items-center gap-1.5 rounded-[10px] border px-2.5 text-[12px] font-medium transition-colors",
+                        "flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-[12px] font-medium transition-colors",
                         g.watermark ? "border-warning/30 bg-warning/10 text-warning" : "text-muted-foreground hover:text-foreground",
                       )}
                     >

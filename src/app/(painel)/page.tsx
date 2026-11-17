@@ -48,22 +48,22 @@ function Kpi({
   delay?: number;
 }) {
   const toneCls = {
-    neutral: "bg-muted text-muted-foreground",
-    success: "bg-success/10 text-success",
-    warning: "bg-warning/10 text-warning",
-    info: "bg-info/10 text-info",
+    neutral: "bg-gray-400/15 text-gray-500",
+    success: "bg-green-500/15 text-green-600",
+    warning: "bg-yellow-500/20 text-yellow-700",
+    info: "bg-violet-500/15 text-violet-500",
   }[tone];
   return (
     <motion.div initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay, duration: 0.3, ease: [0.23, 1, 0.32, 1] }}>
       <Card className="h-full">
         <div className="flex items-center justify-between px-5 pt-5">
-          <span className="text-[13px] font-medium text-muted-foreground">{title}</span>
-          <span className={cn("flex size-8 items-center justify-center rounded-[10px]", toneCls)}>
+          <span className="text-xs font-semibold text-gray-400 uppercase dark:text-gray-500">{title}</span>
+          <span className={cn("flex size-9 items-center justify-center rounded-full", toneCls)}>
             <Icon className="size-4" strokeWidth={2} />
           </span>
         </div>
         <div className="px-5 pt-2 pb-5">
-          <div className="text-[28px] font-semibold tracking-tight tabular-nums">{value}</div>
+          <div className="text-3xl font-bold text-gray-800 tabular-nums dark:text-gray-100">{value}</div>
           <p className="mt-0.5 text-[12px] text-muted-foreground">{hint}</p>
         </div>
       </Card>
@@ -91,11 +91,11 @@ function ActivityChart({ days }: { days: Stats["days"] }) {
               initial={{ height: 0 }}
               animate={{ height: `${(d.captured / max) * 100}%` }}
               transition={{ delay: i * 0.025, duration: 0.5, ease: [0.23, 1, 0.32, 1] }}
-              className="relative w-full overflow-hidden rounded-[6px] bg-foreground/[0.07]"
+              className="relative w-full overflow-hidden rounded-t-[4px] bg-sky-500/30"
               style={{ minHeight: d.captured ? 4 : 2 }}
             >
               <div
-                className="absolute inset-x-0 bottom-0 rounded-[6px] bg-foreground"
+                className="absolute inset-x-0 bottom-0 bg-violet-500"
                 style={{ height: d.captured ? `${(d.sent / d.captured) * 100}%` : 0 }}
               />
             </motion.div>
@@ -107,8 +107,8 @@ function ActivityChart({ days }: { days: Stats["days"] }) {
         <span>hoje</span>
       </div>
       <div className="mt-3 flex items-center gap-4 text-[12px] text-muted-foreground">
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-foreground" /> Postados</span>
-        <span className="flex items-center gap-1.5"><span className="size-2 rounded-sm bg-foreground/15" /> Ofertas lidas</span>
+        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-violet-500" /> Postados</span>
+        <span className="flex items-center gap-1.5"><span className="size-2.5 rounded-full bg-sky-500/40" /> Ofertas lidas</span>
       </div>
     </div>
   );
@@ -117,7 +117,7 @@ function ActivityChart({ days }: { days: Stats["days"] }) {
 function StatusRow({ ok, label, detail, href }: { ok: boolean; label: string; detail: string; href: string }) {
   return (
     <Link href={href} className="flex items-center gap-3 rounded-xl px-2 py-2 transition-colors hover:bg-muted">
-      <span className={cn("flex size-8 items-center justify-center rounded-[10px]", ok ? "bg-success/10 text-success" : "bg-warning/10 text-warning")}>
+      <span className={cn("flex size-8 items-center justify-center rounded-lg", ok ? "bg-success/10 text-success" : "bg-warning/10 text-warning")}>
         {ok ? <CheckCircle2 className="size-4" /> : <AlertTriangle className="size-4" />}
       </span>
       <div className="min-w-0 flex-1">
@@ -220,7 +220,7 @@ export default function Dashboard() {
                       </span>
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-muted">
-                      <div className="h-full rounded-full bg-foreground" style={{ width: `${(g.sent / Math.max(1, g.captured)) * 100}%` }} />
+                      <div className="h-full rounded-full bg-violet-500" style={{ width: `${(g.sent / Math.max(1, g.captured)) * 100}%` }} />
                     </div>
                   </li>
                 ))}

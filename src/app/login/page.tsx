@@ -26,31 +26,44 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-background px-4">
-      <div className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_1px_1px,color-mix(in_srgb,var(--foreground)_7%,transparent)_1px,transparent_0)] [background-size:22px_22px] [mask-image:radial-gradient(ellipse_at_center,black_30%,transparent_75%)]" />
-      <motion.form
-        onSubmit={submit}
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
-        className="relative w-full max-w-sm rounded-2xl border bg-card p-7 [box-shadow:0_1px_2px_rgba(0,0,0,0.04),0_24px_48px_-24px_rgba(0,0,0,0.18)]"
-      >
-        <div className="mb-6 flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-xl bg-accent text-[16px] font-bold text-accent-foreground shadow-sm">A</div>
-          <div>
-            <div className="text-[16px] font-semibold tracking-tight">Afiliados</div>
-            <div className="text-[12.5px] text-muted-foreground">Entre para gerenciar suas promoções</div>
+    <main className="bg-white dark:bg-gray-900">
+      <div className="relative md:flex">
+        {/* formulário, no estilo da tela de entrada do Mosaic */}
+        <div className="md:w-1/2">
+          <div className="flex min-h-dvh flex-col after:flex-1">
+            <div className="flex-1">
+              <div className="flex h-16 items-center px-4 sm:px-6 lg:px-8">
+                <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">A</span>
+                <span className="ml-3 font-bold text-gray-800 dark:text-gray-100">Afiliados</span>
+              </div>
+            </div>
+            <motion.form
+              onSubmit={submit}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, ease: [0.23, 1, 0.32, 1] }}
+              className="mx-auto w-full max-w-sm px-4 py-8"
+            >
+              <h1 className="mb-6 text-3xl font-bold text-gray-800 dark:text-gray-100">Bem-vindo de volta! ✨</h1>
+              <label className="flex flex-col gap-1">
+                <span className="text-sm font-medium text-gray-600 dark:text-gray-300">Senha do painel</span>
+                <Input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
+              </label>
+              {error && <p className="mt-2 text-sm text-danger">{error}</p>}
+              <div className="mt-6 flex items-center justify-between">
+                <span className="text-sm text-gray-500">Promoções de perfume no WhatsApp</span>
+                <Button variant="accent" loading={loading}>
+                  Entrar {!loading && <ArrowRight className="size-4" />}
+                </Button>
+              </div>
+            </motion.form>
           </div>
         </div>
-        <label className="flex flex-col gap-1.5">
-          <span className="text-[13px] font-medium">Senha do painel</span>
-          <Input type="password" autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" />
-        </label>
-        {error && <p className="mt-2 text-[12.5px] text-danger">{error}</p>}
-        <Button className="mt-5 w-full" loading={loading}>
-          Entrar {!loading && <ArrowRight className="size-4" />}
-        </Button>
-      </motion.form>
-    </div>
+        {/* lado decorativo */}
+        <div className="absolute top-0 right-0 bottom-0 hidden md:block md:w-1/2" aria-hidden="true">
+          <div className="h-full w-full bg-[radial-gradient(circle_at_30%_20%,#b7acff_0,transparent_45%),radial-gradient(circle_at_80%_70%,#67bfff_0,transparent_40%),linear-gradient(135deg,#755ff8,#4634b1)]" />
+        </div>
+      </div>
+    </main>
   );
 }

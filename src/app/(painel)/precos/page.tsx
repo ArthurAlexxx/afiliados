@@ -35,7 +35,7 @@ function Chart({ d }: { d: Detail }) {
           </div>
         )}
         {d.days.map((x) => (
-          <div key={x.day} title={`${x.day.split("-").reverse().join("/")}: ${brl(x.min)} (${x.n} ofertas)`} className="flex-1 rounded-t bg-foreground/70" style={{ height: `${(x.min / max) * 100}%` }} />
+          <div key={x.day} title={`${x.day.split("-").reverse().join("/")}: ${brl(x.min)} (${x.n} ofertas)`} className="flex-1 rounded-t bg-violet-500" style={{ height: `${(x.min / max) * 100}%` }} />
         ))}
       </div>
       <div className="mt-1 flex justify-between text-[10.5px] text-muted-foreground">

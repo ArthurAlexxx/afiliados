@@ -56,7 +56,7 @@ function Kpi({ title, value, hint, icon: Icon }: { title: string; value: React.R
     <Card className="p-5">
       <div className="flex items-center justify-between">
         <span className="text-[13px] font-medium text-muted-foreground">{title}</span>
-        <span className="flex size-8 items-center justify-center rounded-[10px] bg-muted text-muted-foreground">
+        <span className="flex size-8 items-center justify-center rounded-lg bg-muted text-muted-foreground">
           <Icon className="size-4" />
         </span>
       </div>

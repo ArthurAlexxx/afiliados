@@ -1,17 +1,9 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 
+/** Cartão no estilo Mosaic: branco, cantos de 12px, sombra leve, sem borda. */
 export function Card({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return (
-    <div
-      className={cn(
-        "rounded-2xl border bg-card text-foreground",
-        "[box-shadow:0_1px_2px_rgba(0,0,0,0.04),0_8px_24px_-16px_rgba(0,0,0,0.10)]",
-        className,
-      )}
-      {...props}
-    />
-  );
+  return <div className={cn("rounded-xl bg-card text-foreground shadow-xs", className)} {...props} />;
 }
 
 export function CardHeader({
@@ -26,13 +18,13 @@ export function CardHeader({
   className?: string;
 }) {
   return (
-    <div className={cn("flex items-start justify-between gap-4 px-5 pt-5 pb-3", className)}>
+    <header className={cn("mb-4 flex items-start justify-between gap-4 border-b border-border-soft px-5 py-4", className)}>
       <div className="min-w-0">
-        <h3 className="text-[15px] font-semibold leading-tight tracking-tight">{title}</h3>
-        {description ? <p className="mt-1 text-[13px] text-muted-foreground">{description}</p> : null}
+        <h2 className="font-semibold leading-snug text-foreground">{title}</h2>
+        {description ? <p className="mt-0.5 text-[13px] text-muted-foreground">{description}</p> : null}
       </div>
       {action ? <div className="flex shrink-0 items-center gap-2">{action}</div> : null}
-    </div>
+    </header>
   );
 }
 

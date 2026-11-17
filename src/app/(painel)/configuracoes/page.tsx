@@ -83,7 +83,7 @@ export default function ConfigPage() {
     }
   };
 
-  if (!data) return <div className="h-96 animate-pulse rounded-2xl bg-muted" />;
+  if (!data) return <div className="h-96 animate-pulse rounded-xl bg-muted" />;
 
   const connected = evo?.state === "open";
 
@@ -101,7 +101,7 @@ export default function ConfigPage() {
 
       <div className="flex flex-col gap-4 pb-20">
         <Card className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center">
-          <span className="flex size-9 items-center justify-center rounded-[10px] bg-muted">
+          <span className="flex size-9 items-center justify-center rounded-lg bg-muted">
             <Plug className="size-4 text-muted-foreground" />
           </span>
           <div className="min-w-0 flex-1">
