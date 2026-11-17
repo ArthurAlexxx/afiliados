@@ -370,7 +370,7 @@ export default function FotosPage() {
     const t = setTimeout(() => setDeb(q), 300);
     return () => clearTimeout(t);
   }, [q]);
-  const { data } = useApi<{ rows: Prod[]; total: number; learned: { n: number; likes: string[] } }>(`/api/fotos?q=${encodeURIComponent(deb)}`);
+  const { data, reload: reloadList } = useApi<{ rows: Prod[]; total: number; learned: { n: number; likes: string[] } }>(`/api/fotos?q=${encodeURIComponent(deb)}`, 30_000);
   return (
     <>
       <PageHeader
@@ -384,7 +384,7 @@ export default function FotosPage() {
       {tab === "pin" ? (
         <PinReview />
       ) : sel ? (
-        <ProductPhotos id={sel} onBack={() => setSel(null)} />
+        <ProductPhotos id={sel} onBack={() => { setSel(null); reloadList(); }} />
       ) : (
         <>
           {data && (
