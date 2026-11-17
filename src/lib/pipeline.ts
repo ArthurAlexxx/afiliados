@@ -547,6 +547,19 @@ export function startWorker() {
       setState("fragRoyalV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL AND lower(name) LIKE '%royal collection%'").run();
     }
+    if (getState("fragNoRepeatV1") !== "1") {
+      setState("fragNoRepeatV1", "1");
+      // Arthur (17/nov): perfume já procurado no Fragrantica não é procurado de novo (gasto à toa).
+      // Todo não achado criado antes das 16:55 já tinha sido procurado (pelo menos uma vez) antes de hoje à tarde.
+      const n = db()
+        .prepare(
+          `UPDATE products SET frag_searched = 1, frag_checked_at = COALESCE(frag_checked_at, datetime('now'))
+           WHERE frag_url IS NULL AND (created_at < '2026-11-17 16:55:00' OR id IN (SELECT product_id FROM api_calls WHERE kind IN ('frag_search','frag_google') AND ok = 1))`,
+        )
+        .run().changes;
+      db().prepare("UPDATE products SET frag_searched = 1 WHERE frag_url IS NOT NULL").run();
+      log("info", `Fragrantica: ${n} perfume(s) já procurados marcados para não procurar de novo`);
+    }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {
       saveSettings({ activeTo: "23:00" });

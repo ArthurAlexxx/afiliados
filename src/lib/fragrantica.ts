@@ -7,8 +7,8 @@
  * O scraper do GitHub (jc855/fragrantica-scraper) tem a base só até 2017 e baixa direto do site, que hoje bloqueia.
  */
 import { db, log } from "./db.ts";
-import { apifyFail, checkApify, refreshTier, tracked } from "./apify.ts";
-import { BRAND_WORDS, FLANKERS, STOP, dist, isBrand, norm } from "./perfume.ts";
+import { apifyFail, checkApify, overDailyBudget, priceTable, recordCall, refreshTier, tracked } from "./apify.ts";
+import { BRAND_WORDS, FLANKERS, STOP, dist, isBrand, norm, notPerfume } from "./perfume.ts";
 
 const ACTOR = "unfenced-group~fragrantica-perfume-scraper";
 type Hit = { name: string; brand: string; url: string; ratingCount?: number; year?: number };
@@ -64,6 +64,49 @@ export async function fetchDetails(productId: number): Promise<FragData | null> 
     (r) => ({ items: r.length, result: r.length ? "ficha lida" : "página sem ficha" }),
   )) as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
   if (!d) return null;
+  return saveDetails(productId, p.frag_url, d);
+}
+
+const fragId = (u: string) => (u.match(/-(\d+)\.html/) || [])[1] || "";
+
+/**
+ * Fichas de vários perfumes numa execução só do robô (Arthur, 17/nov: "juntar as buscas"):
+ * paga 1 abertura do robô para o lote em vez de 1 por perfume.
+ */
+export async function fetchDetailsBatch(ids: number[]): Promise<number> {
+  if (!ids.length) return 0;
+  const rows = ids
+    .map((id) => db().prepare("SELECT id, frag_url FROM products WHERE id = ?").get(id) as { id: number; frag_url: string | null } | undefined)
+    .filter((r): r is { id: number; frag_url: string } => !!r?.frag_url);
+  if (!rows.length) return 0;
+  const urls = [...new Set(rows.map((r) => r.frag_url))];
+  const t0 = Date.now();
+  let items: Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  try {
+    items = (await runActor({ startUrls: urls.map((url) => ({ url })), scrapeDetails: true, includeCommunityVotes: true, includeReviews: false, maxResults: urls.length, language: "pt" })) as Record<string, any>[]; // eslint-disable-line @typescript-eslint/no-explicit-any
+  } catch (e) {
+    if (!/sem saldo/.test((e as Error).message)) for (const r of rows) recordCall({ kind: "frag_details", productId: r.id, label: r.frag_url, ok: false, result: (e as Error).message });
+    throw e;
+  }
+  const pt = priceTable();
+  const share = pt.start / rows.length;
+  let n = 0;
+  for (const r of rows) {
+    const d = items.find((x) => fragId(String(x.url || "")) === fragId(r.frag_url) || String(x.perfumeId || "") === fragId(r.frag_url));
+    if (d) {
+      saveDetails(r.id, r.frag_url, d);
+      n++;
+    }
+    recordCall({ kind: "frag_details", productId: r.id, label: r.frag_url, items: d ? 1 : 0, cost: share + (d ? pt.profile : 0), ms: Date.now() - t0, result: d ? `ficha lida (lote de ${rows.length})` : "página sem ficha" });
+  }
+  // achou ou não, não pede de novo sozinho: marca a ficha como "tentada"
+  for (const r of rows) db().prepare("UPDATE products SET frag_data = COALESCE(frag_data, '{}') WHERE id = ?").run(r.id);
+  return n;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function saveDetails(productId: number, url: string, d: Record<string, any>): FragData {
+  const p = { frag_url: url };
   const notes = (l: unknown) => (Array.isArray(l) ? l.map((n: { name?: string }) => String(n.name || "")).filter(Boolean) : []);
   const data: FragData = {
     url: p.frag_url,
@@ -88,6 +131,28 @@ export async function fetchDetails(productId: number): Promise<FragData | null> 
   db().prepare("UPDATE products SET frag_data = ? WHERE id = ?").run(JSON.stringify(data), productId);
   // Arthur (nov/2026): a foto de capa do Fragrantica NÃO entra no banco; só as do "Fragram Photos" (api/fragram)
   return data;
+}
+
+/** Busca vários nomes numa execução só (1 abertura do robô por lote). Devolve os resultados de cada busca. */
+async function searchBatch(list: { id: number; q: string }[]): Promise<Map<string, Hit[]>> {
+  const qs = [...new Set(list.map((x) => x.q))];
+  const t0 = Date.now();
+  let items: (Hit & { searchQuery?: string })[];
+  try {
+    items = (await runActor({ searchQueries: qs, scrapeDetails: false, maxResults: 8 * qs.length })) as unknown as (Hit & { searchQuery?: string })[];
+  } catch (e) {
+    if (!/sem saldo/.test((e as Error).message)) for (const x of list) recordCall({ kind: "frag_search", productId: x.id, label: x.q, ok: false, result: (e as Error).message });
+    throw e;
+  }
+  const out = new Map<string, Hit[]>();
+  for (const q of qs) out.set(q, []);
+  for (const it of items) if (it.name && it.brand && it.searchQuery && out.has(it.searchQuery)) out.get(it.searchQuery)!.push(it);
+  const pt = priceTable();
+  for (const x of list) {
+    const n = out.get(x.q)?.length || 0;
+    recordCall({ kind: "frag_search", productId: x.id, label: x.q, items: n, cost: pt.start / list.length + n * pt.listing, ms: Date.now() - t0, result: `${n} resultado(s) (lote de ${list.length})` });
+  }
+  return out;
 }
 
 async function search(q: string, productId?: number): Promise<Hit[]> {
@@ -264,7 +329,7 @@ async function searchGoogleRaw(name: string): Promise<Hit[]> {
 }
 
 /** Procura um perfume na Fragrantica e, se achar com certeza, troca o nome dele pelo padrão. */
-export async function standardize(productId: number): Promise<string> {
+export async function standardize(productId: number, pre?: Hit[]): Promise<string> {
   const p = db().prepare("SELECT id, name, ml, conc FROM products WHERE id = ?").get(productId) as { id: number; name: string; ml: number; conc: string | null } | undefined;
   if (!p) return "perfume não existe";
   const q = core(p.name).join(" ");
@@ -272,7 +337,9 @@ export async function standardize(productId: number): Promise<string> {
   if (!q) return "nome vazio";
   let hits: Hit[];
   try {
-    hits = await search(q, p.id);
+    hits = pre ?? (await search(q, p.id));
+    // procurado (pago): nunca mais procura sozinho; para trocar, só colando o link na tela Fotos
+    db().prepare("UPDATE products SET frag_searched = frag_searched + 1 WHERE id = ?").run(p.id);
   } catch (e) {
     // falha do Apify (limite, rede): tenta de novo numa próxima rodada
     db().prepare("UPDATE products SET frag_checked_at = NULL WHERE id = ?").run(p.id);
@@ -281,7 +348,8 @@ export async function standardize(productId: number): Promise<string> {
   let h = pick(p.name, hits);
   noteResult("frag_search", p.id, h ? `achou: ${h.brand} ${h.name}` : `${hits.length} resultado(s), nenhum com certeza`);
   // a busca do Fragrantica se perde com palavras de anúncio ("Armani Beauty ..."): tenta pelo Google, só páginas do Fragrantica
-  if (!h) {
+  const waitingPost = !!db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND status = 'photo'").get(p.id);
+  if (!h && (waitingPost || !pre)) {
     const g = await searchGoogle(p.name, p.id).catch((e) => (log("warn", `Fragrantica (Google): ${(e as Error).message}`), [] as Hit[]));
     if (g.length) {
       h = pick(p.name, g);
@@ -299,7 +367,7 @@ export async function standardize(productId: number): Promise<string> {
   const name = canonicalName(h, p.ml, p.conc);
   db().prepare("UPDATE products SET frag_name = ?, frag_brand = ?, frag_url = ?, name = ? WHERE id = ?").run(h.name, h.brand, h.url, name, p.id);
   if (name !== p.name) log("info", `Fragrantica: "${p.name}" → "${name}"`);
-  await fetchDetails(p.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`));
+  if (!pre) await fetchDetails(p.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`));
   await fetchFragram(p.id).catch((e) => log("warn", `Fragram: ${(e as Error).message}`));
   return name;
 }
@@ -346,25 +414,40 @@ async function fetchFragramRaw(fragUrl: string): Promise<number> {
   return urls.length;
 }
 
-export async function fragranticaStep(max = 4) {
+export async function fragranticaStep(max = 10) {
   if (!process.env.APIFY_TOKEN || process.env.FRAGRANTICA === "0") return;
   const g = globalThis as { __fragBusy?: boolean };
   if (g.__fragBusy) return;
   g.__fragBusy = true;
   try {
     await refreshTier();
-    const rows = db()
+    if (overDailyBudget()) return;
+    let rows = db()
       .prepare(
-        `SELECT p.id FROM products p WHERE p.frag_checked_at IS NULL
+        `SELECT p.id, p.name FROM products p WHERE p.frag_checked_at IS NULL AND p.frag_searched = 0
          ORDER BY EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo') DESC, (SELECT MAX(o.created_at) FROM offers o WHERE o.product_id = p.id) DESC LIMIT ?`,
       )
-      .all(max) as { id: number }[];
-    // várias buscas ao mesmo tempo (auditoria rápida do banco)
-    const res = await Promise.all(rows.map((r) => standardize(r.id).catch((e) => (log("warn", `Fragrantica: ${(e as Error).message}`), ""))));
+      .all(max * 3) as { id: number; name: string }[];
+    // kit, body splash, creme...: não existe no Fragrantica, não gasta procurando
+    const skip = db().prepare("UPDATE products SET frag_checked_at = datetime('now') WHERE id = ?");
+    for (const r of rows) if (notPerfume(r.name) || /\b(kit|combo|hair mist)\b/i.test(r.name)) skip.run(r.id);
+    rows = rows.filter((r) => !notPerfume(r.name) && !/\b(kit|combo|hair mist)\b/i.test(r.name)).slice(0, max);
+    // todas as buscas da rodada numa execução só do robô
+    const list = rows.map((r) => ({ id: r.id, q: core(r.name).join(" ") })).filter((x) => x.q);
+    let found = new Map<string, Hit[]>();
+    if (list.length) {
+      try {
+        found = await searchBatch(list);
+      } catch (e) {
+        log("warn", `Fragrantica: ${(e as Error).message}`);
+        return;
+      }
+    }
+    const res = await Promise.all(list.map((x) => standardize(x.id, found.get(x.q) || []).catch((e) => (log("warn", `Fragrantica: ${(e as Error).message}`), ""))));
     const changed = res.filter((n) => n && n !== "não achei" && n !== "nome vazio").length;
     // já achados antes desta versão: busca a ficha completa (2 por rodada)
-    const old = db().prepare("SELECT id FROM products WHERE frag_url IS NOT NULL AND frag_data IS NULL LIMIT 2").all() as { id: number }[];
-    await Promise.all(old.map((r) => fetchDetails(r.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`))));
+    const old = db().prepare("SELECT MIN(id) id FROM products WHERE frag_url IS NOT NULL AND frag_data IS NULL GROUP BY frag_url LIMIT 20").all() as { id: number }[];
+    await fetchDetailsBatch(old.map((r) => r.id)).catch((e) => log("warn", `Fragrantica (fichas): ${(e as Error).message}`));
     // Fragram Photos dos que ainda não foram lidos (posts esperando foto primeiro), 3 por rodada
     const gram = db()
       .prepare(

@@ -32,6 +32,7 @@ type Resp = {
   };
   prices: { tier: string; start: number; listing: number; profile: number; search: number; fetch: number };
   paused: string | null;
+  budget: { limit: number; spent: number };
   byKind: Kind[];
   days: { day: string; kind: string; n: number; usd: number }[];
   hours: { h: string; n: number; usd: number }[];
@@ -250,7 +251,18 @@ export default function ScrapingPage() {
           value={usd(left, 2)}
           hint={perDay > 0 ? (runsOut < daysLeft ? `⚠️ no ritmo atual acaba em ~${Math.max(0, Math.floor(runsOut))} dia(s), antes de renovar` : `no ritmo atual dura até a renovação`) : "sem gasto ainda neste ciclo"}
         />
-        <Kpi label="Gasto hoje" icon={Gauge} value={usd(todayUsd, 2)} hint={`${num(data?.byKind.reduce((s, k) => s + k.n_today, 0))} puxada(s) hoje · ${num(data?.byKind.reduce((s, k) => s + k.n_hour, 0))} na última hora`} />
+        <Kpi label="Gasto hoje" icon={Gauge} value={usd(todayUsd, 2)} hint={`${num(data?.byKind.reduce((s, k) => s + k.n_today, 0))} puxada(s) hoje · ${num(data?.byKind.reduce((s, k) => s + k.n_hour, 0))} na última hora`}>
+          {data?.budget ? (
+            <div className="mt-3">
+              <div className="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-700/50">
+                <div className={cn("h-full rounded-full", data.budget.spent >= data.budget.limit ? "bg-red-500" : "bg-green-500")} style={{ width: `${Math.min(100, (data.budget.spent / data.budget.limit) * 100)}%` }} />
+              </div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                Teto automático: {usd(data.budget.spent, 3)} de {usd(data.budget.limit, 2)} por dia{data.budget.spent >= data.budget.limit ? " · pausado até amanhã" : ""}
+              </div>
+            </div>
+          ) : null}
+        </Kpi>
         <Kpi
           label="Renova em"
           icon={CalendarClock}

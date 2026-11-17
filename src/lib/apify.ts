@@ -113,3 +113,27 @@ export async function refreshTier() {
     /* tenta de novo depois */
   }
 }
+
+/**
+ * Teto de gasto por dia das buscas automáticas (Arthur, 17/nov: "daqui 1 a 2 horas acaba o dinheiro").
+ * Padrão US$ 0,15 por dia (o plano grátis dá US$ 5 por mês). Muda com APIFY_DAILY_USD no Railway.
+ * Colar o link à mão na tela Fotos não conta para o teto.
+ */
+export function dailyLimitUsd() {
+  const v = Number(process.env.APIFY_DAILY_USD);
+  return Number.isFinite(v) && v > 0 ? v : 0.15;
+}
+export function spentTodayUsd(): number {
+  return (db().prepare("SELECT COALESCE(SUM(cost_usd), 0) n FROM api_calls WHERE date(at, '-3 hours') = date('now', '-3 hours')").get() as { n: number }).n;
+}
+let budgetLogged = "";
+export function overDailyBudget(): boolean {
+  const spent = spentTodayUsd();
+  if (spent < dailyLimitUsd()) return false;
+  const day = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10);
+  if (budgetLogged !== day) {
+    budgetLogged = day;
+    log("info", `Apify: teto do dia atingido (US$ ${spent.toFixed(3)} de US$ ${dailyLimitUsd().toFixed(2)}); buscas automáticas voltam amanhã`);
+  }
+  return true;
+}

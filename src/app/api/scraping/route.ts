@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { KIND_LABEL, apifyOff, priceTable, setApifyTier, type CallKind } from "@/lib/apify";
+import { KIND_LABEL, apifyOff, dailyLimitUsd, priceTable, setApifyTier, spentTodayUsd, type CallKind } from "@/lib/apify";
 
 export const dynamic = "force-dynamic";
 
@@ -132,5 +132,5 @@ export async function GET(req: Request) {
     perfumesWithPhotos: one("SELECT COUNT(DISTINCT frag_url) n FROM frag_photos"),
   };
 
-  return Response.json({ account: acc, prices: priceTable(), paused: apifyOff(), byKind, days, hours, calls, top, coverage, kinds: KIND_LABEL });
+  return Response.json({ account: acc, prices: priceTable(), paused: apifyOff(), budget: { limit: dailyLimitUsd(), spent: spentTodayUsd() }, byKind, days, hours, calls, top, coverage, kinds: KIND_LABEL });
 }
