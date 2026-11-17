@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     .run(url, brand, fname, name, pid);
   log("info", `Fragrantica: link colocado à mão no perfume #${pid}: ${url}`);
   try {
-    const n = await fetchFragram(pid);
+    const n = await fetchFragram(pid, true);
     fetchDetails(pid).catch(() => undefined);
     return Response.json({ msg: n ? `${n} foto(s) do Fragrantica trazidas` : "Página ligada, mas ela não tem Fragram Photos" });
   } catch (e) {

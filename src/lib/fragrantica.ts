@@ -367,7 +367,9 @@ export async function standardize(productId: number, pre?: Hit[]): Promise<strin
   const name = canonicalName(h, p.ml, p.conc);
   db().prepare("UPDATE products SET frag_name = ?, frag_brand = ?, frag_url = ?, name = ? WHERE id = ?").run(h.name, h.brand, h.url, name, p.id);
   if (name !== p.name) log("info", `Fragrantica: "${p.name}" → "${name}"`);
-  if (!pre) await fetchDetails(p.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`));
+  const known = db().prepare("SELECT frag_data FROM products WHERE frag_url = ? AND frag_data IS NOT NULL AND id != ? LIMIT 1").get(h.url, p.id) as { frag_data: string } | undefined;
+  if (known) db().prepare("UPDATE products SET frag_data = ? WHERE id = ?").run(known.frag_data, p.id);
+  else if (!pre) await fetchDetails(p.id).catch((e) => log("warn", `Fragrantica (ficha): ${(e as Error).message}`));
   await fetchFragram(p.id).catch((e) => log("warn", `Fragram: ${(e as Error).message}`));
   return name;
 }
@@ -377,9 +379,14 @@ export async function standardize(productId: number, pre?: Hit[]): Promise<strin
  * Fotos da seção "Fragram Photos" da página do perfume. O servidor não abre o Fragrantica direto (Cloudflare),
  * então a página vem pelo Web Fetch do Apify (~US$ 0,0015 por página); guarda só as URLs das fotos.
  */
-export async function fetchFragram(productId: number): Promise<number> {
+export async function fetchFragram(productId: number, force = false): Promise<number> {
   const p = db().prepare("SELECT frag_url FROM products WHERE id = ?").get(productId) as { frag_url: string | null } | undefined;
   if (!p?.frag_url || !process.env.APIFY_TOKEN) return 0;
+  // página já lida (por este ou outro cadastro do mesmo perfume): não paga de novo
+  if (!force && db().prepare("SELECT 1 FROM products WHERE frag_url = ? AND fragram_at IS NOT NULL UNION SELECT 1 FROM frag_photos WHERE frag_url = ?").get(p.frag_url, p.frag_url)) {
+    db().prepare("UPDATE products SET fragram_at = COALESCE(fragram_at, datetime('now')) WHERE frag_url = ?").run(p.frag_url);
+    return (db().prepare("SELECT COUNT(*) n FROM frag_photos WHERE frag_url = ?").get(p.frag_url) as { n: number }).n;
+  }
   const label = decodeURIComponent(new URL(p.frag_url).pathname.split("/").pop() || "").replace(/-\d+\.html$/, "").replace(/-/g, " ");
   return tracked("frag_photos", { productId, label }, () => fetchFragramRaw(p.frag_url!), (n) => ({ items: 1, result: `${n} foto(s)` }));
 }
@@ -445,6 +452,15 @@ export async function fragranticaStep(max = 10) {
     }
     const res = await Promise.all(list.map((x) => standardize(x.id, found.get(x.q) || []).catch((e) => (log("warn", `Fragrantica: ${(e as Error).message}`), ""))));
     const changed = res.filter((n) => n && n !== "não achei" && n !== "nome vazio").length;
+    // mesma página do Fragrantica já lida por outro cadastro (outro ml): copia, não paga de novo
+    db().prepare(
+      `UPDATE products SET frag_data = (SELECT p2.frag_data FROM products p2 WHERE p2.frag_url = products.frag_url AND p2.frag_data IS NOT NULL LIMIT 1)
+       WHERE frag_data IS NULL AND frag_url IS NOT NULL AND EXISTS (SELECT 1 FROM products p2 WHERE p2.frag_url = products.frag_url AND p2.frag_data IS NOT NULL)`,
+    ).run();
+    db().prepare(
+      `UPDATE products SET fragram_at = datetime('now') WHERE fragram_at IS NULL AND frag_url IS NOT NULL
+       AND (EXISTS (SELECT 1 FROM products p2 WHERE p2.frag_url = products.frag_url AND p2.fragram_at IS NOT NULL) OR EXISTS (SELECT 1 FROM frag_photos f WHERE f.frag_url = products.frag_url))`,
+    ).run();
     // já achados antes desta versão: busca a ficha completa (2 por rodada)
     const old = db().prepare("SELECT MIN(id) id FROM products WHERE frag_url IS NOT NULL AND frag_data IS NULL GROUP BY frag_url LIMIT 20").all() as { id: number }[];
     await fetchDetailsBatch(old.map((r) => r.id)).catch((e) => log("warn", `Fragrantica (fichas): ${(e as Error).message}`));
