@@ -540,7 +540,7 @@ export function startWorker() {
       // casados errado antes da regra nova: volta o nome original e procura de novo
       const undo = db().prepare("UPDATE products SET name = ?, frag_url = NULL, frag_name = NULL, frag_brand = NULL, frag_data = NULL, frag_checked_at = NULL, fragram_at = NULL WHERE name = ?");
       undo.run("Rabanne 1 Million Gold Eau de Parfum Intense 100ml", "Rabanne Million Gold For Her 100ml");
-      undo.run("Natura Homem Evolutio 100ml", "Natura Homem 100ml");
+      db().prepare("UPDATE products SET name = 'Natura Homem Evolutio 100ml', frag_url = NULL, frag_name = NULL, frag_brand = NULL, frag_data = NULL, frag_checked_at = NULL, fragram_at = NULL WHERE id = (SELECT id FROM products WHERE name = 'Natura Homem 100ml' AND frag_checked_at BETWEEN '2026-11-17 16:47:00' AND '2026-11-17 16:50:00' LIMIT 1)").run();
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
     }
     if (getState("fragRoyalV1") !== "1") {
