@@ -130,9 +130,44 @@ export async function plainEdgeColor(src: Buffer): Promise<{ r: number; g: numbe
  * - fundo com cenário: foto inteira no centro e as sobras com a própria foto desfocada (último recurso;
  *   a curadoria já prefere fotos quadradas para isso quase não acontecer).
  */
+/**
+ * Tira faixas brancas de moldura nas bordas (foto colada num fundo branco, como as de loja no Pinterest).
+ * Só corta quando a faixa é branca de ponta a ponta e logo depois começa a foto (borda nítida).
+ * Foto de produto em fundo branco não é cortada: ali o branco continua depois da borda.
+ */
+export async function trimFrame(src: Buffer): Promise<Buffer> {
+  const meta = await sharp(src).metadata();
+  const W = meta.width || 0, H = meta.height || 0;
+  if (!W || !H) return src;
+  const w = Math.min(300, W), h = Math.max(1, Math.round((H * w) / W));
+  const { data } = await sharp(src).resize(w, h, { fit: "fill" }).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+  const white = (x: number, y: number) => {
+    const i = (y * w + x) * 3;
+    return data[i] > 238 && data[i + 1] > 238 && data[i + 2] > 238;
+  };
+  const rowW = (y: number) => { let n = 0; for (let x = 0; x < w; x++) if (white(x, y)) n++; return n / w; };
+  const colW = (x: number) => { let n = 0; for (let y = 0; y < h; y++) if (white(x, y)) n++; return n / h; };
+  const band = (len: number, frac: (i: number) => number, from: number, step: number) => {
+    let k = 0;
+    while (k < len * 0.3 && frac(from + k * step) >= 0.97) k++;
+    if (!k) return 0;
+    // depois da faixa tem que vir foto de verdade, não fundo branco
+    const next = frac(from + Math.min(len - 1, k + 1) * step);
+    return next < 0.5 ? k : 0;
+  };
+  const top = band(h, rowW, 0, 1), bottom = band(h, rowW, h - 1, -1);
+  const left = band(w, colW, 0, 1), right = band(w, colW, w - 1, -1);
+  if (!top && !bottom && !left && !right) return src;
+  const sx = W / w, sy = H / h, pad = 2;
+  const L = Math.round(left * sx) + (left ? pad : 0), T = Math.round(top * sy) + (top ? pad : 0);
+  const R = Math.round(right * sx) + (right ? pad : 0), B = Math.round(bottom * sy) + (bottom ? pad : 0);
+  if (W - L - R < W * 0.5 || H - T - B < H * 0.5) return src;
+  return sharp(src).extract({ left: L, top: T, width: W - L - R, height: H - T - B }).png().toBuffer();
+}
+
 export async function squareCanvas(input: Buffer, size = 1080): Promise<Buffer> {
   const img = sharp(input, { failOn: "none" }).rotate().flatten({ background: "#ffffff" });
-  const src = await img.png().toBuffer();
+  const src = await trimFrame(await img.png().toBuffer());
   const meta = await sharp(src).metadata();
   const w = meta.width || size, h = meta.height || size;
   const ratio = w / h;
