@@ -430,34 +430,18 @@ export function fragProfileLines(productId: number): string[] {
     d = row?.frag_data ? JSON.parse(row.frag_data) : null;
   } catch {}
   if (!d) return [];
-  const out: string[] = [];
+  // uma linha só (Arthur): "☀️ Pro dia · cítrico, aromático, marinho"
   const sv = d.seasons || {};
   const day = Number(sv.day) || 0, night = Number(sv.night) || 0;
-  const parts: string[] = [];
-  if (day + night >= 10) {
-    const r = day / (day + night);
-    parts.push(r >= 0.65 ? "☀️ Mais pro dia" : r <= 0.35 ? "🌙 Mais pra noite" : "🌗 Dia e noite");
-  }
-  const SEASONS: [string, string][] = [["spring", "primavera"], ["summer", "verão"], ["autumn", "outono"], ["winter", "inverno"]];
-  const sv2 = SEASONS.map(([k, n]) => ({ n, v: Number(sv[k]) || 0 })).filter((x) => x.v > 0);
-  const top = Math.max(0, ...sv2.map((x) => x.v));
-  if (top >= 10) {
-    const best = sv2.filter((x) => x.v >= top * 0.7).map((x) => x.n);
-    const icon = best.every((n) => n === "verão" || n === "primavera") ? "🌸" : best.every((n) => n === "inverno" || n === "outono") ? "❄️" : "🗓️";
-    const txt = best.length >= 3 ? "Ano todo" : best.join(" e ");
-    parts.push(`${best.length >= 3 ? "🗓️" : icon} ${txt.charAt(0).toUpperCase()}${txt.slice(1)}`);
-  }
-  if (parts.length) out.push(parts.join(" · "));
-  const acc = (d.accords || []).slice(0, 3).map((a) => a.name.toLowerCase()).filter(Boolean);
-  if (acc.length) out.push(`🎯 Notas: ${acc.join(", ")}`);
-  const lon = Number(d.longevity) || 0;
-  if (lon) out.push(`⏳ Fixação: ${lon >= 4 ? "muito alta" : lon >= 3.3 ? "alta" : lon >= 2.5 ? "moderada" : "fraca"}`);
-  return out;
+  const when = day + night >= 10 ? (day / (day + night) >= 0.65 ? "☀️ Pro dia" : day / (day + night) <= 0.35 ? "🌙 Pra noite" : "🌗 Dia e noite") : "";
+  const acc = (d.accords || []).slice(0, 3).map((a) => a.name.toLowerCase()).filter(Boolean).join(", ");
+  const line = [when, acc].filter(Boolean).join(" · ");
+  return line ? [line] : [];
 }
 
 /** Põe o perfil do Fragrantica antes do link do produto (uma vez só). */
 export function withFragProfile(text: string, productId: number): string {
-  if (/⏳ Fixação|🎯 Notas|☀️ Mais pro dia|🌙 Mais pra noite|🌗 Dia e noite/.test(text)) return text;
+  if (/☀️ Pro dia|🌙 Pra noite|🌗 Dia e noite/.test(text)) return text;
   const lines = fragProfileLines(productId);
   if (!lines.length) return text;
   const all = text.split("\n");
