@@ -152,7 +152,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
 type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number; flags: string | null };
 
 function PinReview() {
-  const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean }>("/api/pinterest");
+  const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean }>("/api/pinterest", 30_000);
   const [busy, setBusy] = React.useState<number | null>(null);
   const [big, setBig] = React.useState<PinPhoto | null>(null);
   const [showSus, setShowSus] = React.useState<Record<number, boolean>>({});
@@ -262,7 +262,15 @@ function PinReview() {
 }
 
 export default function FotosPage() {
-  const [tab, setTab] = React.useState<"fotos" | "pin">("fotos");
+  // link direto: /fotos#pinterest abre a aba de escolha
+  const [tab, setTabState] = React.useState<"fotos" | "pin">("fotos");
+  React.useEffect(() => {
+    if (window.location.hash === "#pinterest") setTabState("pin");
+  }, []);
+  const setTab = (t: "fotos" | "pin") => {
+    setTabState(t);
+    history.replaceState(null, "", t === "pin" ? "#pinterest" : window.location.pathname);
+  };
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
   const [sel, setSel] = React.useState<number | null>(null);
