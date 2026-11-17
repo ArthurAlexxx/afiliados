@@ -454,6 +454,11 @@ export function startWorker() {
             .catch((e) => log("warn", `Refazer post #${old.id}: ${(e as Error).message}`));
         }, 30_000);
     }
+    // Fragrantica: tenta de novo os que não foram achados antes da correção do apóstrofo
+    if (getState("fragRetryV1") !== "1") {
+      setState("fragRetryV1", "1");
+      db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
+    }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {
       saveSettings({ activeTo: "23:00" });
