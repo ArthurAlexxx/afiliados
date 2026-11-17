@@ -19,6 +19,7 @@ type Row = {
   current: number | null;
   waiting: string | null;
   expires: string | null;
+  ml: { url: string; title: string; group_name: string } | null;
   frag: { state: "ready" | "busy" | "queued" | "found" | "nophotos" | "notfound" | "skip" | "paused" | "idle"; text: string; call?: string | null };
   bank: Opt[];
   pins: Opt[];
@@ -253,9 +254,26 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
               <Card key={row.id} className={cn("overflow-hidden p-0", row.blocked && "opacity-50", row.waiting && "ring-2 ring-amber-400/70")}>
                 {/* topo: nome, situação no Fragrantica e ações */}
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-[var(--border-soft)] px-4 py-3">
-                  <button onClick={() => onOpen(row.id)} className="min-w-0 flex-1 text-left text-[15px] leading-snug font-semibold hover:underline">
-                    {row.name}
-                  </button>
+                  <div className="min-w-0 flex-1">
+                    <button onClick={() => onOpen(row.id)} className="text-left text-[15px] leading-snug font-semibold hover:underline">
+                      {row.name}
+                    </button>
+                    {row.ml?.title && row.ml.title.trim().toLowerCase() !== row.name.trim().toLowerCase() ? (
+                      <div className="mt-0.5 truncate text-[11.5px] text-muted-foreground" title={row.ml.title}>
+                        No anúncio ({row.ml.group_name}): {row.ml.title}
+                      </div>
+                    ) : null}
+                  </div>
+                  {row.ml ? (
+                    <a
+                      href={row.ml.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex h-7 shrink-0 items-center gap-1.5 rounded-lg bg-yellow-300 px-2.5 text-[11.5px] font-semibold text-gray-900 hover:bg-yellow-400"
+                    >
+                      Ver no Mercado Livre <ExternalLink className="size-3.5" />
+                    </a>
+                  ) : null}
                   {row.waiting ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2.5 py-1 text-[11.5px] font-semibold text-amber-700 dark:text-amber-300">
                       <Clock className="size-3.5" /> Post esperando · descarta em {left(row.expires)}

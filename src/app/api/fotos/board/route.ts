@@ -86,6 +86,11 @@ export async function GET(req: Request) {
     if (r.frag_url) return { state: "found", text: "Achado no Fragrantica. Fotos só são buscadas quando for postar", call };
     return { state: "idle", text: "Ainda não procurado. Só busca quando for postar", call };
   };
+  // anúncio no Mercado Livre (link da oferta mais recente, de preferência do próprio ML) para conferir o modelo exato
+  const mlOf = db().prepare(
+    `SELECT url, title, group_name FROM offers WHERE product_id = ? AND url IS NOT NULL AND url != ''
+     ORDER BY (url LIKE '%mercadolivre%' OR url LIKE '%mercadolibre%') DESC, created_at DESC LIMIT 1`,
+  );
   const rows = list.slice(offset, offset + LIMIT).map((r) => {
     const pth = chosenImagePath(r.id);
     const cur = pth ? (idOf.get(pth) as { id: number } | undefined)?.id ?? null : null;
@@ -99,6 +104,7 @@ export async function GET(req: Request) {
       waiting: r.waiting,
       expires: r.waiting ? new Date(new Date(r.waiting.replace(" ", "T") + "Z").getTime() + 3 * 3600e3).toISOString() : null,
       frag: fragOf(r),
+      ml: (mlOf.get(r.id) as { url: string; title: string; group_name: string } | undefined) ?? null,
       bank: imgs.all(r.id),
       pins: pins.all(r.id),
       fragram: r.frag_url ? frags.all(r.frag_url) : [],
