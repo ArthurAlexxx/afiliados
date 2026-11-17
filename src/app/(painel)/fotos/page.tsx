@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { api, useApi, timeAgo } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
-type Prod = { id: number; name: string; n: number; active: number; cover: number | null; main: number | null; last: string };
+type Prod = { id: number; name: string; n: number; active: number; cover: number | null; main: number | null; main_pin: number | null; pin_pending: number; pin_searched: number; last: string };
 type Img = { id: number; width: number; height: number; score: number; disabled: number; created_at: string; message_id: string | null; group_name: string };
 
 function Lightbox({ imgs, index, onIndex, onClose, onToggle, mainId, onMain }: {
@@ -366,6 +366,7 @@ export default function FotosPage() {
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
   const [sel, setSel] = React.useState<number | null>(null);
+  const [filter, setFilter] = React.useState<"all" | "pin" | "own" | "none" | "choose">("all");
   React.useEffect(() => {
     const t = setTimeout(() => setDeb(q), 300);
     return () => clearTimeout(t);
@@ -398,9 +399,36 @@ export default function FotosPage() {
             <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input placeholder="Buscar perfume..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
           </div>
+          {data && (() => {
+            const c = {
+              all: data.rows.length,
+              pin: data.rows.filter((p) => p.main && p.main_pin).length,
+              own: data.rows.filter((p) => p.main && !p.main_pin).length,
+              none: data.rows.filter((p) => !p.main).length,
+              choose: data.rows.filter((p) => p.pin_pending > 0).length,
+            };
+            const opts: [typeof filter, string][] = [
+              ["all", `Todos (${c.all})`],
+              ["pin", `★ Escolhida do Pinterest (${c.pin})`],
+              ["own", `★ Escolhida sem Pinterest (${c.own})`],
+              ["none", `Sem principal (${c.none})`],
+              ["choose", `Com opções do Pinterest para escolher (${c.choose})`],
+            ];
+            return (
+              <div className="mb-4 flex flex-wrap gap-2">
+                {opts.map(([k, label]) => (
+                  <Button key={k} size="sm" variant={filter === k ? "accent" : "outline"} onClick={() => setFilter(k)}>{label}</Button>
+                ))}
+              </div>
+            );
+          })()}
           {data ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-              {data.rows.map((p) => (
+              {data.rows
+                .filter((p) =>
+                  filter === "pin" ? p.main && p.main_pin : filter === "own" ? p.main && !p.main_pin : filter === "none" ? !p.main : filter === "choose" ? p.pin_pending > 0 : true,
+                )
+                .map((p) => (
                 <button key={p.id} onClick={() => setSel(p.id)} className="group overflow-hidden rounded-xl border bg-card text-left">
                   {p.cover ? (
                     // eslint-disable-next-line @next/next/no-img-element
@@ -411,8 +439,13 @@ export default function FotosPage() {
                   <div className="border-t px-3 py-2">
                     <div className="line-clamp-2 text-[12.5px] leading-snug font-medium">{p.name}</div>
                     <div className="mt-0.5 text-[11.5px] text-muted-foreground">
-                      {p.active} foto(s){p.n > p.active ? ` · ${p.n - p.active} desligada(s)` : ""} · {p.main ? "★ principal escolhida" : "automática"}
+                      {p.active} foto(s){p.n > p.active ? ` · ${p.n - p.active} desligada(s)` : ""} · {p.main ? (p.main_pin ? "★ escolhida do Pinterest" : "★ escolhida") : "automática"}
                     </div>
+                    {p.pin_pending > 0 ? (
+                      <div className="mt-1"><Badge tone="warning">{p.pin_pending} opção(ões) do Pinterest para escolher</Badge></div>
+                    ) : !p.pin_searched ? (
+                      <div className="mt-1 text-[11px] text-muted-foreground">ainda não buscado no Pinterest</div>
+                    ) : null}
                   </div>
                 </button>
               ))}

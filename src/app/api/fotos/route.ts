@@ -27,6 +27,9 @@ export async function GET(req: Request) {
       `SELECT p.id, p.name, COUNT(i.id) n, SUM(i.disabled = 0) active,
               COALESCE(p.main_image_id, (SELECT i2.id FROM images i2 WHERE i2.product_id = p.id AND i2.disabled = 0 ORDER BY i2.score DESC LIMIT 1)) cover,
               p.main_image_id main,
+              (SELECT m.message_id LIKE 'pin:%' FROM images m WHERE m.id = p.main_image_id) main_pin,
+              (SELECT COUNT(*) FROM pin_photos f WHERE f.product_id = p.id AND f.status = 'pending' AND f.url NOT IN ('none','searching')) pin_pending,
+              (SELECT COUNT(*) FROM pin_photos f WHERE f.product_id = p.id) pin_searched,
               MAX(i.created_at) last
        FROM products p JOIN images i ON i.product_id = p.id
        WHERE p.name LIKE ? GROUP BY p.id ORDER BY last DESC LIMIT 300`,
