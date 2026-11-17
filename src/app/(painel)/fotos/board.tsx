@@ -83,6 +83,27 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, loadingMore]);
 
+  // chegou ou saiu post esperando foto (aviso global a cada 8s): atualiza a lista sem recarregar a página
+  const waitKey = React.useRef("");
+  React.useEffect(() => {
+    const on = (e: Event) => {
+      const rows = (e as CustomEvent<{ post: number }[]>).detail;
+      const key = rows.map((r) => r.post).join(",");
+      if (waitKey.current && key !== waitKey.current) {
+        api<Resp>(url(0))
+          .then((r) => {
+            if (!picked.current && f === "fragram" && r.counts.wait) return setFState("wait");
+            setData((d) => (d && f !== "wait" ? { ...r, rows: [...r.rows, ...d.rows.filter((x) => !r.rows.some((y) => y.id === x.id))] } : r));
+          })
+          .catch(() => undefined);
+      }
+      waitKey.current = key;
+    };
+    window.addEventListener("waiting-photos", on);
+    return () => window.removeEventListener("waiting-photos", on);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f, deb]);
+
   React.useEffect(() => {
     const el = sentinel.current;
     if (!el) return;

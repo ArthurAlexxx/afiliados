@@ -8,6 +8,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { WaitingWatch } from "./waiting-watch";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import {
   LayoutDashboard,
@@ -203,6 +204,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-background">
+      <WaitingWatch />
       {/* Desktop */}
       <nav
         aria-label="Navegação principal"
