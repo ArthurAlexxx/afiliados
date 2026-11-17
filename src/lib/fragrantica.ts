@@ -243,17 +243,27 @@ export async function fetchFragram(productId: number): Promise<number> {
   const p = db().prepare("SELECT frag_url FROM products WHERE id = ?").get(productId) as { frag_url: string | null } | undefined;
   if (!p?.frag_url || !process.env.APIFY_TOKEN) return 0;
   const page = "https://www.fragrantica.com" + new URL(p.frag_url).pathname;
-  const r = await fetch(`https://apify--web-fetch.apify.actor/?formats=links&url=${encodeURIComponent(page)}`, {
+  const r = await fetch(`https://apify--web-fetch.apify.actor/?formats=html&url=${encodeURIComponent(page)}`, {
     headers: { authorization: `Bearer ${process.env.APIFY_TOKEN}` },
     signal: AbortSignal.timeout(90000),
   });
   if (!r.ok) throw new Error(`Web Fetch respondeu ${r.status}: ${(await r.text()).slice(0, 160)}`);
-  const j = (await r.json()) as { links?: string[]; fetch?: { httpStatusCode?: number } };
+  const j = (await r.json()) as { html?: string; fetch?: { httpStatusCode?: number } };
   if (j.fetch?.httpStatusCode && j.fetch.httpStatusCode >= 400) throw new Error(`Fragrantica respondeu ${j.fetch.httpStatusCode}`);
-  const urls = [...new Set((j.links || []).filter((u) => /^https:\/\/fimgs\.net\/photogram\/p1200\//.test(u)))];
+  const html = j.html || "";
+  const found = new Map<string, string>(); // url grande -> miniatura
+  // fotos dos usuários (Fragram): qualquer tamanho (p180, p600, p1200) vira a de 1200px
+  for (const m of html.matchAll(/https:\/\/fimgs\.net\/photogram\/p\d+\/([a-z0-9]{2})\/([a-z0-9]{2})\/([A-Za-z0-9_-]+)\.(jpg|jpeg|png|webp)/g)) {
+    const path = `${m[1]}/${m[2]}/${m[3]}.${m[4]}`;
+    found.set(`https://fimgs.net/photogram/p1200/${path}`, `https://fimgs.net/photogram/p180/${path}`);
+  }
+  // perfume sem fotos de usuários: a seção mostra as fotos oficiais da marca ("secundar"), 580px
+  for (const m of html.matchAll(/https:\/\/fimgs\.net\/mdimg\/secundar\/[a-z]+\.(\d+)\.jpg/g))
+    found.set(`https://fimgs.net/mdimg/secundar/o.${m[1]}.jpg`, `https://fimgs.net/mdimg/secundar/fit.${m[1]}.jpg`);
+  const urls = [...found.keys()];
   const ins = db().prepare("INSERT OR IGNORE INTO frag_photos (frag_url, url, thumb) VALUES (?, ?, ?)");
   let n = 0;
-  for (const u of urls) n += Number(ins.run(p.frag_url, u, u.replace("/p1200/", "/p180/")).changes);
+  for (const u of urls) n += Number(ins.run(p.frag_url, u, found.get(u)!).changes);
   db().prepare("UPDATE products SET fragram_at = datetime('now') WHERE frag_url = ?").run(p.frag_url);
   log("info", `Fragram: ${urls.length} foto(s) em ${page.split("/").pop()} (${n} nova(s))`);
   return urls.length;
@@ -281,8 +291,7 @@ export async function fragranticaStep(max = 4) {
     const gram = db()
       .prepare(
         `SELECT MIN(p.id) id FROM products p WHERE p.frag_url IS NOT NULL AND p.fragram_at IS NULL
-         AND NOT EXISTS (SELECT 1 FROM frag_photos f WHERE f.frag_url = p.frag_url)
-         GROUP BY p.frag_url ORDER BY MAX(EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo')) DESC, MAX(p.id) DESC LIMIT 3`,
+         GROUP BY p.frag_url ORDER BY MAX(EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo')) DESC, MAX(p.id) DESC LIMIT 5`,
       )
       .all() as { id: number }[];
     await Promise.all(gram.map((r) => fetchFragram(r.id).catch((e) => log("warn", `Fragram: ${(e as Error).message}`))));

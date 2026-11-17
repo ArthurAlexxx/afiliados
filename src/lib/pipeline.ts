@@ -522,6 +522,11 @@ export function startWorker() {
       // Armani Code Parfum tinha virado "Code Colonia": #555 é o Parfum (Arthur)
       db().prepare("UPDATE products SET frag_url = 'https://www.fragrantica.com/perfume/Giorgio-Armani/Armani-Code-Parfum-75126.html', frag_name = 'Armani Code Parfum', frag_brand = 'Giorgio Armani', name = 'Armani Code Parfum ' || ml || 'ml', frag_data = NULL, fragram_at = NULL WHERE id = 555").run();
     }
+    // Fragram lido de novo pelo HTML inteiro (antes só pegava os links e perdia fotos)
+    if (getState("fragramHtmlV1") !== "1") {
+      setState("fragramHtmlV1", "1");
+      db().prepare("UPDATE products SET fragram_at = NULL").run();
+    }
     if (getState("fragRoyalV1") !== "1") {
       setState("fragRoyalV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL AND lower(name) LIKE '%royal collection%'").run();
