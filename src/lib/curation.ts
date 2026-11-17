@@ -540,6 +540,30 @@ function sinceLastCuratedMs() {
 const gapMs = (s: Settings) => (s.curationPerHour > 0 ? (60 / s.curationPerHour) * 60e3 : 0);
 
 /**
+ * Ritmo espelhado no RP Promos (pedido do Arthur, sócio dele): na última hora, postamos tantos quanto eles postaram.
+ * Sem o grupo na lista, volta para o ritmo fixo de curationPerHour.
+ */
+export const MIRROR_GROUP = process.env.MIRROR_GROUP || "RP PROMOS";
+const MIRROR_MIN_GAP = 3 * 60e3; // nunca dois posts nossos com menos de 3 min
+let paceCache: { at: number; v: { mirror: boolean; theirs: number; ours: number } } | null = null;
+export function pace(s: Settings) {
+  if (paceCache && Date.now() - paceCache.at < 20e3) return paceCache.v;
+  const jids = (db().prepare("SELECT jid FROM groups WHERE upper(name) LIKE ?").all(`%${MIRROR_GROUP.toUpperCase()}%`) as { jid: string }[]).map((r) => r.jid);
+  const ours = (db().prepare("SELECT COUNT(*) n FROM posts WHERE origin='curated' AND status IN ('queued','sending','sent') AND created_at >= datetime('now','-60 minutes')").get() as { n: number }).n;
+  let v = { mirror: false, theirs: s.curationPerHour, ours };
+  if (jids.length) {
+    const theirs = (
+      db()
+        .prepare(`SELECT COUNT(*) n FROM offers WHERE group_jid IN (${jids.map(() => "?").join(",")}) AND created_at >= datetime('now','-60 minutes')`)
+        .get(...jids) as { n: number }
+    ).n;
+    v = { mirror: true, theirs, ours };
+  }
+  paceCache = { at: Date.now(), v };
+  return v;
+}
+
+/**
  * Promoção fora de série pode furar o ritmo de N/h: nota muito alta, menor preço histórico ou vendas disparando.
  * Mesmo assim, sem spam: no máximo N+3 posts na última hora e pelo menos 4 min entre posts.
  */
@@ -547,10 +571,13 @@ export function exceptional(item: RankItem, s: Settings) {
   const special = item.score >= 85 || (item.sales?.boost || 0) >= 15 || isHistoricLow(item.productId, item.bestPrice, (item.best as { message_id?: string } | null)?.message_id);
   if (!special) return false;
   const lastHour = (db().prepare("SELECT COUNT(*) n FROM posts WHERE origin='curated' AND status IN ('queued','sending','sent') AND created_at >= datetime('now','-60 minutes')").get() as { n: number }).n;
-  return lastHour < s.curationPerHour + 3 && sinceLastCuratedMs() >= 4 * 60e3;
+  const p = pace(s);
+  return lastHour < (p.mirror ? p.theirs + 1 : s.curationPerHour + 3) && sinceLastCuratedMs() >= 4 * 60e3;
 }
 
 export function slotOpen(s: Settings) {
+  const p = pace(s);
+  if (p.mirror) return p.ours < p.theirs && sinceLastCuratedMs() >= MIRROR_MIN_GAP;
   return sinceLastCuratedMs() >= gapMs(s);
 }
 
@@ -562,7 +589,7 @@ export async function evaluateInstant(productId: number): Promise<string> {
   const item = ranking(s).find((r) => r.productId === productId);
   if (!item || !item.eligible) return item?.why || "";
   if (item.score < s.curationInstantScore) return `nota ${item.score} < ${s.curationInstantScore}`;
-  if (!slotOpen(s) && !exceptional(item, s)) return `nota ${item.score}, aguardando o ritmo de ${s.curationPerHour}/h`;
+  if (!slotOpen(s) && !exceptional(item, s)) return `nota ${item.score}, aguardando o ritmo (${pace(s).mirror ? `${MIRROR_GROUP}: ${pace(s).theirs} na última hora, nós ${pace(s).ours}` : `${s.curationPerHour}/h`})`;
   // evita duas escolhas simultâneas do mesmo perfume (várias mensagens chegando juntas)
   const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now','-10 minutes')").get(productId);
   if (busy) return "já escolhido";
@@ -701,7 +728,17 @@ export function startCuration() {
       // garante o ritmo mínimo: se a vaga abriu e em 2 min não chegou nada com nota alta,
       // posta a melhor promoção que estiver valendo
       const since = sinceLastCuratedMs();
-      if (s.curationPerHour > 0 && since >= gapMs(s)) {
+      const p = pace(s);
+      if (p.mirror && slotOpen(s)) {
+        // espelho do RP: estamos atrás deles na última hora, posta a melhor promoção valendo
+        const top = ranking(s).find((i) => i.eligible);
+        if (top) {
+          paceCache = null;
+          log("info", `Ritmo ${MIRROR_GROUP}: eles ${p.theirs} na última hora, nós ${p.ours}; postando ${top.name}`);
+          await pickAndQueue({ productId: top.productId });
+          return;
+        }
+      } else if (!p.mirror && s.curationPerHour > 0 && since >= gapMs(s)) {
         const top = ranking(s).find((i) => i.eligible);
         if (top && (top.score >= s.curationInstantScore || since >= gapMs(s) + 2 * 60e3)) {
           await pickAndQueue({ productId: top.productId });
