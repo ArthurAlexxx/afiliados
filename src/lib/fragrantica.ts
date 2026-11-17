@@ -109,7 +109,12 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     const brandToks = toks(h.brand).filter((t) => !GENERIC.has(t));
     // a marca tem que aparecer no nosso nome (ou o nosso nome não ter marca nenhuma)
     const ourHasBrand = ourAll.some((t) => isBrand(t) || BRAND_WORDS.has(t));
-    if (brandToks.length && ourHasBrand && !brandToks.some((t) => has(ourAll, t))) continue;
+    const brandIn = brandToks.some((t) => has(ourAll, t));
+    if (brandToks.length && ourHasBrand && !brandIn) continue;
+    // números do nosso nome (212, 1 Million, 9pm) têm que estar no da Fragrantica: "212 NYC" ≠ "Nutrimetics NYC"
+    const nums = toks(ourName.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => /^\d+$/.test(t));
+    const theirs = toks(`${h.brand} ${h.name}`);
+    if (nums.some((n) => !theirs.includes(n))) continue;
     const nameToks = toks(h.name).filter((t) => !GENERIC.has(t) || VARIANT.has(t));
     const key = nameToks.filter((t) => !GENERIC.has(t));
     if (!key.length) continue;
@@ -123,6 +128,8 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
     // a maior parte das nossas palavras explicada pela marca + nome
     const explained = ours.filter((t) => has(nameToks, t) || has(brandToks, t) || isBrand(t)).length;
     if (explained / Math.max(1, ours.length) < 0.6) continue;
+    // sem a marca no nosso nome: só aceita nome com 2+ palavras e perfume conhecido
+    if (!brandIn && (key.length < 2 || (h.ratingCount || 0) < 300)) continue;
     const sc = key.length * 10 + explained + Math.log10(1 + (h.ratingCount || 0)) / 10;
     ok.push(h);
     if (sc > bestScore) (bestScore = sc), (best = h);

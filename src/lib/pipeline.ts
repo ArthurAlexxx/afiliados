@@ -483,6 +483,11 @@ export function startWorker() {
         }
       })();
     }
+    // Fragrantica: desfaz um nome errado ("212 NYC Men" tinha virado "Nutrimetics NYC") e busca de novo
+    if (getState("fragFixNycV1") !== "1") {
+      setState("fragFixNycV1", "1");
+      db().prepare("UPDATE products SET name = '212 NYC Men EDT 200ml', frag_name = NULL, frag_brand = NULL, frag_url = NULL, frag_data = NULL, frag_checked_at = NULL WHERE frag_brand = 'Nutrimetics'").run();
+    }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {
       saveSettings({ activeTo: "23:00" });
