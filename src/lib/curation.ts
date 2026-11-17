@@ -1104,14 +1104,15 @@ const isParfum = (t: string) => perfumeInfo(t)?.conc === "parfum";
  * errada é esquecida para ser procurada de novo.
  */
 export function splitParfum(): number {
-  const prods = db().prepare("SELECT id, conc, name, frag_url FROM products").all() as { id: number; conc: string | null; name: string; frag_url: string | null }[];
+  const prods = db().prepare("SELECT id, conc, name, frag_url, ml, tokens FROM products").all() as { id: number; conc: string | null; name: string; frag_url: string | null; ml: number; tokens: string }[];
   let moved = 0;
   const touched = new Set<number>();
   const tx = db();
   for (const p of prods) {
     const mine = p.conc === "parfum";
     const offers = tx.prepare("SELECT id, title FROM offers WHERE product_id = ?").all(p.id) as { id: number; title: string }[];
-    const other = offers.filter((o) => o.title && perfumeInfo(o.title) && isParfum(o.title) !== mine);
+    const pinfo = { ml: (p as { ml?: number }).ml ?? 0, conc: p.conc, tokens: JSON.parse((p as { tokens?: string }).tokens || "[]") as string[], key: "" };
+    const other = offers.filter((o) => o.title && perfumeInfo(o.title) && isParfum(o.title) !== mine && !samePerfume(perfumeInfo(o.title)!, pinfo));
     if (!other.length) continue;
     for (const o of other) {
       const info = perfumeInfo(o.title)!;
@@ -1124,7 +1125,7 @@ export function splitParfum(): number {
     const posts = tx.prepare("SELECT id, original_text FROM posts WHERE product_id = ?").all(p.id) as { id: number; original_text: string }[];
     for (const q of posts) {
       const title = (q.original_text || "").split("\n").map((l) => l.replace(/[*_~]/g, "").trim()).find((l) => perfumeInfo(l)) || "";
-      if (!title || isParfum(title) === mine) continue;
+      if (!title || isParfum(title) === mine || samePerfume(perfumeInfo(title)!, pinfo)) continue;
       const to = findOrCreateProduct(perfumeInfo(title)!, title);
       if (to !== p.id) tx.prepare("UPDATE posts SET product_id = ? WHERE id = ?").run(to, q.id);
     }
@@ -1141,6 +1142,14 @@ export function splitParfum(): number {
     db().prepare("UPDATE products SET frag_url = NULL, frag_name = NULL, frag_brand = NULL, frag_data = NULL, frag_accords = NULL, fragram_at = NULL, frag_searched = 0, frag_checked_at = NULL WHERE id = ?").run(id);
   }
   return moved;
+}
+
+/** Desfaz separações erradas da 1ª versão: Natura "Parfum" = Deo Parfum; linha que só existe em Parfum (Royal) junta de novo. */
+export function fixParfumSplit(): number {
+  const rows = db().prepare("SELECT id, name, pkey FROM products WHERE conc = 'parfum'").all() as { id: number; name: string; pkey: string }[];
+  for (const r of rows)
+    if (perfumeOrigin(r.name) === "nacional") db().prepare("UPDATE products SET conc = 'deo', pkey = REPLACE(pkey, '|parfum', '|deo') WHERE id = ?").run(r.id);
+  return mergeDuplicateProducts();
 }
 
 export function mergeDuplicateProducts(): number {

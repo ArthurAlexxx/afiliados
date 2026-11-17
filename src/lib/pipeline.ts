@@ -588,15 +588,23 @@ export function startWorker() {
   // fotos: medidas das fotos antigas (para a escolha automática aprender com as principais)
   setTimeout(() => import("./photoprefs.ts").then((m) => m.backfillFeatures()).catch((e) => log("warn", `Fotos: ${(e as Error).message}`)), 90e3);
   // "Parfum" separado da versão comum (Arthur, 17/nov: Stronger With You Parfum foi postado com o nome do comum)
-  import("./curation.ts").then(({ splitParfum }) => {
-    if (getState("splitParfumV1")) return;
-    try {
-      const n = splitParfum();
-      log("info", `Parfum separado da versão comum: ${n} oferta(s) movida(s)`);
-    } catch (e) {
-      log("warn", `Parfum: ${(e as Error).message}`);
+  import("./curation.ts").then(({ splitParfum, fixParfumSplit }) => {
+    if (!getState("splitParfumV1")) {
+      try {
+        const n = splitParfum();
+        log("info", `Parfum separado da versão comum: ${n} oferta(s) movida(s)`);
+      } catch (e) {
+        log("warn", `Parfum: ${(e as Error).message}`);
+      }
     }
     setState("splitParfumV1", "1");
+    if (getState("fixParfumV2")) return;
+    try {
+      log("info", `Parfum: ${fixParfumSplit()} separação(ões) desfeita(s) (Natura Deo Parfum e linhas só Parfum)`);
+    } catch (e) {
+      log("warn", `Parfum v2: ${(e as Error).message}`);
+    }
+    setState("fixParfumV2", "1");
   });
   // "Deo Parfum" (Natura/Boticário) passa a ter concentração própria, separada de "Parfum"
   import("./settings.ts").then(({ getState, setState }) => {

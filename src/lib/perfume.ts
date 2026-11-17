@@ -100,6 +100,8 @@ export function perfumeInfo(title: string): PerfumeInfo | null {
   else if (/\bdeo[\s-]*parfum\b/.test(n)) conc = "deo";
   else if (/\bparfum\b/.test(n)) conc = "parfum";
   else if (/\b(colonia|edc|eau de cologne)\b/.test(n)) conc = "colonia";
+  // Natura/Boticário chamam o "Deo Parfum" só de "Parfum" nos grupos: é a mesma coisa
+  if (conc === "parfum" && perfumeOrigin(title) === "nacional") conc = "deo";
 
   const tokens = [
     ...new Set(
@@ -123,7 +125,11 @@ function jaccard(a: string[], b: string[]) {
 export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
   if (a.ml !== b.ml) return false;
   // "Parfum" é outro produto (212 Men ≠ 212 Men Parfum), mesmo quando o outro título não diz a concentração
-  if ((a.conc === "parfum") !== (b.conc === "parfum")) return false;
+  // Exceção: linha que só existe em Parfum (1 Million Royal, Le Male Elixir Absolu), quando o outro título não diz a concentração.
+  if ((a.conc === "parfum") !== (b.conc === "parfum")) {
+    const other = a.conc === "parfum" ? b : a;
+    if (other.conc || !FLANKERS.some((f) => a.tokens.includes(f) && b.tokens.includes(f))) return false;
+  }
   if (a.conc && b.conc && a.conc !== b.conc) {
     // "Colônia" e "EDT" são usados como sinônimos em nacionais (Boticário/Natura)
     const loose = new Set(["colonia", "edt"]);
