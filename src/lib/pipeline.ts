@@ -596,6 +596,16 @@ export function startWorker() {
     }
     if (rows.length) log("info", `Notas: ${rows.length} post(s) da fila corrigido(s)`);
   }
+    // concentração saiu do post (só serve para a busca): limpa a linha da marca dos posts que ainda não saíram
+  {
+    const rows = db().prepare("SELECT id, formatted_text FROM posts WHERE status IN ('queued','photo','review','failed') AND formatted_text LIKE '%🏷️%·%·%'").all() as { id: number; formatted_text: string }[];
+    let n = 0;
+    for (const r of rows) {
+      const t = r.formatted_text.replace(/^(🏷️ .*?) · (?:Parfum|Eau de Parfum|Eau de Toilette|Extrait de Parfum|Colônia|Deo Parfum)( · \d+ml)?$/m, "$1$2");
+      if (t !== r.formatted_text) (db().prepare("UPDATE posts SET formatted_text = ? WHERE id = ?").run(t, r.id), n++);
+    }
+    if (n) log("info", `Concentração tirada de ${n} post(s) da fila`);
+  }
     // "Parfum" separado da versão comum (Arthur, 17/nov: Stronger With You Parfum foi postado com o nome do comum)
   import("./curation.ts").then(({ splitParfum, fixParfumSplit }) => {
     if (!getState("splitParfumV1")) {

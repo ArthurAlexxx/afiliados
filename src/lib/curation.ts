@@ -404,21 +404,26 @@ export function isHistoricLow(productId: number, price: number | null, messageId
  * Arthur (nov/2026): no post, nome do perfume como está no Fragrantica, e embaixo a marca e o tamanho.
  * Troca a linha do título já renderizada (funciona com qualquer template).
  */
+const CONC_WORDS = /\s+(?:extrait de parfum|eau de parfum|eau de toilette|eau de cologne|(?<!\ble\s)parfum|edp|edt)\b/gi;
+
 export function withFragTitle(text: string, productId: number, oldTitle: string): string {
   const p = db().prepare("SELECT frag_name, frag_brand, ml, conc FROM products WHERE id = ?").get(productId) as
     | { frag_name: string | null; frag_brand: string | null; ml: number; conc: string | null }
     | undefined;
-  if (!p?.frag_name || !p.frag_brand || !oldTitle) return text;
+  if (!oldTitle) return text;
+  if (!p?.frag_name || !p.frag_brand) {
+    // sem Fragrantica: tira a concentração do título que veio do grupo
+    const clean = oldTitle.replace(CONC_WORDS, "").replace(/\s{2,}/g, " ").trim();
+    return clean && clean !== oldTitle ? text.split("\n").map((l) => (l.includes(oldTitle) ? l.replace(oldTitle, clean) : l)).join("\n") : text;
+  }
   const brand = p.frag_brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim();
   const nice = brand === brand.toUpperCase() && /[A-Z]{3}/.test(brand) ? brand.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : brand;
   const lines = text.split("\n");
   const i = lines.findIndex((l) => l.includes(oldTitle));
   if (i < 0) return text;
   const name = lines[i].replace(oldTitle, p.frag_name);
-  // concentração na linha da marca: Parfum, EDP e EDT têm preços diferentes (Arthur, 17/nov)
-  const CONC: Record<string, string> = { parfum: "Parfum", edp: "Eau de Parfum", edt: "Eau de Toilette", extrait: "Extrait de Parfum", colonia: "Colônia", deo: "Deo Parfum" };
-  const conc = p.conc && CONC[p.conc] && !norm(p.frag_name).includes(norm(CONC[p.conc])) ? CONC[p.conc] : "";
-  lines.splice(i, 1, name, `🏷️ ${nice}${conc ? ` · ${conc}` : ""}${p.ml ? ` · ${p.ml}ml` : ""}`);
+  // concentração só serve para achar a página certa no Fragrantica, não aparece no post (Arthur, 17/nov)
+  lines.splice(i, 1, name.replace(CONC_WORDS, "").replace(/\s{2,}/g, " ").replace(/\s+(\*?)$/, "$1"), `🏷️ ${nice}${p.ml ? ` · ${p.ml}ml` : ""}`);
   return lines.join("\n");
 }
 
