@@ -86,7 +86,7 @@ export async function fetchDetails(productId: number): Promise<FragData | null> 
 }
 
 async function search(q: string): Promise<Hit[]> {
-  return ((await runActor({ searchQueries: [q], scrapeDetails: false, maxResults: 12 })) as unknown as Hit[]).filter((h) => h.name && h.brand);
+  return ((await runActor({ searchQueries: [q], scrapeDetails: false, maxResults: 8 })) as unknown as Hit[]).filter((h) => h.name && h.brand);
 }
 
 /** Palavras que identificam o perfume no nosso nome (sem ml, concentração, gênero, "árabe"…). */

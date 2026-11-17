@@ -65,20 +65,34 @@ function titleMatches(product: string, title: string) {
 }
 
 /** Busca no Pinterest e guarda até `max` fotos candidatas do perfume. Devolve quantas novas. */
+const pinInFlight = new Set<number>();
 export async function findPinPhotos(productId: number, max = 10): Promise<number> {
+  // o mesmo perfume às vezes é pedido duas vezes no mesmo segundo (post esperando + automático): busca uma vez só
+  if (pinInFlight.has(productId)) return 0;
+  pinInFlight.add(productId);
+  try {
+    return await findPinPhotosOnce(productId, max);
+  } finally {
+    pinInFlight.delete(productId);
+  }
+}
+
+async function findPinPhotosOnce(productId: number, max: number): Promise<number> {
   const p = db().prepare("SELECT name FROM products WHERE id = ?").get(productId) as { name: string } | undefined;
   if (!p) return 0;
   const base = p.name.replace(/\b\d{2,4}\s*ml\b/gi, "").replace(/\b(eau de (parfum|toilette)|edp|edt|masculino|feminino|perfume|árabe|arabe|original)\b/gi, " ").replace(/[-|]/g, " ").replace(/\s+/g, " ").trim();
   const query = `${base} perfume`;
-  // nome de nicho às vezes não acha com "perfume": tenta também só o nome e "fragrance", na mesma busca
-  let pins = (await searchPins([query, base, `${base} fragrance`], 25)).filter((x) => titleMatches(p.name, x.title));
+  // cada pin custa no Apify: uma busca só, de 25 pins (antes eram 3 buscas = 75 pins)
+  let pins = (await searchPins([query], 25)).filter((x) => titleMatches(p.name, x.title));
+  // nome de nicho às vezes não acha com "perfume": tenta só o nome, uma vez
+  if (pins.length < 3) pins = [...pins, ...(await searchPins([base], 25)).filter((x) => titleMatches(p.name, x.title) && !pins.some((y) => y.url === x.url))];
   // o Pinterest bloqueia algumas palavras para quem não está logado (ex: "Vibrato" volta vazio).
   // Com pouco resultado, busca a linha sem uma das palavras ("Sospiro") e filtra pelo título e pela cor depois.
   if (pins.length < 5) {
     const toks = nameTokens(p.name);
     const variants = toks.length >= 2 ? toks.map((_, i) => toks.filter((__, j) => j !== i).join(" ")) : [];
     if (variants.length) {
-      const more = (await searchPins(variants.map((v) => `${v} perfume`), 40)).filter((x) => titleMatches(p.name, x.title));
+      const more = (await searchPins(variants.slice(0, 2).map((v) => `${v} perfume`), 20)).filter((x) => titleMatches(p.name, x.title));
       const seen = new Set(pins.map((x) => x.url));
       pins = [...pins, ...more.filter((x) => !seen.has(x.url))];
     }
