@@ -240,13 +240,22 @@ export default function WhatsAppPage() {
   );
 
   return (
-    <div className="-mx-4 -my-6 md:-mx-8 md:-my-8">
-      <div className="flex h-[calc(100dvh-3.5rem)] overflow-hidden border-[#d1d7db] bg-white text-[#111b21] md:h-[100dvh] dark:border-[#222d34] dark:bg-[#111b21] dark:text-[#e9edef]">
+    <div>
+      <div className="mb-4 flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-2xl font-bold md:text-3xl">WhatsApp</h1>
+          <p className="mt-1 text-[13px] text-muted-foreground">As conversas do nosso número, como no app. O nosso grupo fica fixado no topo para acompanhar os posts saindo.</p>
+        </div>
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-3 py-1 text-[12px] font-medium text-emerald-700 dark:text-emerald-300">
+          <Lock className="size-3.5" /> Só visualização
+        </span>
+      </div>
+      <div className="flex h-[calc(100dvh-14rem)] min-h-[520px] overflow-hidden rounded-2xl border border-[#d1d7db] bg-white text-[#111b21] shadow-[0_10px_40px_-12px_rgba(0,0,0,0.25)] dark:border-[#222d34] dark:bg-[#111b21] dark:text-[#e9edef]">
         {/* lista de conversas */}
         <aside className={cn("flex w-full shrink-0 flex-col border-r border-[#e9edef] md:w-[380px] dark:border-[#222d34]", open && "hidden md:flex")}>
-          <header className="flex items-center justify-between px-4 pt-3 pb-2">
-            <h1 className="text-[22px] font-bold">WhatsApp</h1>
-            <span className="flex items-center gap-1 text-[11.5px] text-[#667781] dark:text-[#8696a0]"><Lock className="size-3" /> só visualização</span>
+          <header className="flex items-center justify-between px-4 pt-4 pb-2">
+            <h2 className="text-[20px] font-bold">Conversas</h2>
+            <span className="text-[12px] text-[#667781] dark:text-[#8696a0]">{chats ? `${chats.length}` : ""}</span>
           </header>
           <div className="px-3 pb-2">
             <div className="flex items-center gap-3 rounded-full bg-[#f0f2f5] px-4 py-2 dark:bg-[#202c33]">
@@ -355,8 +364,8 @@ export default function WhatsAppPage() {
                   })
                 )}
               </div>
-              <footer className="flex items-center gap-3 bg-[#f0f2f5] px-4 py-2.5 dark:bg-[#202c33]">
-                <div className="flex-1 rounded-lg bg-white px-4 py-2.5 text-[14px] text-[#667781] dark:bg-[#2a3942] dark:text-[#8696a0]">
+              <footer className="flex items-center gap-3 bg-[#f0f2f5] px-4 py-3 dark:bg-[#202c33]">
+                <div className="flex-1 rounded-full bg-white px-5 py-2.5 text-[14px] text-[#667781] dark:bg-[#2a3942] dark:text-[#8696a0]">
                   Só visualização: as mensagens saem pelo robô
                 </div>
               </footer>

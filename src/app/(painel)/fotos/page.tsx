@@ -1,593 +1,487 @@
 "use client";
 
+/**
+ * Fotos dos perfumes: galeria com todos os perfumes. Clicou num card, abre o perfume com a foto
+ * grande (como sai no post, 1:1) e um carrossel embaixo com todas as opções (Fragrantica e grupos).
+ */
 import * as React from "react";
-import { Check, ChevronLeft, ChevronRight, Download, EyeOff, Eye, Search, Star, X } from "lucide-react";
+import { Ban, Check, ChevronLeft, ChevronRight, Crop as CropIcon, EyeOff, ExternalLink, ImageOff, Loader2, Search, Star, X } from "lucide-react";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/app-shell";
 import { Card } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, useApi, timeAgo } from "@/lib/client";
+import { CropSquare, type Crop } from "@/components/crop-square";
+import { api } from "@/lib/client";
 import { cn } from "@/lib/utils";
-import { PhotoBoard } from "./board";
 import { DropPhoto } from "./drop";
 
-type Prod = { id: number; name: string; n: number; active: number; cover: number | null; main: number | null; main_pin: number | null; pin_pending: number; pin_searched: number; last: string };
-type Img = { id: number; width: number; height: number; score: number; disabled: number; created_at: string; message_id: string | null; group_name: string };
-
-function Lightbox({ imgs, index, onIndex, onClose, onToggle, mainId, onMain }: {
-  imgs: Img[]; index: number; onIndex: (i: number) => void; onClose: () => void; onToggle: (i: Img) => void;
-  mainId: number | null; onMain: (i: Img) => void;
-}) {
-  const img = imgs[index];
-  const [zoom, setZoom] = React.useState(false);
-  React.useEffect(() => setZoom(false), [index]);
-  React.useEffect(() => {
-    const k = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-      if (e.key === "ArrowRight") onIndex((index + 1) % imgs.length);
-      if (e.key === "ArrowLeft") onIndex((index - 1 + imgs.length) % imgs.length);
-    };
-    window.addEventListener("keydown", k);
-    return () => window.removeEventListener("keydown", k);
-  }, [index, imgs.length, onClose, onIndex]);
-  if (!img) return null;
-  return (
-    <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={onClose}>
-      <div className="flex items-center gap-3 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
-        <span className="tabular-nums opacity-70">{index + 1} / {imgs.length}</span>
-        <span className="opacity-90">{img.width}×{img.height}px · nota {img.score}{img.group_name ? ` · ${img.group_name}` : ""}{img.message_id?.startsWith("fix:") ? " · refeita pela IA" : ""}</span>
-        {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
-        <div className="ml-auto flex items-center gap-2">
-          <button onClick={() => onMain(img)} className={cn("flex h-8 items-center gap-1.5 rounded-lg px-3", mainId === img.id ? "bg-accent text-accent-foreground" : "bg-white/10 hover:bg-white/20")}>
-            <Star className="size-4" /> {mainId === img.id ? "Principal (tirar)" : "Definir como principal"}
-          </button>
-          <a href={`/api/fotos/${img.id}`} download={`foto-${img.id}.jpg`} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20">
-            <Download className="size-4" /> Baixar
-          </a>
-          <button onClick={() => onToggle(img)} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20">
-            {img.disabled ? <Eye className="size-4" /> : <EyeOff className="size-4" />} {img.disabled ? "Usar nos posts" : "Não usar nos posts"}
-          </button>
-          <button onClick={onClose} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20">
-            <X className="size-4" />
-          </button>
-        </div>
-      </div>
-      <div className={cn("relative min-h-0 flex-1 px-14 pb-4", zoom ? "overflow-auto" : "flex items-center justify-center")}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={`/api/fotos/${img.id}`}
-          alt=""
-          title={zoom ? "Clique para caber na tela" : "Clique para ver em 100% (resolução máxima)"}
-          className={cn(zoom ? "max-w-none cursor-zoom-out" : "max-h-full max-w-full cursor-zoom-in object-contain")}
-          onClick={(e) => { e.stopPropagation(); setZoom((z) => !z); }}
-        />
-        {imgs.length > 1 && (
-          <>
-            <button aria-label="Anterior" onClick={(e) => { e.stopPropagation(); onIndex((index - 1 + imgs.length) % imgs.length); }} className="absolute left-3 flex size-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
-              <ChevronLeft className="size-5" />
-            </button>
-            <button aria-label="Próxima" onClick={(e) => { e.stopPropagation(); onIndex((index + 1) % imgs.length); }} className="absolute right-3 flex size-10 items-center justify-center rounded-full bg-white/10 hover:bg-white/20">
-              <ChevronRight className="size-5" />
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Opções do Pinterest de um perfume, na página dele: buscar, ver e escolher sem sair da tela. */
-function PinOptions({ productId, onChosen }: { productId: number; onChosen: () => void }) {
-  const { data, reload } = useApi<{ rows: PinPhoto[] }>(`/api/pinterest?productId=${productId}`);
-  const [searching, setSearching] = React.useState(false);
-  const [busy, setBusy] = React.useState<number | null>(null);
-  const [big, setBig] = React.useState<PinPhoto | null>(null);
-  const rows = data?.rows || [];
-  const search = async () => {
-    setSearching(true);
-    try {
-      const r = await api<{ msg: string }>("/api/pinterest", { method: "POST", json: { productId } });
-      toast.success(r.msg);
-      reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setSearching(false);
-    }
-  };
-  const decide = async (p: PinPhoto, ok: boolean) => {
-    setBusy(p.id);
-    try {
-      await api("/api/pinterest", { method: "POST", json: ok ? { id: p.id, main: true } : { id: p.id, ok: false } });
-      toast.success(ok ? "Escolhida: é a foto principal desse perfume nos próximos posts" : "Recusada");
-      setBig(null);
-      reload();
-      if (ok) onChosen();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <div className="mb-6 rounded-xl border bg-card p-4">
-      <div className="mb-3 flex flex-wrap items-center gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-[14px] font-semibold">Opções do Pinterest</div>
-          <div className="text-[12px] text-muted-foreground">
-            {searching
-              ? "Buscando no Pinterest… leva uns 20 a 60 segundos."
-              : rows.length
-                ? `${rows.length} opção(ões). Clique em Escolher na melhor: ela vira a foto principal desse perfume.`
-                : "Nenhuma opção ainda. Clique em Buscar para trazer fotos do Pinterest."}
-          </div>
-        </div>
-        <Button size="sm" variant="accent" disabled={searching} onClick={search}>
-          <Search className="size-4" /> {searching ? "Buscando…" : rows.length ? "Buscar mais" : "Buscar no Pinterest"}
-        </Button>
-      </div>
-      {searching && !rows.length ? <div className="h-40 animate-pulse rounded-lg bg-muted" /> : null}
-      {rows.length ? (
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-          {rows.map((p) => (
-            <div key={p.id} className={cn("overflow-hidden rounded-xl border bg-card", p.flags && "border-warning opacity-80")}>
-              <button onClick={() => setBig(p)} className="block w-full" title={p.title || "Ver maior"}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/pinterest/${p.id}?w=600`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain" />
-              </button>
-              {p.flags ? <div className="border-t px-2 py-1 text-[11px] text-warning">{p.flags}</div> : null}
-              <div className="px-2 pt-2 text-[11.5px] text-muted-foreground tabular-nums">{p.width}×{p.height}</div>
-              <div className="grid grid-cols-[auto_1fr] gap-1.5 px-2 pt-1.5 pb-2">
-                <Button size="sm" variant="outline" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar" title="Recusar"><X className="size-3.5" /></Button>
-                <Button size="sm" variant="accent" disabled={busy === p.id} onClick={() => decide(p, true)}><Check className="size-3.5" /> Escolher</Button>
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : null}
-      {big && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={() => setBig(null)}>
-          <div className="flex items-center gap-2 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
-            <span className="min-w-0 truncate opacity-90">{big.width}×{big.height}px{big.flags ? ` · ${big.flags}` : ""}</span>
-            <div className="ml-auto flex gap-2">
-              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
-              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
-              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
-            </div>
-          </div>
-          <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/pinterest/${big.id}`} alt="" className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-type Frag = {
-  url: string; name: string; brand: string; year: number | null; gender: string | null; description: string;
-  top: string[]; middle: string[]; base: string[]; accords: { name: string; strength: number; color: string }[];
-  seasons: Record<string, number>; longevity: number | null; sillage: number | null; rating: number | null; ratingCount: number | null;
+type Opt = { id: number; url?: string; thumb?: string | null; crop?: string | null; width?: number; height?: number };
+type Row = {
+  id: number;
+  name: string;
+  main: number | null;
+  blocked: number;
+  fragUrl: string | null;
+  current: number | null;
+  currentCrop: string | null;
+  waiting: string | null;
+  frag: { state: string; text: string; call?: string | null };
+  ml: { url: string; title: string; group_name: string } | null;
+  bank: Opt[];
+  fragram: Opt[];
 };
-const SEASONS: [string, string][] = [["winter", "Inverno"], ["autumn", "Outono"], ["spring", "Primavera"], ["summer", "Verão"], ["day", "Dia"], ["night", "Noite"]];
-const LONG = ["", "muito fraca", "fraca", "moderada", "duradoura", "eterna"];
-const SILL = ["", "íntima", "moderada", "forte", "enorme"];
+type Resp = { rows: Row[]; total: number; more: boolean; counts: { all: number; wait: number; none: number; fragram: number } };
+type Kind = "bank" | "fragram";
+type Item = { k: Kind; o: Opt };
 
-/** Ficha da Fragrantica: descrição, notas, acordes, estações, fixação e projeção. */
-function FragCard({ raw }: { raw: string }) {
-  let f: Frag;
+const sq = (it: Item, w: number) =>
+  it.k === "bank" ? `/api/fotos/square?img=${it.o.id}&w=${w}&c=${encodeURIComponent(it.o.crop || "")}` : `/api/fotos/square?frag=${it.o.id}&w=${w}`;
+const orig = (it: Item) => (it.k === "bank" ? `/api/fotos/${it.o.id}?w=1200` : it.o.url!);
+const parse = (c?: string | null): Crop | null => {
   try {
-    f = JSON.parse(raw);
+    return c ? (JSON.parse(c) as Crop) : null;
   } catch {
     return null;
   }
-  const maxSeason = Math.max(1, ...SEASONS.map(([k]) => f.seasons?.[k] || 0));
+};
+const itemsOf = (r: Row): Item[] => {
+  const bank = r.bank.map((o) => ({ k: "bank" as const, o }));
+  const cur = bank.findIndex((b) => b.o.id === r.current);
+  // a escolhida primeiro, depois Fragrantica, depois as dos grupos
+  const first = cur >= 0 ? bank.splice(cur, 1) : [];
+  return [...first, ...r.fragram.map((o) => ({ k: "fragram" as const, o })), ...bank];
+};
+
+/* ---------------- card da galeria ---------------- */
+
+function PerfumeCard({ r, onOpen }: { r: Row; onOpen: () => void }) {
+  const items = itemsOf(r);
+  const cover = r.current ? `/api/fotos/square?img=${r.current}&w=360&c=${encodeURIComponent(r.currentCrop || "")}` : items[0] ? sq(items[0], 360) : null;
   return (
-    <Card className="mb-4 grid gap-4 p-4 text-[13px] md:grid-cols-[1.3fr_1fr]">
-      <div className="space-y-3">
-        <div className="flex flex-wrap items-baseline gap-2">
-          <a href={f.url} target="_blank" rel="noreferrer" className="text-[14px] font-semibold hover:underline">{f.brand} {f.name}</a>
-          <span className="text-muted-foreground">{[f.gender, f.year].filter(Boolean).join(" · ")}</span>
-          {f.rating ? <Badge tone="success">★ {f.rating.toFixed(2)} ({f.ratingCount} votos)</Badge> : null}
-        </div>
-        {f.description ? <p className="text-muted-foreground">{f.description}</p> : null}
-        <div className="grid gap-1">
-          {[["Topo", f.top], ["Coração", f.middle], ["Fundo", f.base]].map(([l, n]) =>
-            (n as string[]).length ? (
-              <div key={l as string}><b>{l as string}:</b> {(n as string[]).join(", ")}</div>
-            ) : null,
+    <button
+      onClick={onOpen}
+      className={cn(
+        "group overflow-hidden rounded-xl border border-[var(--border-soft)] bg-card text-left shadow-xs transition hover:-translate-y-0.5 hover:shadow-md",
+        r.blocked && "opacity-50",
+      )}
+    >
+      <div className="relative aspect-square bg-muted">
+        {cover ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={cover} alt="" loading="lazy" className={cn("size-full object-cover", !r.current && "opacity-80 saturate-50")} />
+        ) : (
+          <div className="flex size-full items-center justify-center text-muted-foreground">
+            <ImageOff className="size-8 opacity-40" />
+          </div>
+        )}
+        <span
+          className={cn(
+            "absolute top-2 left-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
+            r.current ? "bg-violet-600 text-white" : "bg-black/60 text-white",
           )}
-        </div>
-        <div className="flex gap-4 text-muted-foreground">
-          {f.longevity ? <span>Fixação: <b className="text-foreground">{LONG[Math.round(f.longevity)] || f.longevity.toFixed(1)}</b></span> : null}
-          {f.sillage ? <span>Projeção: <b className="text-foreground">{SILL[Math.round(f.sillage)] || f.sillage.toFixed(1)}</b></span> : null}
+        >
+          {r.current ? <Star className="size-3" /> : null}
+          {r.current ? "Escolhida" : "Sem foto escolhida"}
+        </span>
+        {r.waiting ? <span className="absolute top-2 right-2 rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-semibold text-gray-900">Post esperando</span> : null}
+        {r.blocked ? <span className="absolute right-2 bottom-2 rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-semibold text-white">Não postar</span> : null}
+      </div>
+      <div className="p-3">
+        <div className="line-clamp-2 min-h-[2.6em] text-[13.5px] leading-snug font-semibold">{r.name}</div>
+        <div className="mt-1.5 flex items-center gap-2 text-[11.5px] text-muted-foreground">
+          <span>{items.length} foto(s)</span>
+          {r.fragram.length ? <span className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-emerald-700 dark:text-emerald-300">Fragrantica {r.fragram.length}</span> : null}
+          {r.bank.length ? <span className="rounded bg-muted px-1.5 py-0.5">grupos {r.bank.length}</span> : null}
         </div>
       </div>
-      <div className="space-y-3">
-        <div className="space-y-1">
-          {f.accords.slice(0, 7).map((a) => (
-            <div key={a.name} className="rounded px-2 py-0.5 text-[12px] font-medium text-black/80" style={{ width: `${Math.max(30, a.strength)}%`, background: a.color }}>{a.name}</div>
-          ))}
-        </div>
-        <div className="grid grid-cols-6 items-end gap-1.5">
-          {SEASONS.map(([k, l]) => (
-            <div key={k} className="text-center text-[11px] text-muted-foreground">
-              <div className="mx-auto mb-1 w-full rounded-sm bg-accent/70" style={{ height: `${Math.round(40 * ((f.seasons?.[k] || 0) / maxSeason)) + 2}px` }} />
-              {l}
-            </div>
-          ))}
-        </div>
-      </div>
-    </Card>
+    </button>
   );
 }
 
-/** Fotos da seção "Fragram Photos" do Fragrantica. Clicou em "Usar", a foto é baixada e vira a principal. */
-function Fragram({ productId, photos, onChosen }: { productId: number; photos: { id: number; url: string; thumb: string | null }[]; onChosen: () => void }) {
-  const [busy, setBusy] = React.useState<number | null>(null);
-  const [all, setAll] = React.useState(false);
-  const shown = all ? photos : photos.slice(0, 24);
-  async function use(p: { id: number; url: string }) {
-    setBusy(p.id);
+/* ---------------- modal do perfume ---------------- */
+
+function PerfumeModal({ id, onClose, onChanged }: { id: number; onClose: () => void; onChanged: (r: Row | null) => void }) {
+  const [r, setR] = React.useState<Row | null>(null);
+  const [i, setI] = React.useState(0);
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [crop, setCrop] = React.useState<{ it: Item; initial: Crop | null; adjust?: boolean; dropped?: boolean } | null>(null);
+  const strip = React.useRef<HTMLDivElement>(null);
+
+  const load = React.useCallback(async () => {
+    const d = await api<Resp>(`/api/fotos/board?id=${id}`);
+    const row = d.rows[0] || null;
+    setR(row);
+    onChanged(row);
+    return row;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+  React.useEffect(() => {
+    void load().then(() => setI(0));
+  }, [load]);
+
+  const items = r ? itemsOf(r) : [];
+  const it = items[Math.min(i, Math.max(0, items.length - 1))];
+  const isCur = !!it && it.k === "bank" && it.o.id === r?.current;
+
+  React.useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      if (crop) return;
+      if (e.key === "Escape") onClose();
+      if (e.key === "ArrowRight") setI((x) => Math.min(items.length - 1, x + 1));
+      if (e.key === "ArrowLeft") setI((x) => Math.max(0, x - 1));
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  });
+  React.useEffect(() => {
+    strip.current?.querySelector<HTMLElement>(`[data-i="${i}"]`)?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+  }, [i]);
+
+  async function use(item: Item, c?: Crop) {
+    if (!r) return;
+    setBusy("use");
     try {
-      const r = await api<{ msg: string }>("/api/fotos/upload", { method: "POST", json: { productId, url: p.url } });
-      toast.success(r.msg || "Foto do Fragrantica virou a principal");
-      onChosen();
+      if (item.k === "bank") await api("/api/fotos", { method: "PATCH", json: { productId: r.id, mainImageId: item.o.id, crop: c } });
+      else await api("/api/fotos/upload", { method: "POST", json: { productId: r.id, url: item.o.url, crop: c } });
+      toast.success(r.waiting ? "Foto escolhida: o post está saindo" : "Foto principal trocada");
+      await load();
+      setI(0);
     } catch (e) {
       toast.error((e as Error).message);
     } finally {
       setBusy(null);
     }
   }
+  async function hide(item: Item) {
+    if (!r) return;
+    await api("/api/fotos", { method: "PATCH", json: { id: item.o.id, disabled: true } }).catch((e) => toast.error((e as Error).message));
+    toast.success("Foto escondida");
+    await load();
+  }
+  async function toggleBlock() {
+    if (!r) return;
+    await api("/api/fotos", { method: "PATCH", json: { productId: r.id, blocked: !r.blocked } });
+    toast.success(r.blocked ? "Liberado para postar" : "Não vai ser postado (Posts › Rejeitados)");
+    await load();
+  }
+
   return (
-    <Card className="mb-4 p-4">
-      <div className="mb-3 text-[13px] font-semibold">Fragram Photos · Fragrantica <span className="font-normal text-muted-foreground">({photos.length} fotos de usuários)</span></div>
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
-        {shown.map((p) => (
-          <div key={p.id} className="group relative overflow-hidden rounded-lg border">
-            <a href={p.url} target="_blank" rel="noreferrer">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={p.thumb || p.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="aspect-square w-full object-cover" />
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-6" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="flex max-h-full w-full max-w-5xl flex-col overflow-hidden rounded-2xl bg-card shadow-2xl">
+        {/* topo */}
+        <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border-soft)] px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[16px] font-bold">{r?.name || "Carregando…"}</div>
+            {r ? (
+              <div className="truncate text-[12px] text-muted-foreground">
+                Fragrantica: {r.frag.text}
+                {r.ml?.title ? ` · anúncio: ${r.ml.title}` : ""}
+              </div>
+            ) : null}
+          </div>
+          {r?.ml ? (
+            <a href={r.ml.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-yellow-300 px-3 text-[12px] font-semibold text-gray-900 hover:bg-yellow-400">
+              Mercado Livre <ExternalLink className="size-3.5" />
             </a>
-            <Button size="sm" className="absolute inset-x-1 bottom-1 h-7 text-[11px] opacity-0 group-hover:opacity-100" disabled={busy !== null} onClick={() => use(p)}>
-              {busy === p.id ? "Baixando…" : "Usar como principal"}
+          ) : null}
+          {r?.fragUrl ? (
+            <a href={r.fragUrl} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-[var(--border-soft)] px-3 text-[12px] font-medium hover:bg-muted">
+              Fragrantica <ExternalLink className="size-3.5" />
+            </a>
+          ) : null}
+          {r ? (
+            <Button size="sm" variant="outline" className="h-8 text-[12px]" onClick={toggleBlock}>
+              <Ban className="size-3.5" /> {r.blocked ? "Liberar" : "Não postar"}
             </Button>
-          </div>
-        ))}
-      </div>
-      {photos.length > 24 && !all ? (
-        <Button variant="outline" size="sm" className="mt-3" onClick={() => setAll(true)}>Ver todas as {photos.length}</Button>
-      ) : null}
-    </Card>
-  );
-}
-
-
-function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
-  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null; blocked?: number; frag_data?: string | null; frag_url?: string | null }; images: Img[]; used: number | null; fragram?: { id: number; url: string; thumb: string | null }[] }>(`/api/fotos?id=${id}`);
-  const blocked = Boolean(data?.product?.blocked);
-  const setBlocked = async () => {
-    try {
-      await api("/api/fotos", { method: "PATCH", json: { productId: id, blocked: !blocked } });
-      toast.success(blocked ? "Perfume liberado para postar" : "Esse perfume não será mais postado");
-      reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
-  const mainId = data?.product?.main_image_id ?? null;
-  const setMain = async (img: Img) => {
-    const off = mainId === img.id;
-    try {
-      await api("/api/fotos", { method: "PATCH", json: { productId: id, mainImageId: off ? null : img.id } });
-      toast.success(off ? "Voltou para a escolha automática da melhor foto" : "Foto principal definida: os próximos posts desse perfume usam ela");
-      reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
-  const [open, setOpen] = React.useState<number | null>(null);
-  const toggle = async (img: Img) => {
-    try {
-      await api("/api/fotos", { method: "PATCH", json: { id: img.id, disabled: !img.disabled } });
-      toast.success(img.disabled ? "Foto volta a ser usada nos posts" : "Foto não será mais usada nos posts");
-      reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    }
-  };
-  const imgs = data?.images || [];
-  return (
-    <>
-      <div className="mb-4 flex items-center gap-3">
-        <Button variant="outline" size="sm" onClick={onBack}><ChevronLeft className="size-4" /> Todos os perfumes</Button>
-        <Button variant={blocked ? "accent" : "outline"} size="sm" className="order-last ml-auto" onClick={setBlocked}>
-          {blocked ? "Bloqueado · liberar" : "Não postar este perfume"}
-        </Button>
-        <div className="min-w-0">
-          <div className="truncate text-[15px] font-semibold">{data?.product?.name || "…"}</div>
-          <div className="text-[12px] text-muted-foreground">
-            {imgs.length} foto(s) ·{" "}
-            {mainId
-              ? "principal escolhida por você"
-              : "escolha automática: o sistema usa a melhor foto, seguindo o gosto aprendido das suas principais. Não gostou? Torne outra principal."}
-          </div>
+          ) : null}
+          <button onClick={onClose} className="rounded-md p-1.5 text-muted-foreground hover:bg-muted" aria-label="Fechar">
+            <X className="size-5" />
+          </button>
         </div>
-      </div>
-      {data?.product?.frag_data ? <FragCard raw={data.product.frag_data} /> : null}
-      <DropPhoto productId={id} onAdded={reload} />
-      {data?.fragram?.length ? <Fragram productId={id} photos={data.fragram} onChosen={reload} /> : null}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
-        {imgs.map((img, i) => (
-          <div key={img.id} className={cn("group overflow-hidden rounded-xl border bg-card text-left", mainId === img.id && "ring-2 ring-accent", img.disabled && "opacity-50")}>
-            <button onClick={() => setOpen(i)} className="block w-full overflow-hidden" title="Abrir em tela cheia">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/fotos/${img.id}?w=900`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain transition-transform group-hover:scale-[1.02]" />
-            </button>
-            <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2 text-[12px] text-muted-foreground">
-              <Button size="sm" variant={mainId === img.id ? "accent" : "outline"} onClick={() => setMain(img)}>
-                <Star className="size-3.5" /> {mainId === img.id ? "Principal" : "Tornar principal"}
-              </Button>
-              <span className="tabular-nums">{img.width}×{img.height}</span>
-              <span>nota {img.score}</span>
-              {data?.used === img.id ? <Badge tone="success">{mainId ? "Usada nos posts" : "Usada nos posts (automática)"}</Badge> : null}
-              {img.message_id?.startsWith("fix:") ? <Badge tone="info">IA</Badge> : null}
-              {img.message_id?.startsWith("manual:") ? <Badge tone="info">Você colocou</Badge> : null}
-              {img.message_id?.startsWith("pin:") ? <Badge tone="info">Pinterest</Badge> : null}
-              {img.message_id?.startsWith("frag:") ? <Badge tone="info">Fragrantica</Badge> : null}
-              {img.disabled ? <Badge tone="warning">Desligada</Badge> : null}
-              <span className="ml-auto truncate">{timeAgo(img.created_at)}</span>
+
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          {!r ? (
+            <div className="flex h-80 items-center justify-center text-muted-foreground">
+              <Loader2 className="size-6 animate-spin" />
             </div>
-          </div>
-        ))}
-      </div>
-      {open != null && <Lightbox imgs={imgs} index={open} onIndex={setOpen} onClose={() => setOpen(null)} onToggle={toggle} mainId={mainId} onMain={setMain} />}
-    </>
-  );
-}
-
-type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number; flags: string | null; last_posted_at: string | null; queued: number | null };
-
-type Training = { n: number; hits: number; top2: number; chance: number; likes: string[]; min: number; rate: number; auto: boolean };
-
-function PinReview() {
-  const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean; training?: Training }>("/api/pinterest", 30_000);
-  const t = data?.training;
-  const [busy, setBusy] = React.useState<number | null>(null);
-  const [big, setBig] = React.useState<PinPhoto | null>(null);
-  const [showSus, setShowSus] = React.useState<Record<number, boolean>>({});
-  const decide = async (p: PinPhoto, ok: boolean) => {
-    setBusy(p.id);
-    try {
-      await api("/api/pinterest", { method: "POST", json: ok ? { id: p.id, main: true } : { id: p.id, ok: false } });
-      toast.success(ok ? "Escolhida: é a foto principal desse perfume nos próximos posts" : "Recusada");
-      setBig(null);
-      reload();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(null);
-    }
-  };
-  const groups = new Map<number, PinPhoto[]>();
-  for (const r of data?.rows || []) groups.set(r.product_id, [...(groups.get(r.product_id) || []), r]);
-  return (
-    <>
-      <div className="mb-4 rounded-xl bg-muted px-4 py-3 text-[12.5px] text-muted-foreground">
-        Fotos achadas no Pinterest para perfumes das promoções com poucas fotos. Em cada perfume, clique em <b>Escolher</b> na melhor: ela vira a foto principal dos próximos posts.
-        As outras não vão para os posts, mas ensinam o seu gosto: com as suas escolhas, o sistema aprende e passa a escolher sozinho.
-        Recuse antes as que forem de outro perfume ou tiverem marca, @ ou texto.{" "}
-        {data?.auto
-          ? "Automático LIGADO: perfume das promoções sem foto principal ganha a melhor foto do Pinterest como principal, para sempre (você troca na página do perfume)."
-          : "Automático desligado: nada daqui vai para os posts sem você aprovar."}
-        {t ? (
-          <div className="mt-2 rounded-lg bg-background px-3 py-2 text-foreground">
-            <b>Treino da escolha automática:</b>{" "}
-            {t.n
-              ? `nas suas ${t.n} escolha(s) do Pinterest, o sistema escolheria a mesma foto em ${t.hits} (${Math.round((100 * t.hits) / t.n)}%; no chute seriam ~${t.chance}; entre as 2 primeiras dele: ${t.top2}).`
-              : "ainda sem escolhas suas do Pinterest."}
-            {t.likes.length ? ` Você tem preferido fotos ${t.likes.join(", ")}.` : ""}{" "}
-            {t.auto
-              ? "O automático está ligado."
-              : `O automático liga sozinho quando o sistema acertar ${Math.round(t.rate * 100)}% de pelo menos ${t.min} escolhas suas.`}{" "}
-            O selo <b>o sistema escolheria</b> mostra o palpite dele em cada perfume.
-          </div>
-        ) : null}
-        <div className="mt-2">
-          <Button size="sm" variant={data?.auto ? "outline" : "accent"} onClick={async () => {
-            try {
-              await api("/api/pinterest", { method: "POST", json: { auto: !data?.auto } });
-              toast.success(data?.auto ? "Automático desligado" : "Automático ligado");
-              reload();
-            } catch (e) {
-              toast.error((e as Error).message);
-            }
-          }}>{data?.auto ? "Desligar automático" : "Ligar automático"}</Button>
-        </div>
-      </div>
-      {!data ? (
-        <div className="h-64 animate-pulse rounded-xl bg-muted" />
-      ) : !groups.size ? (
-        <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhuma foto do Pinterest esperando aprovação.</Card>
-      ) : (
-        [...groups.values()].map((list) => {
-          const pid = list[0].product_id;
-          const ok = list.filter((p) => !p.flags);
-          const sus = list.filter((p) => p.flags);
-          const shown = showSus[pid] ? list : ok;
-          return (
-            <div key={pid} className="mb-8">
-              <div className="mb-2 flex flex-wrap items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={`/api/pinterest/${pid}?ref=1&w=160`} alt="" className="size-14 rounded-lg border bg-white object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} title="Referência: foto do perfume certo (grupos ou anúncio do ML)" />
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2 text-[14px] font-semibold">
-                    {list[0].name}
-                    {list[0].queued ? (
-                      <Badge tone="warning">na fila agora</Badge>
-                    ) : list[0].last_posted_at ? (
-                      <Badge tone="info">já postado {timeAgo(list[0].last_posted_at)}</Badge>
-                    ) : (
-                      <Badge tone="success">entre os próximos posts</Badge>
-                    )}
-                  </div>
-                  <div className="text-[12px] text-muted-foreground">
-                    {ok.length} foto(s) conferidas · à esquerda, a referência do perfume certo · {list[0].bank} foto(s) no banco hoje
-                  </div>
+          ) : (
+            <div className="grid gap-5 p-4 md:grid-cols-[minmax(0,1fr)_280px]">
+              {/* foto grande */}
+              <div>
+                <div className="relative mx-auto aspect-square w-full max-w-[520px] overflow-hidden rounded-xl border bg-muted">
+                  {it ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img key={sq(it, 720)} src={sq(it, 720)} alt="" className="size-full object-cover" />
+                  ) : (
+                    <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
+                      <ImageOff className="size-10 opacity-40" />
+                      <span className="text-[13px]">Nenhuma foto ainda</span>
+                    </div>
+                  )}
+                  {it ? (
+                    <>
+                      <span className="absolute top-3 left-3 rounded-full bg-black/65 px-2.5 py-1 text-[11.5px] font-medium text-white">
+                        {isCur ? "★ Vai no post" : it.k === "fragram" ? "Fragrantica" : "Foto dos grupos"} · prévia 1:1
+                      </span>
+                      <button
+                        onClick={() => setI((x) => Math.max(0, x - 1))}
+                        disabled={i === 0}
+                        className="absolute top-1/2 left-2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white disabled:opacity-0"
+                        aria-label="Anterior"
+                      >
+                        <ChevronLeft className="size-5" />
+                      </button>
+                      <button
+                        onClick={() => setI((x) => Math.min(items.length - 1, x + 1))}
+                        disabled={i >= items.length - 1}
+                        className="absolute top-1/2 right-2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white disabled:opacity-0"
+                        aria-label="Próxima"
+                      >
+                        <ChevronRight className="size-5" />
+                      </button>
+                      <span className="absolute right-3 bottom-3 rounded-full bg-black/65 px-2 py-0.5 text-[11px] text-white tabular-nums">
+                        {i + 1}/{items.length}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
-                {sus.length ? (
-                  <Button size="sm" variant="outline" className="ml-auto" onClick={() => setShowSus((m) => ({ ...m, [pid]: !m[pid] }))}>
-                    {showSus[pid] ? "Esconder suspeitas" : `Ver ${sus.length} suspeita(s) de outro perfume`}
-                  </Button>
+                {it ? (
+                  <div className="mx-auto mt-3 flex max-w-[520px] flex-wrap gap-2">
+                    {isCur ? (
+                      <Button
+                        size="sm"
+                        variant="accent"
+                        onClick={() => setCrop({ it, initial: parse(r.currentCrop), adjust: true })}
+                      >
+                        <CropIcon className="size-4" /> Ajustar enquadramento
+                      </Button>
+                    ) : (
+                      <Button size="sm" variant="accent" loading={busy === "use"} onClick={() => setCrop({ it, initial: parse(it.o.crop) })}>
+                        <Check className="size-4" /> Usar esta foto
+                      </Button>
+                    )}
+                    {it.k === "bank" && !isCur ? (
+                      <Button size="sm" variant="ghost" onClick={() => hide(it)}>
+                        <EyeOff className="size-4" /> Esconder
+                      </Button>
+                    ) : null}
+                    {it.k === "fragram" && it.o.url ? (
+                      <a href={it.o.url} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center px-2 text-[12px] text-muted-foreground hover:underline">
+                        Abrir original ↗
+                      </a>
+                    ) : null}
+                  </div>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-                {shown.map((p) => (
-                  <div key={p.id} className={cn("overflow-hidden rounded-xl border bg-card", p.flags && "border-warning opacity-80")}>
-                    <button onClick={() => setBig(p)} className="block w-full" title={p.title || "Ver maior"}>
-                      {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={`/api/pinterest/${p.id}?w=600`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain" />
-                    </button>
-                    {p.flags ? <div className="border-t px-2 py-1 text-[11px] text-warning">{p.flags}</div> : null}
-                    <div className="flex flex-wrap items-center gap-1.5 border-t px-2 pt-2 text-[11.5px] text-muted-foreground">
-                      <span className="tabular-nums">{p.width}×{p.height}</span>
-                      {p.pick ? <Badge tone="success">o sistema escolheria</Badge> : null}
-                    </div>
-                    <div className="grid grid-cols-[auto_1fr] gap-1.5 px-2 pt-1.5 pb-2">
-                      <Button size="sm" variant="outline" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar" title="Recusar"><X className="size-3.5" /></Button>
-                      <Button size="sm" variant="accent" disabled={busy === p.id} onClick={() => decide(p, true)}><Check className="size-3.5" /> Escolher</Button>
-                    </div>
-                  </div>
-                ))}
-                {!shown.length && <div className="col-span-full text-[12.5px] text-muted-foreground">Nenhuma foto com certeza de ser esse perfume. Veja as suspeitas ou recuse.</div>}
+
+              {/* lateral: outras formas de achar a foto */}
+              <div className="space-y-3">
+                <DropPhoto
+                  productId={r.id}
+                  onAdded={() => void load()}
+                  onUploaded={(imgId) => setCrop({ it: { k: "bank", o: { id: imgId } }, initial: null, dropped: true })}
+                  compact
+                  label="Arraste uma foto da internet"
+                />
+                <div className="rounded-lg border border-[var(--border-soft)] p-3">
+                  <div className="text-[12.5px] font-semibold">{r.fragUrl ? "Perfume errado no Fragrantica?" : "Sabe a página no Fragrantica?"}</div>
+                  <div className="mb-2 text-[11.5px] text-muted-foreground">Cole o link e eu trago as fotos de lá.</div>
+                  <form
+                    className="flex gap-1.5"
+                    onSubmit={async (e) => {
+                      e.preventDefault();
+                      const inp = e.currentTarget.elements.namedItem("u") as HTMLInputElement;
+                      setBusy("link");
+                      try {
+                        const x = await api<{ msg: string }>("/api/fotos/fraglink", { method: "POST", json: { productId: r.id, url: inp.value } });
+                        toast.success(x.msg);
+                        inp.value = "";
+                        await load();
+                      } catch (err) {
+                        toast.error((err as Error).message);
+                      } finally {
+                        setBusy(null);
+                      }
+                    }}
+                  >
+                    <Input name="u" placeholder="https://www.fragrantica.com.br/…" className="h-8 min-w-0 flex-1 text-[12px]" />
+                    <Button type="submit" size="sm" className="h-8 text-[12px]" loading={busy === "link"}>
+                      Trazer
+                    </Button>
+                  </form>
+                </div>
+                <div className="rounded-lg bg-muted/50 p-3 text-[11.5px] leading-relaxed text-muted-foreground">
+                  Setas do teclado passam as fotos. A foto escolhida vale para todos os próximos posts desse perfume, com o enquadramento que você salvar.
+                </div>
               </div>
             </div>
-          );
-        })
-      )}
-      {big && (
-        <div className="fixed inset-0 z-50 flex flex-col bg-black/95 text-white" onClick={() => setBig(null)}>
-          <div className="flex items-center gap-2 px-4 py-3 text-[13px]" onClick={(e) => e.stopPropagation()}>
-            <span className="min-w-0 truncate opacity-90">{big.name} · {big.width}×{big.height}px</span>
-            <div className="ml-auto flex gap-2">
-              <button onClick={() => decide(big, false)} className="flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 hover:bg-white/20"><X className="size-4" /> Recusar</button>
-              <button onClick={() => decide(big, true)} className="flex h-8 items-center gap-1.5 rounded-lg bg-accent px-3 text-accent-foreground"><Check className="size-4" /> Escolher como principal</button>
-              <button onClick={() => setBig(null)} aria-label="Fechar" className="flex size-8 items-center justify-center rounded-lg bg-white/10 hover:bg-white/20"><X className="size-4" /></button>
+          )}
+
+          {/* carrossel */}
+          {r && items.length ? (
+            <div ref={strip} className="scroll-thin flex gap-2 overflow-x-auto border-t border-[var(--border-soft)] bg-muted/30 px-4 py-3">
+              {items.map((x, n) => {
+                const cur = x.k === "bank" && x.o.id === r.current;
+                return (
+                  <button
+                    key={`${x.k}:${x.o.id}`}
+                    data-i={n}
+                    onClick={() => setI(n)}
+                    className={cn(
+                      "relative size-20 shrink-0 overflow-hidden rounded-lg border-2 bg-card transition",
+                      n === i ? "border-violet-500" : "border-transparent opacity-80 hover:opacity-100",
+                    )}
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={sq(x, 160)} alt="" loading="lazy" className="size-full object-cover" />
+                    {cur ? (
+                      <span className="absolute top-1 left-1 rounded-full bg-violet-600 p-0.5 text-white">
+                        <Star className="size-3" />
+                      </span>
+                    ) : null}
+                    <span className="absolute inset-x-0 bottom-0 bg-black/55 py-px text-center text-[9.5px] text-white">{x.k === "fragram" ? "Fragrantica" : "grupos"}</span>
+                  </button>
+                );
+              })}
             </div>
-          </div>
-          <div className="flex min-h-0 flex-1 items-center justify-center px-4 pb-4">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={`/api/pinterest/${big.id}`} alt="" className="max-h-full max-w-full object-contain" onClick={(e) => e.stopPropagation()} />
-          </div>
+          ) : null}
         </div>
-      )}
-    </>
+      </div>
+
+      {crop ? (
+        <CropSquare
+          src={orig(crop.it)}
+          title={r?.name}
+          initial={crop.initial}
+          confirmLabel={crop.adjust ? "Salvar enquadramento" : r?.waiting ? "Usar e postar" : "Usar esta foto"}
+          onCancel={() => {
+            const x = crop;
+            setCrop(null);
+            if (x.dropped) void use(x.it);
+          }}
+          onConfirm={async (c) => {
+            const x = crop;
+            setCrop(null);
+            await use(x.it, c);
+          }}
+        />
+      ) : null}
+    </div>
   );
 }
 
+/* ---------------- página ---------------- */
+
+const FILTERS = [
+  { k: "all", l: "Todos" },
+  { k: "none", l: "Sem foto escolhida" },
+  { k: "fragram", l: "Com fotos do Fragrantica" },
+  { k: "wait", l: "Post esperando" },
+] as const;
+
 export default function FotosPage() {
-  // link direto: /fotos#pinterest abre a aba de escolha
-  const [tab, setTabState] = React.useState<"board" | "fotos" | "pin">("board");
-  React.useEffect(() => {
-    if (window.location.hash === "#pinterest") setTabState("board");
-    if (window.location.hash === "#perfumes") setTabState("fotos");
-  }, []);
-  const setTab = (t: "board" | "fotos" | "pin") => {
-    setTabState(t);
-    history.replaceState(null, "", t === "pin" ? "#pinterest" : t === "fotos" ? "#perfumes" : window.location.pathname);
-  };
   const [q, setQ] = React.useState("");
   const [deb, setDeb] = React.useState("");
-  const [sel, setSel] = React.useState<number | null>(null);
-  const [filter, setFilter] = React.useState<"all" | "pin" | "own" | "none" | "choose">("all");
+  const [f, setF] = React.useState<(typeof FILTERS)[number]["k"]>("all");
+  const [data, setData] = React.useState<Resp | null>(null);
+  const [loadingMore, setLoadingMore] = React.useState(false);
+  const [open, setOpen] = React.useState<number | null>(null);
+  const sentinel = React.useRef<HTMLDivElement>(null);
+
   React.useEffect(() => {
     const t = setTimeout(() => setDeb(q), 300);
     return () => clearTimeout(t);
   }, [q]);
-  const { data, reload: reloadList } = useApi<{ rows: Prod[]; total: number; learned: { n: number; likes: string[] } }>(`/api/fotos?q=${encodeURIComponent(deb)}`, 30_000);
+  const url = (offset: number) => `/api/fotos/board?f=${f}&q=${encodeURIComponent(deb)}&offset=${offset}`;
+  React.useEffect(() => {
+    let alive = true;
+    setData(null);
+    api<Resp>(url(0))
+      .then((r) => alive && setData(r))
+      .catch((e) => toast.error((e as Error).message));
+    return () => {
+      alive = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [f, deb]);
+
+  const loadMore = React.useCallback(async () => {
+    if (!data?.more || loadingMore) return;
+    setLoadingMore(true);
+    try {
+      const r = await api<Resp>(url(data.rows.length));
+      setData((d) => (d ? { ...r, rows: [...d.rows, ...r.rows.filter((x) => !d.rows.some((y) => y.id === x.id))] } : r));
+    } finally {
+      setLoadingMore(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data, loadingMore]);
+  React.useEffect(() => {
+    const el = sentinel.current;
+    if (!el) return;
+    const io = new IntersectionObserver((e) => e[0].isIntersecting && loadMore(), { rootMargin: "800px" });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [loadMore]);
+
+  const c = data?.counts;
   return (
     <>
-      <PageHeader
-        title="Fotos dos perfumes"
-        description={`O banco de fotos de cada perfume, em resolução original. Clique numa foto para ver em tela cheia e clique de novo para ver em 100% (setas do teclado navegam). Escolha a foto principal de cada perfume: os posts dele sempre saem com ela. ${data ? `${data.total} fotos ativas.` : ""}`}
-      />
-      <div className="mb-4 flex gap-2">
-        <Button size="sm" variant={tab === "board" ? "accent" : "outline"} onClick={() => setTab("board")}>Escolher fotos</Button>
-        <Button size="sm" variant={tab === "fotos" ? "accent" : "outline"} onClick={() => setTab("fotos")}>Perfume por perfume</Button>
-      </div>
-      {tab === "board" ? (
-        <PhotoBoard onOpen={(id) => { setSel(id); setTab("fotos"); }} Drop={DropPhoto} />
-      ) : tab === "pin" ? (
-        <PinReview />
-      ) : sel ? (
-        <ProductPhotos id={sel} onBack={() => { setSel(null); reloadList(); }} />
+      <PageHeader title="Fotos dos perfumes" description="Todos os perfumes com as fotos de cada um. Clique num perfume para escolher a foto que vai nos posts dele." />
+      <Card className="sticky top-16 z-10 mb-4 flex flex-wrap items-center gap-2 p-2">
+        <div className="relative min-w-[220px] flex-1">
+          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Buscar perfume..." value={q} onChange={(e) => setQ(e.target.value)} className="h-9 pl-9" />
+        </div>
+        <div className="flex flex-wrap gap-1">
+          {FILTERS.map((x) => {
+            const n = c ? (x.k === "all" ? c.all : x.k === "none" ? c.none : x.k === "fragram" ? c.fragram : c.wait) : null;
+            return (
+              <button
+                key={x.k}
+                onClick={() => setF(x.k)}
+                className={cn(
+                  "h-9 rounded-lg px-3 text-[12.5px] font-medium whitespace-nowrap",
+                  f === x.k ? "bg-violet-500 text-white" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {x.l}
+                {n != null ? <span className={cn("ml-1.5 text-[11px] tabular-nums", f === x.k ? "text-white/80" : "")}>{n}</span> : null}
+              </button>
+            );
+          })}
+        </div>
+      </Card>
+
+      {!data ? (
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+          {Array.from({ length: 12 }).map((_, n) => (
+            <div key={n} className="aspect-[4/5] animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
+      ) : !data.rows.length ? (
+        <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhum perfume nesse filtro.</Card>
       ) : (
         <>
-          {data && (
-            <div className="mb-4 rounded-xl bg-muted px-4 py-3 text-[12.5px] text-muted-foreground">
-              {data.learned.n
-                ? `Escolha automática aprendendo com ${data.learned.n} foto(s) principal(is) que você escolheu${data.learned.likes.length ? `: você tem preferido fotos ${data.learned.likes.join(", ")}` : ""}. Quanto mais você escolher, mais ela acerta.`
-                : "Nos perfumes sem principal, o sistema escolhe a melhor foto sozinho. Cada principal que você escolher ensina o seu gosto para a escolha automática."}
-            </div>
-          )}
-          <div className="relative mb-4 max-w-md">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Buscar perfume..." value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {data.rows.map((r) => (
+              <PerfumeCard key={r.id} r={r} onOpen={() => setOpen(r.id)} />
+            ))}
           </div>
-          {data && (() => {
-            const c = {
-              all: data.rows.length,
-              pin: data.rows.filter((p) => p.main && p.main_pin).length,
-              own: data.rows.filter((p) => p.main && !p.main_pin).length,
-              none: data.rows.filter((p) => !p.main).length,
-              choose: data.rows.filter((p) => p.pin_pending > 0).length,
-            };
-            const opts: [typeof filter, string][] = [
-              ["all", `Todos (${c.all})`],
-              ["own", `★ Com foto escolhida (${c.own + c.pin})`],
-              ["none", `Sem principal (${c.none})`],
-            ];
-            return (
-              <div className="mb-4 flex flex-wrap gap-2">
-                {opts.map(([k, label]) => (
-                  <Button key={k} size="sm" variant={filter === k ? "accent" : "outline"} onClick={() => setFilter(k)}>{label}</Button>
-                ))}
-              </div>
-            );
-          })()}
-          {data ? (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
-              {data.rows
-                .filter((p) =>
-                  filter === "pin" ? p.main && p.main_pin : filter === "own" ? !!p.main : filter === "none" ? !p.main : filter === "choose" ? p.pin_pending > 0 : true,
-                )
-                .map((p) => (
-                <button key={p.id} onClick={() => setSel(p.id)} className="group overflow-hidden rounded-xl border bg-card text-left">
-                  {p.cover ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={`/api/fotos/${p.cover}?w=500`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain transition-transform group-hover:scale-[1.03]" />
-                  ) : (
-                    <div className="flex aspect-square items-center justify-center text-[12px] text-muted-foreground">sem foto ativa</div>
-                  )}
-                  <div className="border-t px-3 py-2">
-                    <div className="line-clamp-2 text-[12.5px] leading-snug font-medium">{p.name}</div>
-                    <div className="mt-0.5 text-[11.5px] text-muted-foreground">
-                      {p.active} foto(s){p.n > p.active ? ` · ${p.n - p.active} desligada(s)` : ""} · {p.main ? (p.main_pin ? "★ escolhida do Pinterest" : "★ escolhida") : "automática"}
-                    </div>
-{null}
-                  </div>
-                </button>
-              ))}
-              {!data.rows.length && <Card className="col-span-full px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhum perfume com foto.</Card>}
-            </div>
-          ) : (
-            <div className="h-64 animate-pulse rounded-xl bg-muted" />
-          )}
+          <div ref={sentinel} className="py-6 text-center text-[12px] text-muted-foreground">
+            {data.more ? (loadingMore ? "Carregando mais…" : "") : `${data.total} perfume(s)`}
+          </div>
         </>
       )}
+
+      {open ? (
+        <PerfumeModal
+          id={open}
+          onClose={() => setOpen(null)}
+          onChanged={(row) => row && setData((d) => (d ? { ...d, rows: d.rows.map((x) => (x.id === row.id ? row : x)) } : d))}
+        />
+      ) : null}
     </>
   );
 }
