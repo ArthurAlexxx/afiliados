@@ -5,6 +5,7 @@
  * - Guarda como candidata: só entra no banco de fotos do perfume quando o Arthur aprova na tela Fotos.
  */
 import fs from "node:fs";
+import { apifyFail, checkApify } from "./apify.ts";
 import path from "node:path";
 import sharp from "sharp";
 import { db, log, MEDIA_DIR } from "./db.ts";
@@ -26,11 +27,12 @@ export async function searchPins(query: string | string[], limit = 40): Promise<
   const queries = Array.isArray(query) ? query : [query];
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("falta APIFY_TOKEN nas variáveis do Railway");
+  checkApify();
   const r = await fetch(
     `https://api.apify.com/v2/acts/thescrappa~pinterest-search-scraper/run-sync-get-dataset-items?token=${encodeURIComponent(token)}&timeout=120`,
     { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ queries, limit }), signal: AbortSignal.timeout(150000) },
   );
-  if (!r.ok) throw new Error(`Apify respondeu ${r.status}: ${(await r.text()).slice(0, 200)}`);
+  if (!r.ok) throw await apifyFail("Apify respondeu", r);
   const items = (await r.json()) as { title?: string; description?: string; image_url?: string; images?: Record<string, { url?: string }> }[];
   const seen = new Set<string>();
   return items

@@ -22,7 +22,7 @@ type Row = {
   pins: Opt[];
   fragram: Opt[];
 };
-type Resp = { rows: Row[]; total: number; more: boolean; counts: { all: number; wait: number; none: number; fragram: number; pin: number } };
+type Resp = { rows: Row[]; total: number; more: boolean; apifyOff?: string | null; counts: { all: number; wait: number; none: number; fragram: number; pin: number } };
 type Kind = "bank" | "pin" | "fragram";
 
 const src = (k: Kind, o: Opt, big = false) =>
@@ -190,6 +190,11 @@ export function PhotoBoard({ onOpen, Drop }: { onOpen: (id: number) => void; Dro
 
   return (
     <>
+      {data?.apifyOff && (
+        <div className="mb-3 rounded-lg border border-amber-400/50 bg-amber-50 px-3 py-2 text-sm text-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+          ⚠️ {data.apifyOff}. Fotos novas do Fragrantica e do Pinterest não chegam até o saldo voltar; as que já estão aqui continuam valendo.
+        </div>
+      )}
       <div className="sticky top-0 z-10 -mx-1 mb-4 flex flex-wrap items-center gap-2 bg-background/95 px-1 py-2 backdrop-blur">
         <div className="relative w-full max-w-xs">
           <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />

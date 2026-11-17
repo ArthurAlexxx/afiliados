@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { bestImagePath } from "@/lib/curation";
 import { notPerfume } from "@/lib/perfume";
+import { apifyOff } from "@/lib/apify";
 
 export const dynamic = "force-dynamic";
 
@@ -64,5 +65,5 @@ export async function GET(req: Request) {
       fragram: r.frag_url ? frags.all(r.frag_url) : [],
     };
   });
-  return Response.json({ rows, total: list.length, counts, more: offset + LIMIT < list.length });
+  return Response.json({ rows, total: list.length, counts, apifyOff: apifyOff(), more: offset + LIMIT < list.length });
 }

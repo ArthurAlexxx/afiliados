@@ -7,6 +7,7 @@
  * O scraper do GitHub (jc855/fragrantica-scraper) tem a base só até 2017 e baixa direto do site, que hoje bloqueia.
  */
 import { db, log } from "./db.ts";
+import { apifyFail, checkApify } from "./apify.ts";
 import { BRAND_WORDS, FLANKERS, STOP, dist, isBrand, norm } from "./perfume.ts";
 
 const ACTOR = "unfenced-group~fragrantica-perfume-scraper";
@@ -34,13 +35,14 @@ const has = (list: string[], t: string) => list.some((x) => near(x, t));
 async function runActor(input: Record<string, unknown>): Promise<Record<string, unknown>[]> {
   const token = process.env.APIFY_TOKEN;
   if (!token) throw new Error("falta APIFY_TOKEN");
+  checkApify();
   const r = await fetch(`https://api.apify.com/v2/acts/${ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=120&memory=256`, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify(input),
     signal: AbortSignal.timeout(150_000),
   });
-  if (!r.ok) throw new Error(`Apify ${r.status}: ${(await r.text()).replace(/\s+/g, " ").slice(0, 300)}`);
+  if (!r.ok) throw await apifyFail("Apify", r);
   return (await r.json()) as Record<string, unknown>[];
 }
 
@@ -228,6 +230,7 @@ export function hitFromUrl(url: string): Hit | null {
 /** Busca no Google só dentro do Fragrantica (Apify Web Search), com o nome que veio do anúncio. */
 async function searchGoogle(name: string): Promise<Hit[]> {
   if (!process.env.APIFY_TOKEN) return [];
+  checkApify();
   const q = name.replace(/\b\d{2,4}\s*ml\b/gi, " ").replace(/\s+/g, " ").trim();
   const r = await fetch("https://apify--web-search.apify.actor/", {
     method: "POST",
@@ -235,7 +238,7 @@ async function searchGoogle(name: string): Promise<Hit[]> {
     body: JSON.stringify({ query: `${q} fragrantica`, maxResults: 8, allowedDomains: ["fragrantica.com"] }),
     signal: AbortSignal.timeout(60000),
   });
-  if (!r.ok) throw new Error(`Web Search respondeu ${r.status}`);
+  if (!r.ok) throw await apifyFail("Web Search respondeu", r);
   const j = (await r.json()) as { results?: { url: string }[] };
   const out: Hit[] = [];
   for (const x of j.results || []) {
@@ -292,12 +295,13 @@ export async function standardize(productId: number): Promise<string> {
 export async function fetchFragram(productId: number): Promise<number> {
   const p = db().prepare("SELECT frag_url FROM products WHERE id = ?").get(productId) as { frag_url: string | null } | undefined;
   if (!p?.frag_url || !process.env.APIFY_TOKEN) return 0;
+  checkApify();
   const page = "https://www.fragrantica.com" + new URL(p.frag_url).pathname;
   const r = await fetch(`https://apify--web-fetch.apify.actor/?formats=html&url=${encodeURIComponent(page)}`, {
     headers: { authorization: `Bearer ${process.env.APIFY_TOKEN}` },
     signal: AbortSignal.timeout(90000),
   });
-  if (!r.ok) throw new Error(`Web Fetch respondeu ${r.status}: ${(await r.text()).slice(0, 160)}`);
+  if (!r.ok) throw await apifyFail("Web Fetch respondeu", r);
   const j = (await r.json()) as { html?: string; fetch?: { httpStatusCode?: number } };
   if (j.fetch?.httpStatusCode && j.fetch.httpStatusCode >= 400) throw new Error(`Fragrantica respondeu ${j.fetch.httpStatusCode}`);
   const html = j.html || "";
