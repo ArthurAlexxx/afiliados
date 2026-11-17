@@ -421,6 +421,12 @@ async function fetchFragramRaw(fragUrl: string): Promise<number> {
   return urls.length;
 }
 
+/**
+ * Arthur (17/nov): nada de reprocessar o banco. Só vai ao Apify o perfume que vai ser postado agora
+ * (post esperando foto) e que ainda não tem foto escolhida: procura o nome dele no Fragrantica e lê as fotos da página.
+ */
+const WAITING = `p.main_image_id IS NULL AND EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo')`;
+
 export async function fragranticaStep(max = 10) {
   if (!process.env.APIFY_TOKEN || process.env.FRAGRANTICA === "0") return;
   const g = globalThis as { __fragBusy?: boolean };
@@ -431,8 +437,8 @@ export async function fragranticaStep(max = 10) {
     if (overDailyBudget()) return;
     let rows = db()
       .prepare(
-        `SELECT p.id, p.name FROM products p WHERE p.frag_checked_at IS NULL AND p.frag_searched = 0
-         ORDER BY EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo') DESC, (SELECT MAX(o.created_at) FROM offers o WHERE o.product_id = p.id) DESC LIMIT ?`,
+        `SELECT p.id, p.name FROM products p WHERE ${WAITING} AND p.frag_url IS NULL AND p.frag_searched = 0
+         ORDER BY p.id DESC LIMIT ?`,
       )
       .all(max * 3) as { id: number; name: string }[];
     // kit, body splash, creme...: não existe no Fragrantica, não gasta procurando
@@ -461,15 +467,10 @@ export async function fragranticaStep(max = 10) {
       `UPDATE products SET fragram_at = datetime('now') WHERE fragram_at IS NULL AND frag_url IS NOT NULL
        AND (EXISTS (SELECT 1 FROM products p2 WHERE p2.frag_url = products.frag_url AND p2.fragram_at IS NOT NULL) OR EXISTS (SELECT 1 FROM frag_photos f WHERE f.frag_url = products.frag_url))`,
     ).run();
-    // já achados antes desta versão: busca a ficha completa (2 por rodada)
-    const old = db().prepare("SELECT MIN(id) id FROM products WHERE frag_url IS NOT NULL AND frag_data IS NULL GROUP BY frag_url LIMIT 20").all() as { id: number }[];
-    await fetchDetailsBatch(old.map((r) => r.id)).catch((e) => log("warn", `Fragrantica (fichas): ${(e as Error).message}`));
-    // Fragram Photos dos que ainda não foram lidos (posts esperando foto primeiro), 3 por rodada
+    // a ficha (notas, acordes) não vai no post: não é puxada sozinha (Arthur, 17/nov)
+    // fotos do Fragrantica: só da página do perfume que está esperando foto para postar
     const gram = db()
-      .prepare(
-        `SELECT MIN(p.id) id FROM products p WHERE p.frag_url IS NOT NULL AND p.fragram_at IS NULL
-         GROUP BY p.frag_url ORDER BY MAX(EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo')) DESC, MAX(p.id) DESC LIMIT 5`,
-      )
+      .prepare(`SELECT MIN(p.id) id FROM products p WHERE ${WAITING} AND p.frag_url IS NOT NULL AND p.fragram_at IS NULL GROUP BY p.frag_url LIMIT 5`)
       .all() as { id: number }[];
     await Promise.all(gram.map((r) => fetchFragram(r.id).catch((e) => log("warn", `Fragram: ${(e as Error).message}`))));
     if (changed) {

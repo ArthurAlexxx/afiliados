@@ -124,7 +124,8 @@ export function dailyLimitUsd() {
   return Number.isFinite(v) && v > 0 ? v : 0.15;
 }
 export function spentTodayUsd(): number {
-  return (db().prepare("SELECT COALESCE(SUM(cost_usd), 0) n FROM api_calls WHERE date(at, '-3 hours') = date('now', '-3 hours')").get() as { n: number }).n;
+  // o gasto de antes da regra "só o post esperando foto" (17/nov 15:20) não conta para o teto
+  return (db().prepare("SELECT COALESCE(SUM(cost_usd), 0) n FROM api_calls WHERE date(at, '-3 hours') = date('now', '-3 hours') AND at >= '2026-11-17 18:20:00'").get() as { n: number }).n;
 }
 let budgetLogged = "";
 export function overDailyBudget(): boolean {
