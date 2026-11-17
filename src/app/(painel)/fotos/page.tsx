@@ -149,7 +149,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
   );
 }
 
-type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number; flags: string | null };
+type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number; flags: string | null; last_posted_at: string | null; queued: number | null };
 
 function PinReview() {
   const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean }>("/api/pinterest", 30_000);
@@ -208,7 +208,16 @@ function PinReview() {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={`/api/pinterest/${pid}?ref=1&w=160`} alt="" className="size-14 rounded-lg border bg-white object-contain" onError={(e) => ((e.target as HTMLImageElement).style.display = "none")} title="Referência: foto do perfume certo (grupos ou anúncio do ML)" />
                 <div className="min-w-0">
-                  <div className="text-[14px] font-semibold">{list[0].name}</div>
+                  <div className="flex flex-wrap items-center gap-2 text-[14px] font-semibold">
+                    {list[0].name}
+                    {list[0].queued ? (
+                      <Badge tone="warning">na fila agora</Badge>
+                    ) : list[0].last_posted_at ? (
+                      <Badge tone="info">já postado {timeAgo(list[0].last_posted_at)}</Badge>
+                    ) : (
+                      <Badge tone="success">entre os próximos posts</Badge>
+                    )}
+                  </div>
                   <div className="text-[12px] text-muted-foreground">
                     {ok.length} foto(s) conferidas · à esquerda, a referência do perfume certo · {list[0].bank} foto(s) no banco hoje
                   </div>
@@ -219,7 +228,7 @@ function PinReview() {
                   </Button>
                 ) : null}
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6">
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
                 {shown.map((p) => (
                   <div key={p.id} className={cn("overflow-hidden rounded-xl border bg-card", p.flags && "border-warning opacity-80")}>
                     <button onClick={() => setBig(p)} className="block w-full" title={p.title || "Ver maior"}>
@@ -227,10 +236,12 @@ function PinReview() {
                       <img src={`/api/pinterest/${p.id}?w=600`} alt="" loading="lazy" className="aspect-square w-full bg-white object-contain" />
                     </button>
                     {p.flags ? <div className="border-t px-2 py-1 text-[11px] text-warning">{p.flags}</div> : null}
-                    <div className="flex items-center gap-1.5 border-t px-2 py-2 text-[11.5px] text-muted-foreground">
+                    <div className="flex flex-wrap items-center gap-1.5 border-t px-2 pt-2 text-[11.5px] text-muted-foreground">
                       <span className="tabular-nums">{p.width}×{p.height}</span>
                       {p.pick ? <Badge tone="success">maior nota</Badge> : null}
-                      <Button size="sm" variant="outline" className="ml-auto" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar"><X className="size-3.5" /></Button>
+                    </div>
+                    <div className="grid grid-cols-[auto_1fr] gap-1.5 px-2 pt-1.5 pb-2">
+                      <Button size="sm" variant="outline" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar" title="Recusar"><X className="size-3.5" /></Button>
                       <Button size="sm" variant="accent" disabled={busy === p.id} onClick={() => decide(p, true)}><Check className="size-3.5" /> Escolher</Button>
                     </div>
                   </div>
