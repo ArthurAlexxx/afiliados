@@ -252,31 +252,40 @@ export async function importPinSeed() {
 /* Precisão: é mesmo ESSE perfume? (nome e cor do frasco)               */
 /* ------------------------------------------------------------------ */
 
-/** Palavras que aparecem em título de pin sem mudar o perfume. Qualquer outra palavra a mais indica outro perfume. */
-const GENERIC = new Set(
-  `by for of the de da do del des le la les los las y and et und with com por para sur en in to from new novo nova
-  spray vapo vaporisateur oz fl floz ml mls edp edt parfum perfume perfumes parfums profumo fragrance fragrances fragancia
-  fragrancia cologne colonia eau toilette agua water men mens man woman women womens homme femme hombre mujer masculino
-  masculina feminino feminina unisex unissex unisexe gift set box caixa original originais originale authentic genuine
-  importado importada arabe arabic arabian oriental dubai uae emirates review resenha notes notas longevity duracao
-  luxury luxo long lasting lasting duradero duradera duradouro fixacao premium best melhor top sample decant amostra
-  limited edition edicao tester shop store loja buy comprar price preco oferta promo promocao sale desconto deal
-  pure intenso intensa elegant elegante fresh fresco fresca sweet doce floral woody amadeirado citrico citrus aroma
-  scent cheiro presente regalo cadeau x for him her ela ele dele dela pour per seu sua inspired inspiracao clone dupe
-  version versao alternative eau de parfum spray natural vaporizador mercado livre mercadolivre amazon shopee
-  everyone todos incolor colorless netshoes walmart target ebay jomashop sephora macys shein aliexpress allegro magalu
-  americanas casas bahia beleza belezanaweb epoca cosmeticos perfumaria perfumes perfumery spray frasco bottle`.split(/\s+/).filter(Boolean),
+/** Palavras que indicam outra versão do perfume (além das FLANKERS da comparação de ofertas). */
+const VARIANT = new Set(
+  `snow pink tous mango tropical vintage gold silver blanc bleu rouge verde green yellow amarelo azul
+  rosa vermelho preto black white blanco negro night noche nuit day dia summer winter spring sport aqua acqua marine
+  ocean elixir extrait intense intensa absolu absolute extreme edition limited collector reserve prive privee oud amber ambar rose musk vanilla baunilha tobacco leather
+  cherry coffee cafe honey lava ice cool fresh wild crystal diamond platinum royal`.split(/\s+/).filter(Boolean),
 );
 
-/** Palavras a mais no título do pin que não são do perfume (ex: "Safeer" num pin de "Al Noble Ameer"). */
+/**
+ * Palavras do TÍTULO do pin que apontam para outra versão: palavras de versão (Snow, Pink, Vintage, Elixir…)
+ * ou nomes de perfumes "irmãos" que já existem no banco (ex: pedimos Al Noble Ameer e o pin é do Al Noble Wazeer).
+ * Texto de propaganda na descrição não conta.
+ */
 export function extraWords(product: string, title: string): string[] {
-  if (!title) return [];
-  const mine = new Set(norm(product).split(" "));
+  const t = (title || "").split(" · ")[0];
+  if (!t) return [];
+  const mineTok = norm(product).split(" ");
+  const mine = new Set(mineTok);
+  const myName = nameTokens(product);
+  const siblings = new Set<string>();
+  if (myName.length) {
+    const rows = db().prepare("SELECT name FROM products").all() as { name: string }[];
+    for (const r of rows) {
+      const other = nameTokens(r.name);
+      if (!other.some((w) => myName.includes(w))) continue;
+      for (const w of other) if (!mine.has(w)) siblings.add(w);
+    }
+  }
   return [
     ...new Set(
-      norm(title)
+      norm(t)
         .split(" ")
-        .filter((w) => w.length > 2 && !/\d/.test(w) && ![...mine].some((x) => near(w, x)) && !GENERIC.has(w) && !STOP.has(w) && !BRAND_WORDS.has(w)),
+        .filter((w) => w.length > 2 && !/\d/.test(w) && ![...mine].some((x) => near(w, x)))
+        .filter((w) => VARIANT.has(w) || FLANKERS.includes(w) || siblings.has(w)),
     ),
   ];
 }
@@ -368,8 +377,12 @@ export async function checkPins(productId: number) {
   rows.forEach((r, i) => {
     const flags: string[] = [];
     const extra = extraWords(p.name, r.title || "");
-    if (!r.title) flags.push("pin sem nome");
-    else if (extra.length) flags.push(`nome diferente: ${extra.slice(0, 3).join(", ")}`);
+    const head = (r.title || "").split(" · ")[0];
+    const words = norm(head).split(" ");
+    const missing = nameTokens(p.name).filter((w) => !words.some((x) => near(w, x)));
+    if (!head) flags.push("pin sem nome");
+    else if (extra.length) flags.push(`outra versão: ${extra.slice(0, 3).join(", ")}`);
+    else if (missing.length) flags.push(`nome não bate (falta ${missing.slice(0, 2).join(", ")})`);
     let sim: number | null = null;
     const s = sigs[i];
     if (s && refSig) sim = sigSim(s, refSig);
@@ -390,8 +403,8 @@ export async function checkPins(productId: number) {
 /** Uma vez: confere as fotos do primeiro teste com as regras de precisão. */
 export async function recheckAllPins() {
   const { getState, setState } = await import("./settings.ts");
-  if (getState("pinCheckV2")) return;
-  setState("pinCheckV2", "1");
+  if (getState("pinCheckV3")) return;
+  setState("pinCheckV3", "1");
   const ids = db().prepare("SELECT DISTINCT product_id FROM pin_photos WHERE status = 'pending'").all() as { product_id: number }[];
   for (const r of ids) await checkPins(r.product_id).catch((e) => log("warn", `Pinterest: conferência falhou: ${(e as Error).message}`));
   const bad = (db().prepare("SELECT COUNT(*) n FROM pin_photos WHERE status = 'pending' AND flags IS NOT NULL").get() as { n: number }).n;
