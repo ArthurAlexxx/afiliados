@@ -20,7 +20,9 @@ export async function GET(req: Request) {
     const usedPath = bestImagePath(id);
     const used = images.find((i) => i.path === usedPath)?.id ?? null;
     for (const i of images) delete i.path;
-    return Response.json({ product, images, used, learned: prefsSummary() });
+    const fu = (product as { frag_url?: string } | undefined)?.frag_url;
+    const fragram = fu ? db().prepare("SELECT id, url, thumb FROM frag_photos WHERE frag_url = ? ORDER BY id").all(fu) : [];
+    return Response.json({ product, images, used, fragram, learned: prefsSummary() });
   }
   const q = `%${(u.searchParams.get("q") || "").trim()}%`;
   const rows = db()

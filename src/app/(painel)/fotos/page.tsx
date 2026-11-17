@@ -244,6 +244,46 @@ async function readDrop(dt: DataTransfer): Promise<{ data?: string; url?: string
   return url.startsWith("data:") ? { data: url } : { url };
 }
 
+/** Fotos da seção "Fragram Photos" do Fragrantica. Clicou em "Usar", a foto é baixada e vira a principal. */
+function Fragram({ productId, photos, onChosen }: { productId: number; photos: { id: number; url: string; thumb: string | null }[]; onChosen: () => void }) {
+  const [busy, setBusy] = React.useState<number | null>(null);
+  const [all, setAll] = React.useState(false);
+  const shown = all ? photos : photos.slice(0, 24);
+  async function use(p: { id: number; url: string }) {
+    setBusy(p.id);
+    try {
+      const r = await api<{ msg: string }>("/api/fotos/upload", { method: "POST", json: { productId, url: p.url } });
+      toast.success(r.msg || "Foto do Fragrantica virou a principal");
+      onChosen();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  }
+  return (
+    <Card className="mb-4 p-4">
+      <div className="mb-3 text-[13px] font-semibold">Fragram Photos · Fragrantica <span className="font-normal text-muted-foreground">({photos.length} fotos de usuários)</span></div>
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 2xl:grid-cols-8">
+        {shown.map((p) => (
+          <div key={p.id} className="group relative overflow-hidden rounded-lg border">
+            <a href={p.url} target="_blank" rel="noreferrer">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={p.thumb || p.url} alt="" loading="lazy" referrerPolicy="no-referrer" className="aspect-square w-full object-cover" />
+            </a>
+            <Button size="sm" className="absolute inset-x-1 bottom-1 h-7 text-[11px] opacity-0 group-hover:opacity-100" disabled={busy !== null} onClick={() => use(p)}>
+              {busy === p.id ? "Baixando…" : "Usar como principal"}
+            </Button>
+          </div>
+        ))}
+      </div>
+      {photos.length > 24 && !all ? (
+        <Button variant="outline" size="sm" className="mt-3" onClick={() => setAll(true)}>Ver todas as {photos.length}</Button>
+      ) : null}
+    </Card>
+  );
+}
+
 function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => void }) {
   const [over, setOver] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
@@ -305,7 +345,7 @@ function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => v
 }
 
 function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
-  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null; blocked?: number; frag_data?: string | null; frag_url?: string | null }; images: Img[]; used: number | null }>(`/api/fotos?id=${id}`);
+  const { data, reload } = useApi<{ product: { id: number; name: string; main_image_id: number | null; blocked?: number; frag_data?: string | null; frag_url?: string | null }; images: Img[]; used: number | null; fragram?: { id: number; url: string; thumb: string | null }[] }>(`/api/fotos?id=${id}`);
   const blocked = Boolean(data?.product?.blocked);
   const setBlocked = async () => {
     try {
@@ -358,6 +398,7 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
       {data?.product?.frag_data ? <FragCard raw={data.product.frag_data} /> : null}
       <DropPhoto productId={id} onAdded={reload} />
       <PinOptions productId={id} onChosen={reload} />
+      {data?.fragram?.length ? <Fragram productId={id} photos={data.fragram} onChosen={reload} /> : null}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
         {imgs.map((img, i) => (
           <div key={img.id} className={cn("group overflow-hidden rounded-xl border bg-card text-left", mainId === img.id && "ring-2 ring-accent", img.disabled && "opacity-50")}>
