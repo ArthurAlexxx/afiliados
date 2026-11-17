@@ -20,9 +20,11 @@ const median = (xs: number[]) => {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 };
 
+/** Preço real: só dos grupos de promoção confiáveis (os marcados "só fotos" tinham preços que não batiam com o ML). */
 export function realPrice(productId: number, days = 30): RealPrice | null {
   const rows = db()
-    .prepare("SELECT price, group_jid FROM offers WHERE product_id = ? AND price > 0 AND created_at >= datetime('now', ?)")
+    .prepare(`SELECT price, group_jid FROM offers WHERE product_id = ? AND price > 0 AND created_at >= datetime('now', ?)
+     AND group_jid NOT IN (SELECT jid FROM groups WHERE role = 'source' AND promo = 0)`)
     .all(productId, `-${days} days`) as { price: number; group_jid: string }[];
   if (rows.length < 5) return null;
   const m0 = median(rows.map((r) => r.price));

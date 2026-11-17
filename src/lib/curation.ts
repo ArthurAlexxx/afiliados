@@ -237,7 +237,8 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
   for (const [pid, list] of byProduct) {
     const p = products.get(pid);
     if (!p) continue;
-    const prices = list.map((o) => o.price).filter((x): x is number => typeof x === "number" && x > 0);
+    // preço de referência só dos grupos de promoção (Arthur, 17/nov: os outros davam "de/por" que não batia com o ML)
+    const prices = list.filter((o) => !photoOnly.has(o.group_jid)).map((o) => o.price).filter((x): x is number => typeof x === "number" && x > 0);
     const med = median(prices);
     const recent = list.filter((o) => ts(o.created_at) >= recentSince && o.price && o.url);
     // a oferta postada (link e preço) só vem dos grupos de promoção; os outros contam só para o hype e o preço
