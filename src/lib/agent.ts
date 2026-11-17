@@ -85,8 +85,8 @@ function rules(i: AgentInput, s: Settings): AgentDecision {
   } else if (i.price && i.medianPrice) {
     // ainda sem preço real confiável: compara com o que os grupos anunciaram na semana
     const ratio = i.price / i.medianPrice;
-    if (!add(ratio <= 1.05, `Sem preço real ainda · ${ratio <= 1 ? "na média da semana ou abaixo" : `${Math.round((ratio - 1) * 100)}% acima da média da semana`}`))
-      fail("o preço está acima do que os grupos costumam anunciar");
+    // só informativo (Arthur, nov/2026): o banco ainda é pequeno e isso descartava muito anúncio bom
+    add(true, `Sem preço real ainda · ${ratio <= 1 ? "na média da semana ou abaixo" : `${Math.round((ratio - 1) * 100)}% acima da média da semana (não bloqueia)`}`);
   }
   // mesmo dia: não postar o mesmo perfume mais caro do que já postamos hoje
   if (i.price && i.ourBestToday && !add(i.price <= i.ourBestToday, `Já postamos hoje por ${fmt(i.ourBestToday)}`))
