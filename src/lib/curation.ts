@@ -399,6 +399,25 @@ export function isHistoricLow(productId: number, price: number | null, messageId
  * Melhor foto do perfume para o post: nota da foto, mas quadrada vale mais
  * (foto em pé ou deitada gera bordas laterais no quadrado).
  */
+/**
+ * Arthur (nov/2026): no post, nome do perfume como está no Fragrantica, e embaixo a marca e o tamanho.
+ * Troca a linha do título já renderizada (funciona com qualquer template).
+ */
+export function withFragTitle(text: string, productId: number, oldTitle: string): string {
+  const p = db().prepare("SELECT frag_name, frag_brand, ml FROM products WHERE id = ?").get(productId) as
+    | { frag_name: string | null; frag_brand: string | null; ml: number }
+    | undefined;
+  if (!p?.frag_name || !p.frag_brand || !oldTitle) return text;
+  const brand = p.frag_brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim();
+  const nice = brand === brand.toUpperCase() && /[A-Z]{3}/.test(brand) ? brand.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : brand;
+  const lines = text.split("\n");
+  const i = lines.findIndex((l) => l.includes(oldTitle));
+  if (i < 0) return text;
+  const name = lines[i].replace(oldTitle, p.frag_name);
+  lines.splice(i, 1, name, `🏷️ ${nice}${p.ml ? ` · ${p.ml}ml` : ""}`);
+  return lines.join("\n");
+}
+
 /** Sem foto boa no banco, o post fica esperando a escolha do Arthur (status 'photo') em vez de sair com a foto do anúncio. */
 export const WAIT_FOR_PHOTO = true;
 const WAIT_HOURS = 3;
@@ -422,9 +441,16 @@ export async function releaseWaiting(productId: number): Promise<string> {
   const out = await brand(fs.readFileSync(bank), pct, s);
   const mediaPath = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, `curadoria_${productId}_${Date.now()}.jpg`);
   fs.writeFileSync(mediaPath, out);
+  // o perfume pode ter sido achado no Fragrantica enquanto esperava: título no formato novo
+  const cur = db().prepare("SELECT formatted_text FROM posts WHERE id = ?").get(post.id) as { formatted_text: string };
+  let title = "";
+  try {
+    title = JSON.parse(post.data_json)?.data?.titulo || "";
+  } catch {}
+  const text = /🏷️/.test(cur.formatted_text) ? cur.formatted_text : withFragTitle(cur.formatted_text, productId, title);
   db()
-    .prepare("UPDATE posts SET media_path = ?, media_mime = 'image/jpeg', status = 'queued', reason = 'Foto escolhida por você' WHERE id = ? AND status = 'photo'")
-    .run(mediaPath, post.id);
+    .prepare("UPDATE posts SET media_path = ?, media_mime = 'image/jpeg', formatted_text = ?, status = 'queued', reason = 'Foto escolhida por você' WHERE id = ? AND status = 'photo'")
+    .run(mediaPath, text, post.id);
   db().prepare("UPDATE posts SET status = 'skipped', reason = 'Saiu outro post com a foto escolhida' WHERE product_id = ? AND status = 'photo'").run(productId);
   db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(productId);
   log("info", `Post #${post.id} saiu da espera: foto escolhida`);
@@ -483,7 +509,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     historico: lowPriceSeal(item.productId, item.best.price, (item.best as { message_id?: string }).message_id),
   };
   data.manchete = manchete(data);
-  const formatted = renderTemplate(s.template, data);
+  const formatted = withFragTitle(renderTemplate(s.template, data), item.productId, data.titulo);
 
   let mediaPath: string | null = null;
   try {

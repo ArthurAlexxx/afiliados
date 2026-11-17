@@ -147,7 +147,7 @@ export function pick(ourName: string, hits: Hit[]): Hit | null {
   return best;
 }
 
-const SOFT = new Set(["royal", "collection", "colecao", "original", "importado", "lacrado", "novo", "masculino", "feminino", "unissex", "perfume", "fragrance"]);
+const SOFT = new Set(["beauty", "royal", "collection", "colecao", "original", "importado", "lacrado", "novo", "masculino", "feminino", "unissex", "perfume", "fragrance"]);
 
 const CONC: Record<string, string> = { edp: "EDP", edt: "EDT", extrait: "Extrait de Parfum", parfum: "Parfum", deo: "Deo Parfum", colonia: "Colônia" };
 
@@ -158,8 +158,9 @@ export function canonicalName(h: Pick<Hit, "brand" | "name">, ml: number, _conc?
   const brand = cap(h.brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim());
   let name = h.name.trim();
   // "Armani Code Parfum" já começa com uma palavra da marca (Giorgio Armani): não repete a marca
-  const first = toks(name)[0];
-  if (!norm(name).startsWith(norm(brand)) && !toks(brand).includes(first)) name = `${brand} ${name}`;
+  // "Emporio Armani Stronger With You" já tem "Armani" (Giorgio Armani): não repete a marca
+  const bt = toks(brand).filter((t) => t.length > 2);
+  if (!norm(name).startsWith(norm(brand)) && !bt.some((t) => toks(name).includes(t))) name = `${brand} ${name}`;
   return `${name}${ml ? ` ${ml}ml` : ""}`.replace(/\s+/g, " ").trim();
 }
 
@@ -204,6 +205,33 @@ async function pickByPhoto(productId: number, ourName: string, hits: Hit[]): Pro
   return null;
 }
 
+/** Hit a partir do link: /perfume/Giorgio-Armani/Emporio-Armani-Stronger-With-You-Intensely-52802.html */
+export function hitFromUrl(url: string): Hit | null {
+  const m = /fragrantica\.[a-z.]+\/perfume\/([^/]+)\/(.+)-(\d+)\.html/i.exec(url);
+  if (!m) return null;
+  return { brand: decodeURIComponent(m[1]).replace(/-/g, " "), name: decodeURIComponent(m[2]).replace(/-/g, " "), url: `https://www.fragrantica.com/perfume/${m[1]}/${m[2]}-${m[3]}.html` };
+}
+
+/** Busca no Google só dentro do Fragrantica (Apify Web Search), com o nome que veio do anúncio. */
+async function searchGoogle(name: string): Promise<Hit[]> {
+  if (!process.env.APIFY_TOKEN) return [];
+  const q = name.replace(/\b\d{2,4}\s*ml\b/gi, " ").replace(/\s+/g, " ").trim();
+  const r = await fetch("https://apify--web-search.apify.actor/", {
+    method: "POST",
+    headers: { authorization: `Bearer ${process.env.APIFY_TOKEN}`, "content-type": "application/json" },
+    body: JSON.stringify({ query: `${q} fragrantica`, maxResults: 8, allowedDomains: ["fragrantica.com"] }),
+    signal: AbortSignal.timeout(60000),
+  });
+  if (!r.ok) throw new Error(`Web Search respondeu ${r.status}`);
+  const j = (await r.json()) as { results?: { url: string }[] };
+  const out: Hit[] = [];
+  for (const x of j.results || []) {
+    const h = hitFromUrl(x.url);
+    if (h && !out.some((o) => o.url === h.url)) out.push(h);
+  }
+  return out;
+}
+
 /** Procura um perfume na Fragrantica e, se achar com certeza, troca o nome dele pelo padrão. */
 export async function standardize(productId: number): Promise<string> {
   const p = db().prepare("SELECT id, name, ml, conc FROM products WHERE id = ?").get(productId) as { id: number; name: string; ml: number; conc: string | null } | undefined;
@@ -220,6 +248,15 @@ export async function standardize(productId: number): Promise<string> {
     throw e;
   }
   let h = pick(p.name, hits);
+  // a busca do Fragrantica se perde com palavras de anúncio ("Armani Beauty ..."): tenta pelo Google, só páginas do Fragrantica
+  if (!h) {
+    const g = await searchGoogle(p.name).catch((e) => (log("warn", `Fragrantica (Google): ${(e as Error).message}`), [] as Hit[]));
+    if (g.length) {
+      h = pick(p.name, g);
+      if (h) log("info", `Fragrantica: "${p.name}" achado pelo Google → ${h.brand} ${h.name}`);
+      else hits = [...g, ...hits];
+    }
+  }
   // várias versões do mesmo perfume (Art of Arabia I, II, III): decide pela foto do anúncio original
   if (!h) h = await pickByPhoto(p.id, p.name, hits).catch((e) => (log("warn", `Fragrantica (foto): ${(e as Error).message}`), null));
   if (!h) {
