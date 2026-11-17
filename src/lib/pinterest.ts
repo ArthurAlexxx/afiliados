@@ -68,7 +68,18 @@ export async function findPinPhotos(productId: number, max = 10): Promise<number
   const base = p.name.replace(/\b\d{2,4}\s*ml\b/gi, "").replace(/\b(eau de (parfum|toilette)|edp|edt|masculino|feminino|perfume|árabe|arabe|original)\b/gi, " ").replace(/[-|]/g, " ").replace(/\s+/g, " ").trim();
   const query = `${base} perfume`;
   // nome de nicho às vezes não acha com "perfume": tenta também só o nome e "fragrance", na mesma busca
-  const pins = (await searchPins([query, base, `${base} fragrance`], 25)).filter((x) => titleMatches(p.name, x.title));
+  let pins = (await searchPins([query, base, `${base} fragrance`], 25)).filter((x) => titleMatches(p.name, x.title));
+  // o Pinterest bloqueia algumas palavras para quem não está logado (ex: "Vibrato" volta vazio).
+  // Com pouco resultado, busca a linha sem uma das palavras ("Sospiro") e filtra pelo título e pela cor depois.
+  if (pins.length < 5) {
+    const toks = nameTokens(p.name);
+    const variants = toks.length >= 2 ? toks.map((_, i) => toks.filter((__, j) => j !== i).join(" ")) : [];
+    if (variants.length) {
+      const more = (await searchPins(variants.map((v) => `${v} perfume`), 40)).filter((x) => titleMatches(p.name, x.title));
+      const seen = new Set(pins.map((x) => x.url));
+      pins = [...pins, ...more.filter((x) => !seen.has(x.url))];
+    }
+  }
   const n = await savePins(productId, pins, max);
   await checkPins(productId).catch(() => undefined);
   log("info", `Pinterest: "${query}" → ${pins.length} pin(s) do mesmo perfume, ${n} foto(s) boas para você aprovar`);
