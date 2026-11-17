@@ -194,6 +194,8 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE image_fixes ADD COLUMN usage TEXT",
     "ALTER TABLE pin_photos ADD COLUMN ref_sim REAL",
     "ALTER TABLE pin_photos ADD COLUMN flags TEXT",
+    "ALTER TABLE pin_photos ADD COLUMN feat TEXT",
+    "ALTER TABLE pin_photos ADD COLUMN chosen_by TEXT",
   ]) {
     try {
       db.exec(sql);

@@ -10,6 +10,7 @@ import sharp from "sharp";
 import { db, log, MEDIA_DIR } from "./db.ts";
 import { BRAND_WORDS, FLANKERS, STOP, nameTokens, norm, notPerfume } from "./perfume.ts";
 import { analyzeImage } from "./images.ts";
+import { afterChoice, systemPick } from "./pinlearn.ts";
 
 const DIR = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "pinterest");
 const UA_ = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
@@ -108,7 +109,10 @@ export async function savePins(productId: number, pins: Pin[], max = 10): Promis
       // nota: a mesma da escolha automática (fundo, nitidez, enquadramento), quadrada vale mais
       const a = await analyzeImage(jpg).catch(() => null);
       const score = Math.round((a?.score || 0) - 70 * Math.abs(Math.log(w / h)) + (Math.min(w, h) >= 1000 ? 10 : 0));
-      db().prepare("INSERT INTO pin_photos (product_id, url, path, width, height, title, score) VALUES (?, ?, ?, ?, ?, ?, ?)").run(productId, pin.url, file, w, h, pin.title.slice(0, 300), score);
+      const { featuresOf } = await import("./photoprefs.ts");
+      db()
+        .prepare("INSERT INTO pin_photos (product_id, url, path, width, height, title, score, feat) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+        .run(productId, pin.url, file, w, h, pin.title.slice(0, 300), score, a ? JSON.stringify(featuresOf(a)) : null);
       n++;
     } catch {
       /* foto que não baixa: pula */
@@ -129,17 +133,23 @@ export async function pinTestBatch(limit = 10) {
 }
 
 export function listPins(status = "pending", productId?: number) {
+  const picks = new Map<number, number | null>();
   return db()
     .prepare(
       `SELECT f.id, f.product_id, p.name, f.width, f.height, f.title, f.status, f.created_at, f.score, f.flags, f.ref_sim,
-        f.id = (SELECT x.id FROM pin_photos x WHERE x.product_id = f.product_id AND x.status = 'pending' AND x.flags IS NULL ORDER BY x.score DESC LIMIT 1) pick,
+
         (SELECT COUNT(*) FROM images i WHERE i.product_id = f.product_id AND i.disabled = 0) bank,
         p.last_posted_at,
         (SELECT 1 FROM posts q WHERE q.product_id = f.product_id AND q.status IN ('queued','sending') LIMIT 1) queued
        FROM pin_photos f JOIN products p ON p.id = f.product_id WHERE f.status = ? AND (? IS NULL OR f.product_id = ?) AND lower(p.name) NOT LIKE '%body splash%' AND lower(p.name) NOT LIKE '%body mist%' ORDER BY f.product_id, f.flags IS NOT NULL, f.score DESC LIMIT 300`,
     )
     .all(status, productId ?? null, productId ?? null)
-    .filter((r) => !notPerfume((r as { name: string }).name));
+    .filter((r) => !notPerfume((r as { name: string }).name))
+    .map((r) => {
+      const pid = (r as { product_id: number }).product_id;
+      if (!picks.has(pid)) picks.set(pid, systemPick(pid));
+      return { ...r, pick: picks.get(pid) === (r as { id: number }).id ? 1 : 0 };
+    });
 }
 
 export function pinFile(id: number): string | null {
@@ -167,11 +177,24 @@ export async function pinAutoStep() {
 
 async function pinAutoOne() {
   const { ranking } = await import("./curation.ts");
-  const item = ranking().find(
+  const items = ranking().filter((i) => i.best);
+  // 1) perfume das próximas promoções com opções esperando e sem foto do Pinterest escolhida: o sistema escolhe
+  const waiting = items.find(
     (i) =>
-      i.best &&
-      !db().prepare("SELECT main_image_id m FROM products WHERE id = ?").get(i.productId)?.m &&
-      !db().prepare("SELECT 1 FROM pin_photos WHERE product_id = ?").get(i.productId),
+      db().prepare("SELECT 1 FROM pin_photos WHERE product_id = ? AND status = 'pending' AND flags IS NULL AND path != ''").get(i.productId) &&
+      !db().prepare("SELECT 1 FROM pin_photos WHERE product_id = ? AND status = 'approved'").get(i.productId),
+  );
+  if (waiting) {
+    const pick = systemPick(waiting.productId);
+    if (pick) {
+      await chooseMain(pick, "auto");
+      log("info", `Pinterest (automático): foto principal escolhida para ${waiting.name}`);
+      return;
+    }
+  }
+  // 2) perfume sem foto principal e nunca buscado: busca e escolhe
+  const item = items.find(
+    (i) => !db().prepare("SELECT main_image_id m FROM products WHERE id = ?").get(i.productId)?.m && !db().prepare("SELECT 1 FROM pin_photos WHERE product_id = ?").get(i.productId),
   );
   if (!item) return;
   const n = await findPinPhotos(item.productId);
@@ -180,32 +203,25 @@ async function pinAutoOne() {
     db().prepare("INSERT OR IGNORE INTO pin_photos (product_id, url, path, width, height, status) VALUES (?, 'none', '', 0, 0, 'rejected')").run(item.productId);
     return;
   }
-  const cands = db().prepare("SELECT id, path, score, width, height FROM pin_photos WHERE product_id = ? AND status = 'pending' AND flags IS NULL").all(item.productId) as {
-    id: number; path: string; score: number; width: number; height: number;
-  }[];
-  if (!cands.length) {
+  const pick = systemPick(item.productId);
+  if (!pick) {
     log("info", `Pinterest: nenhuma foto com certeza de ser ${item.name}; fica para você escolher`);
     return;
   }
-  const { autoPhotoScore, featuresOf } = await import("./photoprefs.ts");
-  let best = cands[0], bestScore = -Infinity;
-  for (const c of cands) {
-    const a = await analyzeImage(fs.readFileSync(c.path)).catch(() => null);
-    const v = autoPhotoScore({ path: c.path, score: c.score, width: c.width, height: c.height, feat: a ? JSON.stringify(featuresOf(a)) : null });
-    if (v > bestScore) { bestScore = v; best = c; }
-  }
-  await chooseMain(best.id);
-  log("info", `Pinterest: foto principal escolhida para ${item.name}`);
+  await chooseMain(pick, "auto");
+  log("info", `Pinterest (automático): foto principal escolhida para ${item.name}`);
 }
 
 /**
  * O Arthur escolheu a melhor do perfume: ela vira a principal (para sempre, até ele trocar).
  * As outras do perfume entram no banco desligadas: não vão para posts, mas ensinam o gosto dele.
  */
-export async function chooseMain(id: number): Promise<string> {
+export async function chooseMain(id: number, by: "arthur" | "auto" = "arthur"): Promise<string> {
   const r = db().prepare("SELECT product_id FROM pin_photos WHERE id = ?").get(id) as { product_id: number } | undefined;
   if (!r) throw new Error("foto não encontrada");
+  const sys = by === "arthur" ? systemPick(r.product_id) : null;
   const msg = await decidePin(id, true, true);
+  db().prepare("UPDATE pin_photos SET chosen_by = ? WHERE id = ?").run(by, id);
   const { addImage } = await import("./curation.ts");
   const others = db().prepare("SELECT id, path FROM pin_photos WHERE product_id = ? AND status = 'pending'").all(r.product_id) as { id: number; path: string }[];
   for (const o of others) {
@@ -215,6 +231,7 @@ export async function chooseMain(id: number): Promise<string> {
   }
   const { learnPrefs } = await import("./photoprefs.ts");
   learnPrefs();
+  if (by === "arthur") afterChoice(r.product_id, id, sys);
   return msg;
 }
 

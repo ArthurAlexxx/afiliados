@@ -232,8 +232,11 @@ function ProductPhotos({ id, onBack }: { id: number; onBack: () => void }) {
 
 type PinPhoto = { id: number; product_id: number; name: string; width: number; height: number; title: string | null; bank: number; pick: number; flags: string | null; last_posted_at: string | null; queued: number | null };
 
+type Training = { n: number; hits: number; top2: number; chance: number; likes: string[]; min: number; rate: number; auto: boolean };
+
 function PinReview() {
-  const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean }>("/api/pinterest", 30_000);
+  const { data, reload } = useApi<{ rows: PinPhoto[]; auto: boolean; training?: Training }>("/api/pinterest", 30_000);
+  const t = data?.training;
   const [busy, setBusy] = React.useState<number | null>(null);
   const [big, setBig] = React.useState<PinPhoto | null>(null);
   const [showSus, setShowSus] = React.useState<Record<number, boolean>>({});
@@ -261,6 +264,19 @@ function PinReview() {
         {data?.auto
           ? "Automático LIGADO: perfume das promoções sem foto principal ganha a melhor foto do Pinterest como principal, para sempre (você troca na página do perfume)."
           : "Automático desligado: nada daqui vai para os posts sem você aprovar."}
+        {t ? (
+          <div className="mt-2 rounded-lg bg-background px-3 py-2 text-foreground">
+            <b>Treino da escolha automática:</b>{" "}
+            {t.n
+              ? `nas suas ${t.n} escolha(s) do Pinterest, o sistema escolheria a mesma foto em ${t.hits} (${Math.round((100 * t.hits) / t.n)}%; no chute seriam ~${t.chance}; entre as 2 primeiras dele: ${t.top2}).`
+              : "ainda sem escolhas suas do Pinterest."}
+            {t.likes.length ? ` Você tem preferido fotos ${t.likes.join(", ")}.` : ""}{" "}
+            {t.auto
+              ? "O automático está ligado."
+              : `O automático liga sozinho quando o sistema acertar ${Math.round(t.rate * 100)}% de pelo menos ${t.min} escolhas suas.`}{" "}
+            O selo <b>o sistema escolheria</b> mostra o palpite dele em cada perfume.
+          </div>
+        ) : null}
         <div className="mt-2">
           <Button size="sm" variant={data?.auto ? "outline" : "accent"} onClick={async () => {
             try {
@@ -319,7 +335,7 @@ function PinReview() {
                     {p.flags ? <div className="border-t px-2 py-1 text-[11px] text-warning">{p.flags}</div> : null}
                     <div className="flex flex-wrap items-center gap-1.5 border-t px-2 pt-2 text-[11.5px] text-muted-foreground">
                       <span className="tabular-nums">{p.width}×{p.height}</span>
-                      {p.pick ? <Badge tone="success">maior nota</Badge> : null}
+                      {p.pick ? <Badge tone="success">o sistema escolheria</Badge> : null}
                     </div>
                     <div className="grid grid-cols-[auto_1fr] gap-1.5 px-2 pt-1.5 pb-2">
                       <Button size="sm" variant="outline" disabled={busy === p.id} onClick={() => decide(p, false)} aria-label="Recusar" title="Recusar"><X className="size-3.5" /></Button>
