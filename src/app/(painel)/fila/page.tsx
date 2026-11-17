@@ -367,32 +367,8 @@ function QueueTab() {
         <PhotoBoard embedded onCount={setWaitN} onOpen={() => (window.location.href = "/fotos")} Drop={DropPhoto} />
       </Section>
 
-      <Section title="Últimos enviados" count={undefined}>
-        {data?.sent.length ? (
-          <Card className="divide-y divide-[var(--border-soft)] p-0">
-            {data.sent.map((p) => (
-              <div key={p.id} className="flex items-center gap-3 px-3 py-2">
-                <div className="size-10 shrink-0 overflow-hidden rounded-md border bg-muted">
-                  {p.has_media ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={`/api/media/${p.id}?v=${encodeURIComponent(p.mv)}`} alt="" loading="lazy" className="size-full object-cover" />
-                  ) : null}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-[13px] font-medium">{p.name || titleOf(p.formatted_text)}</div>
-                  <div className="text-[11.5px] text-muted-foreground">
-                    {p.detail?.source ? `veio de ${p.detail.source.group_name}` : p.source_name}
-                    {p.discount ? ` · -${p.discount}%` : ""}
-                  </div>
-                </div>
-                {p.price ? <span className="text-[12.5px] font-semibold tabular-nums">{brl(p.price)}</span> : null}
-                <span className="w-16 text-right text-[11.5px] whitespace-nowrap text-muted-foreground">{clockOf(p.sent_at)}</span>
-              </div>
-            ))}
-          </Card>
-        ) : (
-          <Card className="px-5 py-6 text-center text-[13px] text-muted-foreground">Nenhum envio ainda.</Card>
-        )}
+      <Section title="Enviados" hint="Tudo o que já saiu no grupo. Clique num card para ver a mensagem e os detalhes.">
+        <SentGallery />
       </Section>
 
       {crop ? (
@@ -415,6 +391,215 @@ function QueueTab() {
           }}
         />
       ) : null}
+    </>
+  );
+}
+
+
+/* ---------- Enviados (galeria com filtros e páginas) ---------- */
+
+type SentResp = { rows: QPost[]; total: number; page: number; pages: number; groups: { g: string; n: number }[]; today: number };
+
+const PERIODS = [
+  { k: "today", l: "Hoje" },
+  { k: "7d", l: "7 dias" },
+  { k: "30d", l: "30 dias" },
+  { k: "all", l: "Tudo" },
+];
+
+function SentCard({ p, onOpen }: { p: QPost; onOpen: () => void }) {
+  const src = p.detail?.source;
+  return (
+    <button onClick={onOpen} className="group overflow-hidden rounded-xl border border-[var(--border-soft)] bg-card text-left shadow-xs transition hover:-translate-y-0.5 hover:shadow-md">
+      <div className="relative aspect-square bg-muted">
+        {p.has_media ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={`/api/media/${p.id}?v=${encodeURIComponent(p.mv)}`} alt="" loading="lazy" className="size-full object-cover" />
+        ) : (
+          <div className="flex size-full items-center justify-center text-[12px] text-muted-foreground">sem foto</div>
+        )}
+        <span className="absolute top-2 left-2 rounded-full bg-black/65 px-2 py-0.5 text-[11px] font-medium text-white backdrop-blur">
+          {clockOf(p.sent_at)} · {timeAgo(p.sent_at)}
+        </span>
+        {p.discount ? (
+          <span className="absolute top-2 right-2 rounded-full bg-emerald-500 px-2 py-0.5 text-[11.5px] font-bold text-white">-{p.discount}%</span>
+        ) : null}
+      </div>
+      <div className="p-3">
+        <div className="line-clamp-2 min-h-[2.6em] text-[14px] leading-snug font-semibold">{p.name || titleOf(p.formatted_text)}</div>
+        <div className="mt-1.5 flex items-baseline gap-2">
+          {p.price ? <span className="text-[18px] font-bold tabular-nums">{brl(p.price)}</span> : null}
+          {src?.old_price && p.price && src.old_price > p.price ? <span className="text-[12px] text-muted-foreground line-through tabular-nums">{brl(src.old_price)}</span> : null}
+        </div>
+        <div className="mt-2 flex items-center gap-1.5 border-t border-[var(--border-soft)] pt-2 text-[12px] text-muted-foreground">
+          <span className="min-w-0 flex-1 truncate">
+            veio de <b className="font-semibold text-foreground">{src?.group_name || p.source_name}</b>
+          </span>
+          {p.detail?.groups.length ? <span className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[11px]">{p.detail.groups.length} grupo(s)</span> : null}
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function SentDetail({ p, onClose }: { p: QPost; onClose: () => void }) {
+  React.useEffect(() => {
+    const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [onClose]);
+  const d = p.detail;
+  const src = d?.source;
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/60 p-4" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="max-h-full w-full max-w-4xl overflow-auto rounded-xl bg-card shadow-2xl">
+        <div className="flex items-center gap-3 border-b border-[var(--border-soft)] px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[15px] font-semibold">{p.name || titleOf(p.formatted_text)}</div>
+            <div className="text-[12px] text-muted-foreground">Enviado {clockOf(p.sent_at)} · {timeAgo(p.sent_at)} · #{p.id}</div>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted">
+            <X className="size-5" />
+          </button>
+        </div>
+        <div className="grid gap-4 p-4 md:grid-cols-2">
+          <WaPreview text={p.formatted_text} image={p.has_media ? `/api/media/${p.id}?v=${encodeURIComponent(p.mv)}` : null} time={clockOf(p.sent_at)} />
+          <div className="space-y-2">
+            <Info label="Origem da promoção">
+              {src ? (
+                <>
+                  <div className="font-semibold">{src.group_name}</div>
+                  <div className="text-muted-foreground">{clockOf(src.created_at)} · {timeAgo(src.created_at)}</div>
+                  {src.coupon ? <div className="mt-1">Cupom <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11.5px] font-semibold">{src.coupon}</span></div> : null}
+                </>
+              ) : (
+                p.source_name
+              )}
+              {p.link ? (
+                <a href={p.link} target="_blank" rel="noreferrer" className="mt-1 block font-medium text-violet-600 hover:underline dark:text-violet-400">Abrir no Mercado Livre ↗</a>
+              ) : null}
+            </Info>
+            <Info label="Preço">
+              <div className="grid grid-cols-[auto_1fr] gap-x-3 tabular-nums">
+                <span className="text-muted-foreground">Postado por</span>
+                <span className="text-right font-semibold">{brl(p.price) || "?"}</span>
+                {src?.old_price ? (<><span className="text-muted-foreground">De (no anúncio)</span><span className="text-right">{brl(src.old_price)}</span></>) : null}
+                {d?.realRef ? (<><span className="text-muted-foreground">Normal nos grupos</span><span className="text-right">{brl(d.realRef)}</span></>) : null}
+                {p.discount ? (<><span className="text-muted-foreground">Abaixo do normal</span><span className="text-right font-semibold text-emerald-600">{p.discount}%</span></>) : null}
+              </div>
+            </Info>
+            {d?.groups.length ? (
+              <Info label={`Visto em ${d.groups.length} grupo(s) nas 24h antes`}>
+                <ul className="space-y-0.5">
+                  {d.groups.map((g) => (
+                    <li key={g.g} className="flex gap-2">
+                      <span className={cn("min-w-0 flex-1 truncate", src?.group_name === g.g && "font-semibold")}>{g.g}</span>
+                      <span className="text-muted-foreground tabular-nums">{brl(g.price)}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Info>
+            ) : null}
+            {d?.agent ? <Info label="Por que saiu">{d.agent}</Info> : null}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SentGallery() {
+  const [q, setQ] = React.useState("");
+  const [query, setQuery] = React.useState("");
+  const [group, setGroup] = React.useState("");
+  const [period, setPeriod] = React.useState("all");
+  const [sort, setSort] = React.useState("recent");
+  const [page, setPage] = React.useState(1);
+  const [sel, setSel] = React.useState<QPost | null>(null);
+  React.useEffect(() => {
+    const t = setTimeout(() => setQuery(q), 300);
+    return () => clearTimeout(t);
+  }, [q]);
+  React.useEffect(() => setPage(1), [query, group, period, sort]);
+  const { data, loading } = useApi<SentResp>(
+    `/api/posts/sent?page=${page}&period=${period}&sort=${sort}${query ? `&q=${encodeURIComponent(query)}` : ""}${group ? `&group=${encodeURIComponent(group)}` : ""}`,
+    30000,
+  );
+  const pages = data?.pages || 1;
+  const nums = Array.from({ length: pages }, (_, i) => i + 1).filter((n) => n === 1 || n === pages || Math.abs(n - page) <= 2);
+  const sel2 = "h-9 rounded-lg border border-[var(--border-soft)] bg-card px-2.5 text-[13px] outline-none focus:ring-2 focus:ring-violet-500/40";
+  return (
+    <>
+      <Card className="mb-3 flex flex-wrap items-center gap-2 p-2">
+        <div className="relative min-w-[200px] flex-1">
+          <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Buscar perfume..." value={q} onChange={(e) => setQ(e.target.value)} className="h-9 pl-9" />
+        </div>
+        <select value={group} onChange={(e) => setGroup(e.target.value)} className={sel2}>
+          <option value="">Todos os grupos de origem</option>
+          {data?.groups.map((g) => (
+            <option key={g.g} value={g.g}>
+              {g.g} ({g.n})
+            </option>
+          ))}
+        </select>
+        <div className="flex rounded-lg border border-[var(--border-soft)] p-0.5">
+          {PERIODS.map((x) => (
+            <button
+              key={x.k}
+              onClick={() => setPeriod(x.k)}
+              className={cn("h-8 rounded-md px-2.5 text-[12.5px] font-medium", period === x.k ? "bg-violet-500 text-white" : "text-muted-foreground hover:text-foreground")}
+            >
+              {x.l}
+            </button>
+          ))}
+        </div>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} className={sel2}>
+          <option value="recent">Mais recentes</option>
+          <option value="discount">Maior desconto</option>
+          <option value="price">Menor preço</option>
+        </select>
+      </Card>
+      <div className="mb-2 text-[12.5px] text-muted-foreground">
+        {data ? `${data.total} post(s)${period === "all" ? ` · ${data.today} hoje` : ""}` : "Carregando…"}
+      </div>
+      {loading && !data ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className="aspect-[3/4] animate-pulse rounded-xl bg-muted" />
+          ))}
+        </div>
+      ) : data?.rows.length ? (
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4">
+          {data.rows.map((p) => (
+            <SentCard key={p.id} p={p} onOpen={() => setSel(p)} />
+          ))}
+        </div>
+      ) : (
+        <Card className="px-5 py-10 text-center text-[13px] text-muted-foreground">Nenhum envio com esses filtros.</Card>
+      )}
+      {pages > 1 ? (
+        <div className="mt-4 flex items-center justify-center gap-1">
+          <Button size="sm" variant="outline" disabled={page <= 1} onClick={() => setPage(page - 1)}>
+            Anterior
+          </Button>
+          {nums.map((n, i) => (
+            <React.Fragment key={n}>
+              {i > 0 && n - nums[i - 1] > 1 ? <span className="px-1 text-muted-foreground">…</span> : null}
+              <button
+                onClick={() => setPage(n)}
+                className={cn("h-8 min-w-8 rounded-lg px-2 text-[13px] font-medium tabular-nums", n === page ? "bg-violet-500 text-white" : "text-muted-foreground hover:bg-muted")}
+              >
+                {n}
+              </button>
+            </React.Fragment>
+          ))}
+          <Button size="sm" variant="outline" disabled={page >= pages} onClick={() => setPage(page + 1)}>
+            Próxima
+          </Button>
+        </div>
+      ) : null}
+      {sel ? <SentDetail p={sel} onClose={() => setSel(null)} /> : null}
     </>
   );
 }
@@ -605,7 +790,7 @@ export default function FilaPage() {
           );
         })}
       </div>
-      {tab === "fila" ? <QueueTab /> : <HistoryTab key={tab} status={tab} />}
+      {tab === "fila" ? <QueueTab /> : tab === "sent" ? <SentGallery /> : <HistoryTab key={tab} status={tab} />}
     </>
   );
 }
