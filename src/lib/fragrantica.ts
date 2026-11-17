@@ -16,7 +16,14 @@ const GENERIC = new Set(["for", "men", "women", "man", "woman", "him", "her", "p
 const VARIANT = new Set([...FLANKERS, "elixir", "intense", "extrait", "parfum", "absolu", "bourbon", "nero", "vintage", "sequoia", "platin", "platinum", "noir", "oud", "gold", "silver", "black", "white", "blue", "red", "pink", "rose", "night", "sport", "edition", "limited", "prive", "privee", "reserve", "dark", "light", "pure", "extreme", "le", "la", "men", "women", "femme", "homme", "her", "him"]);
 
 // "Bade'e" = "Badee"
-const toks = (s: string) => norm(s.replace(/['’`´]/g, "")).split(" ").filter(Boolean);
+// "One Million"/"1 Million" = "Million"; "Eau de Parfum Intense" é concentração, não versão "Intense"
+const prep = (s: string) =>
+  s
+    .replace(/['’`´]/g, "")
+    .replace(/\b(1|one)\s+million\b/gi, "million")
+    .replace(/\b(eau de parfum|eau de toilette|edp|edt)\s+intense\b/gi, "$1")
+    .replace(/\b(masc|fem|tradicional|original)\b/gi, " ");
+const toks = (s: string) => norm(prep(s)).split(" ").filter(Boolean);
 const near = (a: string, b: string) => a === b || (a.length >= 5 && a[0] === b[0] && Math.abs(a.length - b.length) <= 2 && dist(a, b) <= (Math.min(a.length, b.length) >= 7 ? 2 : 1));
 const FEM = /\b(feminino|feminina|women|woman|femme|her|pour elle)\b/;
 const MASC = /\b(masculino|masculina|men|man|homme|him|pour homme)\b/;

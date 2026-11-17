@@ -531,6 +531,10 @@ export function startWorker() {
       setState("fragGoogleV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
     }
+    if (getState("fragPrepV1") !== "1") {
+      setState("fragPrepV1", "1");
+      db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL").run();
+    }
     if (getState("fragRoyalV1") !== "1") {
       setState("fragRoyalV1", "1");
       db().prepare("UPDATE products SET frag_checked_at = NULL WHERE frag_url IS NULL AND lower(name) LIKE '%royal collection%'").run();
