@@ -425,6 +425,12 @@ export function startWorker() {
       setState("envPerHour", perHour);
       log("info", `Ritmo ajustado para ${perHour} posts por hora`);
     }
+    // Arthur (nov/2026): posta até as 23h
+    if (getState("activeTo23") !== "1") {
+      saveSettings({ activeTo: "23:00" });
+      setState("activeTo23", "1");
+      log("info", "Janela de envio: agora vai até as 23:00");
+    }
     // IA desligada a pedido (sem chave no Railway): desliga e apaga a chave salva no painel
     // geração de imagem por IA fica desligada (pedido do Arthur; o código fica em imagefix.ts para outro momento)
     if (getState("envImageFix") !== "off") {
