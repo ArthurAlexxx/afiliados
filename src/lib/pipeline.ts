@@ -466,6 +466,23 @@ export function startWorker() {
       db().prepare("UPDATE posts SET status = 'skipped', reason = 'Perfume bloqueado' WHERE status IN ('queued','pending') AND product_id IN (SELECT id FROM products WHERE blocked = 1)").run();
       log("info", `Bloqueado (não postar): Kiss Deo Colônia 100ml (${r.changes} cadastro(s))`);
     }
+    // teste: o servidor consegue abrir a Fragrantica direto? (scraper próprio)
+    if (getState("fragDirectTestV1") !== "1") {
+      setState("fragDirectTestV1", "1");
+      void (async () => {
+        const UA_ = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+        for (const u of ["https://www.fragrantica.com/perfume/French-Avenue/Royal-Blend-94022.html", "https://www.fragrantica.com.br/perfume/French-Avenue/Royal-Blend-94022.html", "https://www.fragrantica.com/search/?query=royal%20blend"]) {
+          try {
+            const r = await fetch(u, { headers: { "user-agent": UA_, accept: "text/html", "accept-language": "pt-BR,pt;q=0.9,en;q=0.8" }, signal: AbortSignal.timeout(20000) });
+            const t = await r.text();
+            const title = t.match(/<title>([^<]*)/i)?.[1]?.trim() || "";
+            log("info", `Teste Fragrantica direto: ${u} → ${r.status}, ${t.length} bytes, título "${title.slice(0, 80)}"${/cf-chl|challenge-platform|Just a moment/i.test(t) ? " (bloqueio Cloudflare)" : ""}`);
+          } catch (e) {
+            log("info", `Teste Fragrantica direto: ${u} → erro ${(e as Error).message}`);
+          }
+        }
+      })();
+    }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {
       saveSettings({ activeTo: "23:00" });
