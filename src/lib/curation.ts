@@ -4,7 +4,7 @@ import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { manchete, parsePromo, renderTemplate, formatPrice } from "./parser.ts";
-import { nameQuality, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
+import { nameQuality, notPerfume, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { autoPhotoScore, featuresOf, type PhotoRow } from "./photoprefs.ts";
 import { brandImage, standardImage } from "./branding.ts";
@@ -265,8 +265,9 @@ export function ranking(s: Settings = getSettings(), opts: { days?: number } = {
 
     let why = "";
     if (!best) why = `sem oferta nos últimos ${s.curationLookbackMinutes} min`;
-    // regra do Arthur: body splash (e body mist) não é postado
-    else if (/body[\s-]*(splash|mist)/i.test(`${p.name}\n${best.text.slice(0, 300)}`)) why = "body splash não é postado";
+    // regra do Arthur: só perfume (body splash, creme, loção, hidratante… não)
+    else if (notPerfume(`${p.name}\n${best.text.split("\n").find((l) => l.trim()) || ""}`))
+      why = `não é perfume (${notPerfume(`${p.name}\n${best.text.split("\n").find((l) => l.trim()) || ""}`)})`;
     else if (coolingDown) why = `já postado nas últimas ${s.curationCooldownHours}h`;
     else if (s.curationRequireImage && !pimgs.length) why = "sem foto boa no banco";
     // regra do Arthur: perfume com só 1 foto no banco não é postado

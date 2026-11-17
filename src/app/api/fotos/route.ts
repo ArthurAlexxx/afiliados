@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { bestImagePath } from "@/lib/curation";
 import { learnPrefs, prefsSummary } from "@/lib/photoprefs";
+import { notPerfume } from "@/lib/perfume";
 
 export const dynamic = "force-dynamic";
 
@@ -34,7 +35,9 @@ export async function GET(req: Request) {
        FROM products p JOIN images i ON i.product_id = p.id
        WHERE p.name LIKE ? GROUP BY p.id ORDER BY last DESC LIMIT 300`,
     )
-    .all(q) as { id: number; cover: number | null }[];
+    .all(q)
+    // só perfume: creme, loção, body splash… não aparecem
+    .filter((r) => !notPerfume((r as { name: string }).name)) as { id: number; cover: number | null }[];
   // capa = a foto que vai nos posts (principal ou a escolha automática)
   const idOf = db().prepare("SELECT id FROM images WHERE path = ?");
   for (const r of rows) {

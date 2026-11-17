@@ -171,3 +171,16 @@ export function nameQuality(title: string): number {
   q += Math.min(10, words.length); // um pouco mais de informação ajuda
   return q;
 }
+
+
+/**
+ * Regra do Arthur: o grupo é só de perfume. Body splash, creme, loção, hidratante, sabonete, desodorante
+ * (aerossol/roll-on) etc. ficam de fora. "Deo parfum" e "deo colônia" são perfume e passam.
+ */
+export function notPerfume(text: string): string | null {
+  const n = norm(text);
+  const m = n.match(
+    /\b(body (splash|mist|lotion|cream|wash)|splash|locao|hidratante|creme|cream|lotion|sabonete|shampoo|condicionador|gel de banho|shower gel|oleo corporal|desodorante (aerosol|antitranspirante|roll on|rollon|stick)|antitranspirante|roll on|pos barba|after shave|aftershave|balm|batom|esmalte|maquiagem|base liquida|protetor solar|talco|creme de barbear|espuma de barbear)\b/,
+  );
+  return m ? m[0] : null;
+}

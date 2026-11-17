@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import sharp from "sharp";
 import { db, log, MEDIA_DIR } from "./db.ts";
-import { BRAND_WORDS, FLANKERS, STOP, nameTokens, norm } from "./perfume.ts";
+import { BRAND_WORDS, FLANKERS, STOP, nameTokens, norm, notPerfume } from "./perfume.ts";
 import { analyzeImage } from "./images.ts";
 
 const DIR = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, "pinterest");
@@ -138,7 +138,8 @@ export function listPins(status = "pending", productId?: number) {
         (SELECT 1 FROM posts q WHERE q.product_id = f.product_id AND q.status IN ('queued','sending') LIMIT 1) queued
        FROM pin_photos f JOIN products p ON p.id = f.product_id WHERE f.status = ? AND (? IS NULL OR f.product_id = ?) AND lower(p.name) NOT LIKE '%body splash%' AND lower(p.name) NOT LIKE '%body mist%' ORDER BY f.product_id, f.flags IS NOT NULL, f.score DESC LIMIT 300`,
     )
-    .all(status, productId ?? null, productId ?? null);
+    .all(status, productId ?? null, productId ?? null)
+    .filter((r) => !notPerfume((r as { name: string }).name));
 }
 
 export function pinFile(id: number): string | null {
