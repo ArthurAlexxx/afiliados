@@ -121,7 +121,7 @@ export function listPins(status = "pending") {
         (SELECT COUNT(*) FROM images i WHERE i.product_id = f.product_id AND i.disabled = 0) bank,
         p.last_posted_at,
         (SELECT 1 FROM posts q WHERE q.product_id = f.product_id AND q.status IN ('queued','sending') LIMIT 1) queued
-       FROM pin_photos f JOIN products p ON p.id = f.product_id WHERE f.status = ? ORDER BY f.product_id, f.flags IS NOT NULL, f.score DESC LIMIT 300`,
+       FROM pin_photos f JOIN products p ON p.id = f.product_id WHERE f.status = ? AND lower(p.name) NOT LIKE '%body splash%' AND lower(p.name) NOT LIKE '%body mist%' ORDER BY f.product_id, f.flags IS NOT NULL, f.score DESC LIMIT 300`,
     )
     .all(status);
 }
