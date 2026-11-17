@@ -769,5 +769,8 @@ export function mergeDuplicateProducts(): number {
       log("info", `Perfume repetido juntado: "${drop.r.name}" entrou em "${keep.r.name}"`);
     }
   }
+  // diagnóstico: nomes muito parecidos que não foram juntados
+  const kingdom = db().prepare("SELECT id, name, ml, conc, tokens FROM products WHERE lower(name) LIKE '%kingdom%'").all();
+  log("info", `Perfumes repetidos (diagnóstico Kingdom): ${JSON.stringify(kingdom)}`);
   return merged;
 }
