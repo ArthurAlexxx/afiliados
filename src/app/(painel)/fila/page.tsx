@@ -32,6 +32,20 @@ type QPost = {
   discount: number | null;
   link: string | null;
   eta?: string;
+  detail?: {
+    source: { group_name: string; created_at: string; price: number | null; old_price: number | null; pct: number | null; coupon: string | null; url: string | null } | null;
+    groups: { g: string; price: number | null; at: string; n: number }[];
+    score: number | null;
+    median: number | null;
+    realRef: number | null;
+    realSamples: number | null;
+    realLabel: string | null;
+    inflated: boolean;
+    origin: string | null;
+    seenGroups: number | null;
+    agent: string | null;
+    photo: string | null;
+  };
 };
 type QueueResp = {
   queued: QPost[];
@@ -81,6 +95,22 @@ async function act(id: number, action: string, extra: Record<string, unknown> = 
 
 /* ---------- Fila ---------- */
 
+const ORIGIN: Record<string, string> = { arabe: "Árabe", importado: "Importado", nacional: "Nacional" };
+const LABEL: Record<string, { t: string; c: string }> = {
+  otima: { t: "Ótimo preço", c: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" },
+  boa: { t: "Bom preço", c: "bg-sky-500/15 text-sky-700 dark:text-sky-300" },
+  normal: { t: "Preço normal", c: "bg-gray-500/15 text-muted-foreground" },
+};
+
+function Info({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={cn("min-w-0 rounded-lg border border-[var(--border-soft)] bg-muted/30 px-3 py-2", className)}>
+      <div className="mb-1 text-[10.5px] font-semibold tracking-wide text-gray-400 uppercase">{label}</div>
+      <div className="text-[12.5px] leading-relaxed">{children}</div>
+    </div>
+  );
+}
+
 function QueueItem({ p, first, onChanged, onCrop }: { p: QPost; first: boolean; onChanged: () => void; onCrop: (p: QPost) => void }) {
   const [open, setOpen] = React.useState(false);
   const [busy, setBusy] = React.useState<string | null>(null);
@@ -97,10 +127,33 @@ function QueueItem({ p, first, onChanged, onCrop }: { p: QPost; first: boolean; 
     }
   };
   const sending = p.status === "sending";
+  const d = p.detail;
+  const src = d?.source;
+  const old = src?.old_price && p.price && src.old_price > p.price ? src.old_price : null;
+  const label = d?.realLabel ? LABEL[d.realLabel] : null;
   return (
     <Card className={cn("overflow-hidden p-0", first && "ring-2 ring-violet-500/60")}>
-      <div className="flex gap-4 p-3">
-        <div className="relative size-24 shrink-0 overflow-hidden rounded-lg border bg-muted sm:size-28">
+      {/* topo: horário de saída e de onde veio */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-[var(--border-soft)] px-4 py-2">
+        <span
+          className={cn(
+            "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11.5px] font-semibold",
+            sending ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-violet-500/10 text-violet-700 dark:text-violet-300",
+          )}
+        >
+          {sending ? <Send className="size-3" /> : <Clock className="size-3" />}
+          {sending ? "Enviando agora" : `Sai ${until(p.eta)} · ${p.eta ? new Date(p.eta).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : ""}`}
+        </span>
+        {src ? (
+          <span className="text-[12px] text-muted-foreground">
+            veio de <b className="font-semibold text-foreground">{src.group_name}</b> {timeAgo(src.created_at)}
+          </span>
+        ) : null}
+        <span className="ml-auto text-[11px] text-muted-foreground tabular-nums">#{p.id}</span>
+      </div>
+
+      <div className="flex gap-4 p-4">
+        <div className="relative size-24 shrink-0 overflow-hidden rounded-lg border bg-muted sm:size-32">
           {p.has_media ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={`/api/media/${p.id}?v=${encodeURIComponent(p.mv)}`} alt="" className="size-full object-cover" />
@@ -109,26 +162,18 @@ function QueueItem({ p, first, onChanged, onCrop }: { p: QPost; first: boolean; 
           )}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold",
-                sending ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300" : "bg-violet-500/10 text-violet-700 dark:text-violet-300",
-              )}
-            >
-              {sending ? <Send className="size-3" /> : <Clock className="size-3" />}
-              {sending ? "Enviando agora" : `Sai ${until(p.eta)} · ${p.eta ? new Date(p.eta).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : ""}`}
-            </span>
-            <span className="text-[11.5px] text-muted-foreground">#{p.id} · {p.source_name}</span>
-          </div>
-          <div className="mt-1 truncate text-[14.5px] font-semibold">{p.name || titleOf(p.formatted_text)}</div>
-          <div className="mt-0.5 flex flex-wrap gap-x-3 text-[12.5px] text-muted-foreground">
-            {p.price ? <span className="font-semibold text-foreground">{brl(p.price)}</span> : null}
-            {p.discount ? <span className="text-emerald-600 dark:text-emerald-400">{p.discount}% abaixo do normal</span> : null}
-            {p.reason ? <span>{p.reason}</span> : null}
+          <div className="text-[15px] leading-snug font-semibold">{p.name || titleOf(p.formatted_text)}</div>
+          <div className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+            {p.price ? <span className="text-[20px] font-bold tabular-nums">{brl(p.price)}</span> : null}
+            {old ? <span className="text-[12.5px] text-muted-foreground line-through tabular-nums">{brl(old)}</span> : null}
+            {p.discount ? (
+              <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11.5px] font-semibold text-emerald-700 dark:text-emerald-300">-{p.discount}%</span>
+            ) : null}
+            {label ? <span className={cn("rounded-full px-2 py-0.5 text-[11.5px] font-semibold", label.c)}>{label.t}</span> : null}
+            {d?.origin ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11.5px] font-medium text-muted-foreground">{ORIGIN[d.origin] || d.origin}</span> : null}
           </div>
           {!sending ? (
-            <div className="mt-2 flex flex-wrap gap-1.5">
+            <div className="mt-3 flex flex-wrap gap-1.5">
               {p.main ? (
                 <Button size="sm" variant="outline" className="h-7 text-[12px]" onClick={() => onCrop(p)}>
                   <CropIcon className="size-3.5" /> Ajustar foto
@@ -143,18 +188,96 @@ function QueueItem({ p, first, onChanged, onCrop }: { p: QPost; first: boolean; 
               <Button size="sm" variant="ghost" className="h-7 text-[12px]" loading={busy === "discard"} onClick={() => run("discard", "Descartado")}>
                 <Ban className="size-3.5" /> Descartar
               </Button>
-              <button onClick={() => setOpen((v) => !v)} className="ml-auto inline-flex items-center gap-1 text-[12px] text-muted-foreground hover:text-foreground">
-                <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} /> Ver mensagem
-              </button>
             </div>
           ) : null}
         </div>
       </div>
-      {open ? (
-        <div className="border-t border-[var(--border-soft)] p-3">
-          <WaPreview text={p.formatted_text} image={p.has_media ? `/api/media/${p.id}?v=${encodeURIComponent(p.mv)}` : null} className="max-w-md" />
+
+      {/* detalhes em blocos */}
+      {d ? (
+        <div className="grid gap-2 px-4 pb-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Info label="Origem da promoção">
+            {src ? (
+              <>
+                <div className="font-semibold">{src.group_name}</div>
+                <div className="text-muted-foreground">
+                  {clockOf(src.created_at)} · {timeAgo(src.created_at)}
+                </div>
+                {src.coupon ? (
+                  <div className="mt-1">
+                    Cupom <span className="rounded bg-amber-500/15 px-1.5 py-0.5 font-mono text-[11.5px] font-semibold text-amber-700 dark:text-amber-300">{src.coupon}</span>
+                  </div>
+                ) : null}
+                {p.link ? (
+                  <a href={p.link} target="_blank" rel="noreferrer" className="mt-1 inline-block font-medium text-violet-600 hover:underline dark:text-violet-400">
+                    Abrir no Mercado Livre ↗
+                  </a>
+                ) : null}
+              </>
+            ) : (
+              <span className="text-muted-foreground">{p.source_name}</span>
+            )}
+          </Info>
+          <Info label="Preço">
+            <div className="grid grid-cols-[auto_1fr] gap-x-3 tabular-nums">
+              <span className="text-muted-foreground">Agora</span>
+              <span className="text-right font-semibold">{brl(p.price) || "?"}</span>
+              {old ? (
+                <>
+                  <span className="text-muted-foreground">De (no anúncio)</span>
+                  <span className={cn("text-right", d.inflated && "text-amber-600")}>{brl(old)}{d.inflated ? " ⚠" : ""}</span>
+                </>
+              ) : null}
+              {d.realRef ? (
+                <>
+                  <span className="text-muted-foreground">Normal nos grupos</span>
+                  <span className="text-right">{brl(d.realRef)}</span>
+                </>
+              ) : d.median ? (
+                <>
+                  <span className="text-muted-foreground">Mediana</span>
+                  <span className="text-right">{brl(d.median)}</span>
+                </>
+              ) : null}
+            </div>
+            {d.realSamples ? <div className="mt-1 text-[11px] text-muted-foreground">base: {d.realSamples} preço(s) dos últimos 30 dias</div> : null}
+            {d.inflated ? <div className="mt-1 text-[11px] text-amber-600">O &quot;de&quot; do anúncio está acima do normal</div> : null}
+          </Info>
+          <Info label={`Visto em ${d.groups.length || d.seenGroups || 0} grupo(s) nas últimas 24h`}>
+            {d.groups.length ? (
+              <ul className="space-y-0.5">
+                {d.groups.slice(0, 5).map((g) => (
+                  <li key={g.g} className="flex items-center gap-2">
+                    <span className={cn("min-w-0 flex-1 truncate", src?.group_name === g.g && "font-semibold")}>{g.g}</span>
+                    <span className="tabular-nums text-muted-foreground">{brl(g.price)}</span>
+                  </li>
+                ))}
+                {d.groups.length > 5 ? <li className="text-[11px] text-muted-foreground">+ {d.groups.length - 5} grupo(s)</li> : null}
+              </ul>
+            ) : (
+              <span className="text-muted-foreground">Só nesse grupo</span>
+            )}
+          </Info>
+          <Info label="Por que vai sair">
+            {d.agent ? <div>{d.agent}</div> : null}
+            <div className="mt-1 flex flex-wrap gap-1.5 text-[11.5px] text-muted-foreground">
+              {d.score != null ? <span className="rounded bg-muted px-1.5 py-0.5">nota {Math.round(d.score)}</span> : null}
+              {d.photo ? <span className="rounded bg-muted px-1.5 py-0.5">foto: {d.photo === "banco" ? "escolhida por você" : d.photo}</span> : null}
+            </div>
+          </Info>
         </div>
       ) : null}
+
+      <div className="border-t border-[var(--border-soft)] px-4 py-2">
+        <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1 text-[12px] font-medium text-muted-foreground hover:text-foreground">
+          <ChevronDown className={cn("size-3.5 transition-transform", open && "rotate-180")} /> {open ? "Esconder mensagem" : "Ver como sai no grupo"}
+        </button>
+        {open ? (
+          <div className="mt-2">
+            <WaPreview text={p.formatted_text} image={p.has_media ? `/api/media/${p.id}?v=${encodeURIComponent(p.mv)}` : null} className="max-w-md" />
+          </div>
+        ) : null}
+      </div>
     </Card>
   );
 }
@@ -257,7 +380,10 @@ function QueueTab() {
                 </div>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-medium">{p.name || titleOf(p.formatted_text)}</div>
-                  <div className="text-[11.5px] text-muted-foreground">{p.source_name}</div>
+                  <div className="text-[11.5px] text-muted-foreground">
+                    {p.detail?.source ? `veio de ${p.detail.source.group_name}` : p.source_name}
+                    {p.discount ? ` · -${p.discount}%` : ""}
+                  </div>
                 </div>
                 {p.price ? <span className="text-[12.5px] font-semibold tabular-nums">{brl(p.price)}</span> : null}
                 <span className="w-16 text-right text-[11.5px] whitespace-nowrap text-muted-foreground">{clockOf(p.sent_at)}</span>
