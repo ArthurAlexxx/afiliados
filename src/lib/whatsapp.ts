@@ -11,7 +11,7 @@ import { getSettings } from "./settings.ts";
 export type WaChat = { jid: string; name: string; pic: string | null; group: boolean; pinned: boolean; ts: number; unread: number; last: WaMsg | null; role: string | null };
 export type WaMsg = {
   id: string; fromMe: boolean; ts: number; sender: string | null; senderJid: string | null; type: string;
-  text: string; media: boolean; thumb: string | null; quoted: string | null; status: string | null;
+  text: string; media: boolean; thumb: string | null; quoted: string | null; status: string | null; w: number | null; h: number | null;
 };
 
 const evo = () => new Evolution(getSettings());
@@ -59,6 +59,8 @@ export function normMsg(r: Any): WaMsg | null {
     media: /image|video|sticker|audio|document/.test(type),
     thumb,
     quoted,
+    w: Number(body.width) || null,
+    h: Number(body.height) || null,
     status: r.status || (Array.isArray(r.MessageUpdate) && r.MessageUpdate.length ? r.MessageUpdate[r.MessageUpdate.length - 1].status : null),
   };
 }

@@ -116,6 +116,11 @@ export class Evolution {
     });
   }
 
+  /** Apaga para todos uma mensagem que nós mandamos. */
+  deleteForEveryone(remoteJid: string, id: string) {
+    return this.call("DELETE", `/chat/deleteMessageForEveryone/${this.inst}`, { id, remoteJid, fromMe: true });
+  }
+
   getBase64FromMediaMessage(messageId: string) {
     return this.call<{ base64?: string; mimetype?: string }>("POST", `/chat/getBase64FromMediaMessage/${this.inst}`, {
       message: { key: { id: messageId } },

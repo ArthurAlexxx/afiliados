@@ -10,7 +10,7 @@ import { api } from "@/lib/client";
 import { cn } from "@/lib/utils";
 import { waToHtml } from "@/components/wa-preview";
 
-type Msg = { id: string; fromMe: boolean; ts: number; sender: string | null; senderJid: string | null; type: string; text: string; media: boolean; thumb: string | null; quoted: string | null; status: string | null };
+type Msg = { id: string; fromMe: boolean; ts: number; sender: string | null; senderJid: string | null; type: string; text: string; media: boolean; thumb: string | null; quoted: string | null; status: string | null; w: number | null; h: number | null };
 type Chat = { jid: string; name: string; pic: string | null; group: boolean; pinned: boolean; ts: number; unread: number; last: Msg | null; role: string | null };
 
 const NAME_COLORS = ["#06cf9c", "#53bdeb", "#ff72a1", "#ffbc38", "#a5b337", "#fc9775", "#d88deb", "#7f66ff", "#25d366", "#e26ab6"];
@@ -64,32 +64,46 @@ function preview(m: Msg | null, group: boolean) {
   return `${who}${icon}${body}`;
 }
 
+/** Caixa da foto no tamanho padrão do WhatsApp: largura fixa e altura pela proporção (limitada), sem pular de tamanho. */
+function Frame({ m, children }: { m: Msg; children: React.ReactNode }) {
+  const ratio = m.w && m.h ? Math.min(1.9, Math.max(0.56, m.w / m.h)) : 1;
+  return (
+    <div className="relative mb-1 w-[330px] max-w-full overflow-hidden rounded-[6px] bg-black/10" style={{ aspectRatio: String(ratio) }}>
+      {children}
+    </div>
+  );
+}
+
 function Media({ m }: { m: Msg }) {
   const [full, setFull] = React.useState(false);
+  const [loaded, setLoaded] = React.useState(false);
   const src = `/api/whatsapp/media?id=${encodeURIComponent(m.id)}`;
   if (m.type === "image")
     return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img
-        src={full ? src : m.thumb || src}
-        onLoad={() => setFull(true)}
-        alt=""
-        loading="lazy"
-        className="mb-1 block max-h-[330px] w-full min-w-[220px] rounded-[6px] object-cover"
-      />
+      <Frame m={m}>
+        {/* miniatura borrada até a foto inteira chegar, no mesmo tamanho */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {m.thumb && !loaded ? <img src={m.thumb} alt="" className="size-full scale-105 object-cover blur-[2px]" /> : null}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" loading="lazy" onLoad={() => setLoaded(true)} className={cn("size-full object-cover", !loaded && "absolute size-0 opacity-0")} />
+      </Frame>
     );
   if (m.type === "sticker")
     // eslint-disable-next-line @next/next/no-img-element
     return <img src={src} alt="" loading="lazy" className="size-[150px] object-contain" />;
   if (m.type === "video")
     return full ? (
-      <video src={src} controls autoPlay className="mb-1 max-h-[330px] w-full rounded-[6px]" />
+      <Frame m={m}>
+        <video src={src} controls autoPlay className="size-full bg-black object-contain" />
+      </Frame>
     ) : (
-      <button onClick={() => setFull(true)} className="relative mb-1 block w-full min-w-[220px] overflow-hidden rounded-[6px] bg-black/40">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {m.thumb ? <img src={m.thumb} alt="" className="block max-h-[330px] w-full object-cover" /> : <div className="h-40" />}
-        <span className="absolute inset-0 m-auto flex size-12 items-center justify-center rounded-full bg-black/50 text-white"><Play className="ml-0.5 size-6" /></span>
-      </button>
+      <Frame m={m}>
+        <button onClick={() => setFull(true)} className="relative block size-full bg-black/40">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {m.thumb ? <img src={m.thumb} alt="" className="size-full object-cover" /> : null}
+          <span className="absolute inset-0 m-auto flex size-12 items-center justify-center rounded-full bg-black/50 text-white"><Play className="ml-0.5 size-6" /></span>
+        </button>
+      </Frame>
     );
   if (m.type === "audio")
     return (
@@ -116,6 +130,7 @@ function Bubble({ m, group, first }: { m: Msg; group: boolean; first: boolean })
       <div
         className={cn(
           "relative max-w-[85%] text-[14.2px] leading-[19px] md:max-w-[65%]",
+          (m.type === "image" || m.type === "video") && "w-[336px] md:max-w-[336px]",
           sticker ? "" : "rounded-[7.5px] p-[3px] shadow-[0_1px_0.5px_rgba(11,20,26,0.13)]",
           !sticker && (m.fromMe ? "bg-[#d9fdd3] text-[#111b21] dark:bg-[#005c4b] dark:text-[#e9edef]" : "bg-white text-[#111b21] dark:bg-[#202c33] dark:text-[#e9edef]"),
           first && !sticker && (m.fromMe ? "rounded-tr-none" : "rounded-tl-none"),

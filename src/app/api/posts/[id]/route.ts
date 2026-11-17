@@ -27,6 +27,16 @@ export async function PATCH(req: Request, ctx: Ctx) {
     case "requeue":
       db().prepare("UPDATE posts SET status = 'queued', reason = NULL, attempts = 0 WHERE id = ?").run(id);
       break;
+    case "redo": {
+      try {
+        const { redoPost } = await import("@/lib/curation");
+        const r = await redoPost(id);
+        log("info", `Refazer post: ${r}`);
+        return Response.json({ ok: true, msg: r });
+      } catch (e) {
+        return Response.json({ ok: false, error: (e as Error).message }, { status: 400 });
+      }
+    }
     case "discard":
       db().prepare("UPDATE posts SET status = 'skipped', reason = 'Descartado manualmente' WHERE id = ?").run(id);
       break;

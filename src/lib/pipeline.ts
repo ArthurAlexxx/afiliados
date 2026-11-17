@@ -367,14 +367,18 @@ export async function sendPost(id: number): Promise<string> {
   setState("lastSentAt", String(Date.now()));
   const evo = new Evolution(s);
   const errors: string[] = [];
+  const waIds: { jid: string; id: string }[] = [];
   for (const d of dests) {
     try {
+      let r: unknown;
       if (s.sendImage && post.media_path && fs.existsSync(post.media_path)) {
         const b64 = fs.readFileSync(post.media_path).toString("base64");
-        await evo.sendImage(d.jid, b64, post.media_mime || "image/jpeg", post.formatted_text);
+        r = await evo.sendImage(d.jid, b64, post.media_mime || "image/jpeg", post.formatted_text);
       } else {
-        await evo.sendText(d.jid, post.formatted_text);
+        r = await evo.sendText(d.jid, post.formatted_text);
       }
+      const mid = (r as { key?: { id?: string } })?.key?.id;
+      if (mid) waIds.push({ jid: d.jid, id: mid });
     } catch (e) {
       errors.push(`${d.name || d.jid}: ${(e as Error).message}`);
     }
@@ -389,8 +393,8 @@ export async function sendPost(id: number): Promise<string> {
     return "falhou";
   }
   db()
-    .prepare("UPDATE posts SET status='sent', sent_at=datetime('now'), reason=? WHERE id=?")
-    .run(errors.length ? errors.join(" | ") : null, id);
+    .prepare("UPDATE posts SET status='sent', sent_at=datetime('now'), reason=?, wa_ids=? WHERE id=?")
+    .run(errors.length ? errors.join(" | ") : null, waIds.length ? JSON.stringify(waIds) : null, id);
   log("info", `Post #${id} enviado para ${dests.length - errors.length} grupo(s)`);
   // "me avisa quando baixar": avisa no privado quem pediu esse perfume (em segundo plano)
   if (post.origin === "curated" && post.product_id) {
@@ -435,6 +439,20 @@ export function startWorker() {
       const on = db().prepare("SELECT name FROM groups WHERE follow = 1").all() as { name: string }[];
       setState("followV1", "1");
       log("info", `Copiar grupos ligado para: ${on.map((g) => g.name).join(", ")}`);
+    }
+    // Arthur (17/nov): apagar o French Avenue Royal Blend e postar de novo com a foto escolhida no Pinterest
+    if (getState("redoFrenchV1") !== "1") {
+      setState("redoFrenchV1", "1");
+      const old = db()
+        .prepare("SELECT p.id FROM posts p JOIN products pr ON pr.id = p.product_id WHERE p.status = 'sent' AND lower(pr.name) LIKE '%royal blend%' ORDER BY p.id DESC LIMIT 1")
+        .get() as { id: number } | undefined;
+      if (old)
+        setTimeout(() => {
+          import("./curation.ts")
+            .then((m) => m.redoPost(old.id))
+            .then((r) => log("info", `Refazer post: ${r}`))
+            .catch((e) => log("warn", `Refazer post #${old.id}: ${(e as Error).message}`));
+        }, 30_000);
     }
     // Arthur (nov/2026): posta até as 23h
     if (getState("activeTo23") !== "1") {

@@ -517,6 +517,65 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   return { id, status, reason };
 }
 
+/**
+ * Refaz um post já enviado: apaga a mensagem no nosso grupo (para todos) e posta de novo
+ * o mesmo texto com a foto atual do perfume (a principal escolhida na tela Fotos / Pinterest).
+ */
+export async function redoPost(postId: number): Promise<string> {
+  const s = getSettings();
+  const post = db().prepare("SELECT * FROM posts WHERE id = ?").get(postId) as
+    | { id: number; product_id: number | null; formatted_text: string; data_json: string; source_jid: string; source_name: string; original_text: string; product_key: string | null; wa_ids: string | null; sent_at: string | null }
+    | undefined;
+  if (!post) throw new Error("post não encontrado");
+  if (!post.product_id) throw new Error("post sem perfume");
+  const evo = new Evolution(s);
+  // 1) apaga no nosso grupo
+  let ids: { jid: string; id: string }[] = post.wa_ids ? JSON.parse(post.wa_ids) : [];
+  if (!ids.length) {
+    // posts antigos não guardavam o id: acha a nossa mensagem pelo texto, perto da hora do envio
+    const dests = db().prepare("SELECT jid FROM groups WHERE role = 'destination'").all() as { jid: string }[];
+    const sent = post.sent_at ? new Date(post.sent_at.replace(" ", "T") + "Z").getTime() / 1000 : 0;
+    const head = post.formatted_text.slice(0, 60);
+    for (const d of dests) {
+      const msgs = await evo.findMessages(d.jid, 80, 1).catch(() => []);
+      for (const m of msgs as Record<string, any>[]) { // eslint-disable-line @typescript-eslint/no-explicit-any
+        const msg = m.message || {};
+        const cap = msg.imageMessage?.caption || msg.extendedTextMessage?.text || msg.conversation || "";
+        const ts = Number(m.messageTimestamp) || 0;
+        if (m.key?.fromMe && cap.startsWith(head) && (!sent || Math.abs(ts - sent) < 600)) ids.push({ jid: d.jid, id: String(m.key.id) });
+      }
+    }
+  }
+  let deleted = 0;
+  for (const x of ids) {
+    try {
+      await evo.deleteForEveryone(x.jid, x.id);
+      deleted++;
+    } catch (e) {
+      log("warn", `Apagar mensagem ${x.id}: ${(e as Error).message}`);
+    }
+  }
+  // 2) posta de novo com a foto atual
+  const bank = bestImagePath(post.product_id);
+  if (!bank) throw new Error(`apaguei ${deleted} mensagem(ns), mas o perfume não tem foto no banco para repostar`);
+  const data = (JSON.parse(post.data_json || "{}").data || {}) as Record<string, string>;
+  const pct = Number(data.desconto_pct) || null;
+  const out = await brand(fs.readFileSync(bank), pct, s);
+  const mediaPath = path.join(/*turbopackIgnore: true*/ MEDIA_DIR, `curadoria_${post.product_id}_${Date.now()}.jpg`);
+  fs.writeFileSync(mediaPath, out);
+  db().prepare("UPDATE posts SET status = 'skipped', reason = ? WHERE id = ?").run(`Apagado no grupo e refeito com a foto nova`, post.id);
+  const info = db()
+    .prepare(
+      `INSERT INTO posts (message_id, source_jid, source_name, original_text, formatted_text, data_json, media_path, media_mime, product_key, product_id, origin, status, reason)
+       VALUES (?, ?, ?, ?, ?, ?, ?, 'image/jpeg', ?, ?, 'curated', 'queued', ?)`,
+    )
+    .run(`redo-${post.id}-${Date.now()}`, post.source_jid, post.source_name, post.original_text, post.formatted_text, post.data_json, mediaPath, post.product_key, post.product_id, `Refeito do #${post.id} com a foto nova`);
+  const id = Number(info.lastInsertRowid);
+  const { sendPost } = await import("./pipeline.ts");
+  const r = await sendPost(id);
+  return `#${post.id} apagado no grupo (${deleted} mensagem) e repostado como #${id} com a foto ${path.basename(bank)} → ${r}`;
+}
+
 /* ------------------------------------------------------------------ */
 /* Copiar grupos (pedido do Arthur): postou num grupo seguido, posta no nosso                */
 /* ------------------------------------------------------------------ */
