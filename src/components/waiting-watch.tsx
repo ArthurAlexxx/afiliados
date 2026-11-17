@@ -3,7 +3,7 @@
 import * as React from "react";
 import { toast } from "sonner";
 
-type W = { post: number; id: number; name: string };
+type W = { post: number; id: number; name: string; photos?: number; searched?: number };
 
 /** Bipe curto (sem arquivo de som). */
 function beep() {
@@ -28,6 +28,8 @@ function beep() {
  */
 export function WaitingWatch() {
   const seen = React.useRef<Set<number> | null>(null);
+  const photos = React.useRef<Map<number, number>>(new Map());
+  const searched = React.useRef<Map<number, number>>(new Map());
   React.useEffect(() => {
     let alive = true;
     const base = document.title.replace(/^\(\d+\)\s*/, "");
@@ -42,10 +44,26 @@ export function WaitingWatch() {
         seen.current = ids;
         document.title = rows.length ? `(${rows.length}) ${base}` : base;
         window.dispatchEvent(new CustomEvent("waiting-photos", { detail: rows }));
+        // fotos do Fragrantica chegaram (ou a busca terminou sem fotos) para um post esperando
+        for (const x of rows) {
+          const before = photos.current.get(x.post);
+          const wasSearched = searched.current.get(x.post);
+          if (before !== undefined && !before && (x.photos || 0) > 0) {
+            beep();
+            toast.success(`📸 ${x.photos} foto(s) do Fragrantica para ${x.name}`, {
+              duration: 20000,
+              action: { label: "Escolher", onClick: () => (window.location.href = "/fotos") },
+            });
+          } else if (wasSearched === 0 && x.searched && !x.photos) {
+            toast.warning(`Fragrantica sem fotos para ${x.name}: arraste uma foto na tela Fotos`, { duration: 15000 });
+          }
+          photos.current.set(x.post, x.photos || 0);
+          searched.current.set(x.post, x.searched || 0);
+        }
         if (fresh.length) {
           beep();
           for (const x of fresh)
-            toast.warning(`Post esperando foto: ${x.name}`, {
+            toast.warning(`Post esperando foto: ${x.name}${x.photos ? ` · ${x.photos} foto(s) do Fragrantica` : " · procurando fotos no Fragrantica…"}`, {
               duration: 15000,
               action: { label: "Escolher", onClick: () => (window.location.href = "/fotos") },
             });

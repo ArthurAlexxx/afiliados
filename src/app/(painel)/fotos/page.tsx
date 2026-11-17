@@ -285,7 +285,7 @@ function Fragram({ productId, photos, onChosen }: { productId: number; photos: {
   );
 }
 
-function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => void }) {
+function DropPhoto({ productId, onAdded, compact }: { productId: number; onAdded: () => void; compact?: boolean }) {
   const [over, setOver] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const input = React.useRef<HTMLInputElement>(null);
@@ -308,6 +308,9 @@ function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => v
     const onPaste = (e: ClipboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (t && /INPUT|TEXTAREA/.test(t.tagName)) return;
+      // várias áreas na tela: Ctrl+V vai só para a que está sob o mouse
+      const w = window as { __dropHover?: number };
+      if (document.querySelectorAll("[data-drop]").length > 1 && w.__dropHover !== productId) return;
       if (e.clipboardData) void send(e.clipboardData);
     };
     window.addEventListener("paste", onPaste);
@@ -315,19 +318,29 @@ function DropPhoto({ productId, onAdded }: { productId: number; onAdded: () => v
   });
   return (
     <div
+      data-drop
+      onMouseEnter={() => ((window as { __dropHover?: number }).__dropHover = productId)}
       onDragOver={(e) => (e.preventDefault(), setOver(true))}
       onDragLeave={() => setOver(false)}
       onDrop={(e) => (e.preventDefault(), setOver(false), void send(e.dataTransfer))}
       onClick={() => input.current?.click()}
       className={cn(
-        "mb-4 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-4 text-[13px] transition-colors",
+        compact
+          ? "flex cursor-pointer items-center gap-3 rounded-lg border-2 border-dashed p-3 text-[11.5px] transition-colors"
+          : "mb-4 flex cursor-pointer items-center gap-3 rounded-xl border-2 border-dashed px-4 py-4 text-[13px] transition-colors",
         over ? "border-accent bg-accent/10" : "border-border text-muted-foreground hover:border-accent/60",
       )}
     >
       <ImagePlus className="size-6 shrink-0" />
       <div className="min-w-0">
-        <div className="font-medium text-foreground">{busy ? "Baixando a foto…" : "Arraste aqui uma foto do Google (ou cole com Ctrl+V, ou clique para escolher)"}</div>
-        <div>No Google Imagens, clique na foto, espere ela abrir grande ao lado e arraste a grande para cá. Ela é baixada e vira a principal desse perfume.</div>
+        <div className={cn("font-medium text-foreground", compact && "text-[12.5px] font-semibold")}>
+          {busy ? "Baixando a foto…" : compact ? "Ou arraste uma foto do Google aqui" : "Arraste aqui uma foto do Google (ou cole com Ctrl+V, ou clique para escolher)"}
+        </div>
+        <div>
+          {compact
+            ? "Também dá para colar com Ctrl+V ou clicar para escolher do computador."
+            : "No Google Imagens, clique na foto, espere ela abrir grande ao lado e arraste a grande para cá. Ela é baixada e vira a principal desse perfume."}
+        </div>
       </div>
       <input
         ref={input}

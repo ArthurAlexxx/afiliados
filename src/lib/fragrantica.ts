@@ -388,7 +388,13 @@ export async function fetchFragram(productId: number, force = false): Promise<nu
     return (db().prepare("SELECT COUNT(*) n FROM frag_photos WHERE frag_url = ?").get(p.frag_url) as { n: number }).n;
   }
   const label = decodeURIComponent(new URL(p.frag_url).pathname.split("/").pop() || "").replace(/-\d+\.html$/, "").replace(/-/g, " ");
-  return tracked("frag_photos", { productId, label }, () => fetchFragramRaw(p.frag_url!), (n) => ({ items: 1, result: `${n} foto(s)` }));
+  const url = p.frag_url;
+  fragNow().urls.add(url);
+  try {
+    return await tracked("frag_photos", { productId, label }, () => fetchFragramRaw(url), (n) => ({ items: 1, result: `${n} foto(s)` }));
+  } finally {
+    fragNow().urls.delete(url);
+  }
 }
 
 async function fetchFragramRaw(fragUrl: string): Promise<number> {
@@ -425,6 +431,12 @@ async function fetchFragramRaw(fragUrl: string): Promise<number> {
  * Arthur (17/nov): nada de reprocessar o banco. Só vai ao Apify o perfume que vai ser postado agora
  * (post esperando foto) e que ainda não tem foto escolhida: procura o nome dele no Fragrantica e lê as fotos da página.
  */
+/** O que está indo ao Apify agora, para a tela Fotos mostrar "procurando…" em cada perfume. */
+export function fragNow(): { names: Set<number>; urls: Set<string> } {
+  const g = globalThis as { __fragNow?: { names: Set<number>; urls: Set<string> } };
+  return (g.__fragNow ??= { names: new Set(), urls: new Set() });
+}
+
 const WAITING = `p.main_image_id IS NULL AND EXISTS (SELECT 1 FROM posts q WHERE q.product_id = p.id AND q.status = 'photo')`;
 
 export async function fragranticaStep(max = 10) {
@@ -449,14 +461,22 @@ export async function fragranticaStep(max = 10) {
     const list = rows.map((r) => ({ id: r.id, q: core(r.name).join(" ") })).filter((x) => x.q);
     let found = new Map<string, Hit[]>();
     if (list.length) {
+      for (const x of list) fragNow().names.add(x.id);
       try {
         found = await searchBatch(list);
       } catch (e) {
         log("warn", `Fragrantica: ${(e as Error).message}`);
+        for (const x of list) fragNow().names.delete(x.id);
         return;
       }
     }
-    const res = await Promise.all(list.map((x) => standardize(x.id, found.get(x.q) || []).catch((e) => (log("warn", `Fragrantica: ${(e as Error).message}`), ""))));
+    const res = await Promise.all(
+      list.map((x) =>
+        standardize(x.id, found.get(x.q) || [])
+          .catch((e) => (log("warn", `Fragrantica: ${(e as Error).message}`), ""))
+          .finally(() => fragNow().names.delete(x.id)),
+      ),
+    );
     const changed = res.filter((n) => n && n !== "não achei" && n !== "nome vazio").length;
     // mesma página do Fragrantica já lida por outro cadastro (outro ml): copia, não paga de novo
     db().prepare(

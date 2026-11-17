@@ -466,6 +466,14 @@ export function expireWaiting() {
   if (n) log("info", `${n} post(s) desistidos: ficaram ${WAIT_HOURS}h sem foto escolhida`);
 }
 
+/** Foto escolhida pelo Arthur como principal (tela Fotos), ou nada. */
+export function chosenImagePath(productId: number): string | null {
+  const main = db()
+    .prepare("SELECT i.path FROM products p JOIN images i ON i.id = p.main_image_id WHERE p.id = ? AND i.disabled = 0")
+    .get(productId) as { path: string } | undefined;
+  return main && fs.existsSync(main.path) ? main.path : null;
+}
+
 export function bestImagePath(productId: number): string | null {
   // foto escolhida como principal na tela Fotos: sempre ela
   const main = db()
@@ -495,7 +503,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   // busca as opções do Pinterest (uma vez por perfume) para o Arthur escolher a foto fixa
   // import tardio para evitar ciclo pipeline ↔ curation
   const { buildPost } = await import("./pipeline.ts");
-  const bankPath = bestImagePath(item.productId);
+  // Arthur (17/nov): só posta direto com a foto que ele escolheu; sem foto escolhida, vai para "esperando foto"
+  const bankPath = chosenImagePath(item.productId);
   const built = await buildPost(item.best.text, s, { groupName: item.best.group_name, wantImage: !bankPath });
   const parsed = parsePromo(item.best.text);
   const discount = item.declaredPct && item.declaredPct > 0 ? item.declaredPct : item.pctVsMedian && item.pctVsMedian > 0.05 ? Math.round(item.pctVsMedian * 100) : null;
@@ -585,6 +594,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     "info",
     `Curadoria escolheu "${item.name}" por R$ ${item.bestPrice != null ? formatPrice(item.bestPrice) : "?"} (${item.groups} grupos, nota ${item.score}) → post #${id} ${status}${reason ? ` (${reason})` : ""}`,
   );
+  // esperando foto: já procura as fotos no Fragrantica agora, sem esperar a próxima rodada
+  if (waitPhoto) import("./fragrantica.ts").then((m) => m.fragranticaStep()).catch((e) => log("warn", `Fragrantica: ${(e as Error).message}`));
   return { id, status, reason };
 }
 

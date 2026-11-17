@@ -1,11 +1,25 @@
 import { db } from "@/lib/db";
-import { bestImagePath } from "@/lib/curation";
+import { chosenImagePath } from "@/lib/curation";
+import { fragNow } from "@/lib/fragrantica";
 import { notPerfume } from "@/lib/perfume";
-import { apifyOff } from "@/lib/apify";
+import { apifyOff, dailyLimitUsd, spentTodayUsd } from "@/lib/apify";
 
 export const dynamic = "force-dynamic";
 
-type Row = { id: number; name: string; main: number | null; blocked: number; frag_url: string | null; last: string | null; waiting: string | null };
+type Row = {
+  id: number;
+  name: string;
+  main: number | null;
+  blocked: number;
+  frag_url: string | null;
+  fragram_at: string | null;
+  frag_searched: number;
+  last: string | null;
+  waiting: string | null;
+};
+
+/** Situação do perfume no Fragrantica, em palavras, para cada card. */
+type Frag = { state: "ready" | "busy" | "queued" | "found" | "nophotos" | "notfound" | "skip" | "paused" | "idle"; text: string; call?: string | null };
 
 /**
  * Tela única de escolha: cada perfume com a foto que vai no post e todas as opções
@@ -21,7 +35,7 @@ export async function GET(req: Request) {
   const LIMIT = 30;
   const all = db()
     .prepare(
-      `SELECT p.id, p.name, p.main_image_id main, COALESCE(p.blocked,0) blocked, p.frag_url,
+      `SELECT p.id, p.name, p.main_image_id main, COALESCE(p.blocked,0) blocked, p.frag_url, p.fragram_at, p.frag_searched,
               MAX(COALESCE((SELECT MAX(o.created_at) FROM offers o WHERE o.product_id = p.id), ''), COALESCE((SELECT MAX(i.created_at) FROM images i WHERE i.product_id = p.id), '')) last,
               (SELECT COUNT(*) FROM frag_photos g WHERE g.frag_url = p.frag_url) nfrag,
               (SELECT COUNT(*) FROM pin_photos x WHERE x.product_id = p.id AND x.status = 'pending' AND x.url NOT IN ('none','searching')) npin,
@@ -49,8 +63,31 @@ export async function GET(req: Request) {
   );
   const pins = db().prepare("SELECT id, width, height FROM pin_photos WHERE product_id = ? AND status = 'pending' AND url NOT IN ('none','searching') ORDER BY score DESC LIMIT 20");
   const frags = db().prepare("SELECT id, url, thumb FROM frag_photos WHERE frag_url = ? ORDER BY id");
+  const now = fragNow();
+  const paused = apifyOff() || (spentTodayUsd() >= dailyLimitUsd() ? `Teto do dia do Apify atingido (US$ ${dailyLimitUsd().toFixed(2)}): busca volta amanhã` : null);
+  const lastCall = db().prepare(
+    `SELECT at, kind, cost_usd, ok, result FROM api_calls WHERE product_id = ? AND kind IN ('frag_search','frag_google','frag_photos') ORDER BY id DESC LIMIT 1`,
+  );
+  const ago = (at: string) => {
+    const m = Math.max(0, Math.round((Date.now() - new Date(at.replace(" ", "T") + "Z").getTime()) / 60000));
+    return m < 1 ? "agora" : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} d`;
+  };
+  const fragOf = (r: Row & { nfrag: number }): Frag => {
+    const c = lastCall.get(r.id) as { at: string; kind: string; cost_usd: number; ok: number; result: string | null } | undefined;
+    const call = c ? `Última consulta ${ago(c.at)} · US$ ${c.cost_usd.toFixed(4)}${c.ok ? "" : " · falhou"}` : null;
+    if (r.nfrag) return { state: "ready", text: `${r.nfrag} foto(s) do Fragrantica`, call };
+    if (now.names.has(r.id)) return { state: "busy", text: "Procurando o perfume no Fragrantica…", call };
+    if (r.frag_url && now.urls.has(r.frag_url)) return { state: "busy", text: "Perfume achado. Lendo as fotos da página…", call };
+    if (r.frag_url && r.fragram_at) return { state: "nophotos", text: "Achado no Fragrantica, mas a página não tem fotos", call };
+    if (!r.frag_url && r.frag_searched) return { state: "notfound", text: "Não achado no Fragrantica", call };
+    if (!r.frag_url && (notPerfume(r.name) || /\b(kit|combo|hair mist)\b/i.test(r.name))) return { state: "skip", text: "Kit ou combo: não existe no Fragrantica", call };
+    if (r.waiting && !r.main && paused) return { state: "paused", text: paused, call };
+    if (r.waiting && !r.main) return { state: "queued", text: r.frag_url ? "Na fila para ler as fotos (segundos)" : "Na fila para procurar no Fragrantica (segundos)", call };
+    if (r.frag_url) return { state: "found", text: "Achado no Fragrantica. Fotos só são buscadas quando for postar", call };
+    return { state: "idle", text: "Ainda não procurado. Só busca quando for postar", call };
+  };
   const rows = list.slice(offset, offset + LIMIT).map((r) => {
-    const pth = bestImagePath(r.id);
+    const pth = chosenImagePath(r.id);
     const cur = pth ? (idOf.get(pth) as { id: number } | undefined)?.id ?? null : null;
     return {
       id: r.id,
@@ -60,6 +97,8 @@ export async function GET(req: Request) {
       fragUrl: r.frag_url,
       current: cur,
       waiting: r.waiting,
+      expires: r.waiting ? new Date(new Date(r.waiting.replace(" ", "T") + "Z").getTime() + 3 * 3600e3).toISOString() : null,
+      frag: fragOf(r),
       bank: imgs.all(r.id),
       pins: pins.all(r.id),
       fragram: r.frag_url ? frags.all(r.frag_url) : [],
