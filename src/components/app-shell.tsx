@@ -245,6 +245,43 @@ function Header({ onMenu, waiting }: { onMenu: () => void; waiting: { id: number
   );
 }
 
+/** Barra de baixo no celular (app instalado): o que o Arthur usa no dia a dia, a um toque. */
+function BottomBar({ waiting, onMenu }: { waiting: number; onMenu: () => void }) {
+  const pathname = usePathname();
+  const items = [
+    { href: "/fila", label: "Posts", icon: ListOrdered, badge: waiting },
+    { href: "/fotos", label: "Fotos", icon: Images },
+    { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
+    { href: "/", label: "Início", icon: LayoutDashboard },
+  ];
+  return (
+    <nav
+      aria-label="Atalhos"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-gray-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-md lg:hidden dark:border-gray-700/60 dark:bg-gray-800/95"
+    >
+      <div className="grid grid-cols-5">
+        {items.map((it) => {
+          const active = it.href === "/" ? pathname === "/" : pathname.startsWith(it.href);
+          const Icon = it.icon;
+          return (
+            <Link key={it.href} href={it.href} className={cn("relative flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium", active ? "text-violet-500" : "text-gray-500 dark:text-gray-400")}>
+              <Icon className="size-[22px]" />
+              {it.label}
+              {it.badge ? (
+                <span className="absolute top-1.5 left-1/2 ml-2 min-w-[18px] rounded-full bg-rose-500 px-1 text-center text-[10px] leading-[18px] font-bold text-white tabular-nums">{it.badge}</span>
+              ) : null}
+            </Link>
+          );
+        })}
+        <button onClick={onMenu} className="flex flex-col items-center gap-0.5 py-2.5 text-[11px] font-medium text-gray-500 dark:text-gray-400">
+          <Menu className="size-[22px]" />
+          Mais
+        </button>
+      </div>
+    </nav>
+  );
+}
+
 export function AppShell({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = React.useState(false);
   const [mobileOpen, setMobileOpen] = React.useState(false);
@@ -320,9 +357,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <div className="scroll-thin relative flex min-w-0 flex-1 flex-col overflow-x-hidden overflow-y-auto">
         <Header onMenu={() => setMobileOpen(true)} waiting={waiting} />
         <main className="grow">
-          <div className="mx-auto w-full max-w-[96rem] px-4 py-8 sm:px-6 lg:px-8">{children}</div>
+          <div className="mx-auto w-full max-w-[96rem] px-4 pt-6 pb-[calc(6rem+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-8">{children}</div>
         </main>
       </div>
+      <BottomBar waiting={waiting.length} onMenu={() => setMobileOpen(true)} />
     </div>
   );
 }
@@ -337,10 +375,10 @@ export function PageHeader({
   actions?: React.ReactNode;
 }) {
   return (
-    <div className="mb-8 sm:flex sm:items-center sm:justify-between">
-      <div className="mb-4 sm:mb-0">
+    <div className="mb-4 flex flex-wrap items-center justify-between gap-3 sm:mb-8">
+      <div className="min-w-0">
         <h1 className="text-2xl font-bold text-gray-800 md:text-3xl dark:text-gray-100">{title}</h1>
-        {description ? <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{description}</p> : null}
+        {description ? <p className="mt-1 hidden max-w-2xl text-sm text-muted-foreground sm:block">{description}</p> : null}
       </div>
       {actions ? <div className="flex flex-wrap items-center justify-start gap-2 sm:justify-end">{actions}</div> : null}
     </div>

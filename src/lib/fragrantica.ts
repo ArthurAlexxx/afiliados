@@ -465,6 +465,13 @@ async function fetchFragramRaw(fragUrl: string): Promise<number> {
   for (const u of urls) n += Number(ins.run(p.frag_url, u, found.get(u)!).changes);
   db().prepare("UPDATE products SET fragram_at = datetime('now') WHERE frag_url = ?").run(p.frag_url);
   log("info", `Fragram: ${urls.length} foto(s) em ${page.split("/").pop()} (${n} nova(s))`);
+  // aviso no celular: chegaram as fotos de um post que está esperando foto
+  if (urls.length) {
+    const w = db()
+      .prepare("SELECT p.name FROM posts q JOIN products p ON p.id = q.product_id WHERE p.frag_url = ? AND q.status = 'photo' LIMIT 1")
+      .get(p.frag_url) as { name: string } | undefined;
+    if (w) void import("./push.ts").then((m) => m.sendPush({ title: "Fotos chegaram 📸", body: `${w.name}: ${urls.length} foto(s) para escolher`, url: "/fila", tag: `fotos-${p.frag_url}` }));
+  }
   return urls.length;
 }
 

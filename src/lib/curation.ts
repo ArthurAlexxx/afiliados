@@ -714,6 +714,11 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     "info",
     `Curadoria escolheu "${item.name}" por R$ ${item.bestPrice != null ? formatPrice(item.bestPrice) : "?"} (${item.groups} grupos, nota ${item.score}) → post #${id} ${status}${reason ? ` (${reason})` : ""}`,
   );
+  // aviso no celular: perfume novo esperando aprovação
+  if (status === "review")
+    void import("./push.ts").then((m) =>
+      m.sendPush({ title: "Perfume novo para aprovar", body: `${item.name}${item.bestPrice != null ? ` · R$ ${formatPrice(item.bestPrice)}` : ""}`, url: "/fila", tag: `review-${id}` }),
+    );
   // esperando foto: já procura as fotos no Fragrantica agora, sem esperar a próxima rodada
   if (waitPhoto) import("./fragrantica.ts").then((m) => m.fragranticaStep()).catch((e) => log("warn", `Fragrantica: ${(e as Error).message}`));
   return { id, status, reason };

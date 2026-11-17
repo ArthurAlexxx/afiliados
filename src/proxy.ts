@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isValidSession, SESSION_COOKIE } from "@/lib/auth";
 
 // Rotas públicas: login e o webhook (protegido pelo WEBHOOK_TOKEN).
-const PUBLIC = ["/login", "/api/auth/login", "/api/webhook", "/api/health", "/api/fragram"];
+const PUBLIC = ["/manifest.webmanifest", "/sw.js", "/icons/", "/login", "/api/auth/login", "/api/webhook", "/api/health", "/api/fragram"];
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;

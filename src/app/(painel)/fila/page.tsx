@@ -4,6 +4,7 @@ import * as React from "react";
 import { toast } from "sonner";
 import { Ban, ChevronDown, Clock, Crop as CropIcon, Hand, Pause, Play, RotateCcw, Search, Send, Trash2, X, Pencil, Check } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
+import { PhoneSetup } from "@/components/pwa";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/input";
@@ -380,7 +381,7 @@ function Section({ title, hint, count, children, right }: { title: string; hint?
             {title}
             {count != null ? <span className="rounded-full bg-muted px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground tabular-nums">{count}</span> : null}
           </h2>
-          {hint ? <p className="text-[12.5px] text-muted-foreground">{hint}</p> : null}
+          {hint ? <p className="hidden text-[12.5px] text-muted-foreground sm:block">{hint}</p> : null}
         </div>
         {right}
       </div>
@@ -997,6 +998,7 @@ export default function FilaPage() {
           </Button>
         }
       />
+      <PhoneSetup />
       <div className="mb-5 flex w-full gap-1 overflow-x-auto rounded-xl border bg-card p-1 sm:w-fit">
         {TABS.map((t) => {
           const n =
