@@ -616,6 +616,13 @@ export function startWorker() {
     setTimeout(run, 20e3);
     if (!g.__syncNames) g.__syncNames = setInterval(run, 10 * 60e3);
   }
+  // "Rayhaan Aquatica" tinha sido juntado ao "Mawwal Rayhan" (aquatica é nome, não família olfativa)
+  if (!getState("unmergeAquaticaV1"))
+    import("./curation.ts").then((m) => {
+      const n = m.unmergeOffers("%Rayhan%", /Aquatica/i);
+      setState("unmergeAquaticaV1", "1");
+      if (n) log("info", `Agente de nomes: ${n} oferta(s) de Rayhaan Aquatica separadas de novo`);
+    });
   // busca do Fragrantica refeita com o nome limpo para quem está esperando foto e não foi achado (uma vez)
   if (!getState("fragRetryCleanV1")) {
     const r = db()

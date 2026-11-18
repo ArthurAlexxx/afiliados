@@ -39,12 +39,22 @@ export const STOP = new Set(
 export const NOISE = new Set(
   `frasco spray vaporizador vapo lacrado lacrada original originais importado importada novo nova oficial lancamento unidade
   volume masculino masculina feminino feminina unissex unisex perfume perfumes arabe arabes nf nota fiscal com
-  amadeirado amadeirada oriental floral frutado frutada citrico citrica aromatico aromatica especiado especiada adocicado
-  adocicada almiscarado almiscarada ambarado ambarada gourmand fougere chipre aquatico aquatica olfativo familia
+  amadeirado amadeirada adocicado adocicada almiscarado almiscarada ambarado ambarada olfativo familia
   pronta entrega envio imediato produto caixa selo garantia autentico veoquiero promocao oferta kit? da do`
     .split(/\s+/)
     .filter((w) => w && !w.endsWith("?")),
 );
+
+/**
+ * Família olfativa colada no fim do título ("… 100 ml Amadeirado Oriental", "… Perfume Floral Cítrico").
+ * Só sai do fim: no meio pode ser o nome do perfume (Rayhaan Aquatica, Oud Oriental).
+ */
+const TRAIL = /(\s+(perfume|amadeirad[oa]|oriental|floral|frutad[oa]|c[ií]tric[oa]|arom[aá]tic[oa]|especiad[oa]|adocicad[oa]|aqu[aá]tic[oa]|fresc[oa]|doce|fougere|chipre|gourmand|masculin[oa]|feminin[oa]|unissex|unisex|com nf))+\s*$/i;
+export function stripDescriptors(title: string): string {
+  let t = title.replace(/[*_~]/g, " ").replace(/\s+/g, " ").trim();
+  for (let i = 0; i < 3; i++) t = t.replace(TRAIL, "").trim();
+  return t;
+}
 
 /** Linha da Natura/Boticário sem "Homem" no título do grupo ("Identidad" = "Homem Identidad"). */
 const OPTIONAL = new Set(["homem", "mulher"]);
@@ -119,7 +129,7 @@ export function tokenSimilarity(a: string[], b: string[]) {
 }
 
 export function perfumeInfo(title: string): PerfumeInfo | null {
-  const n = norm(title);
+  const n = norm(stripDescriptors(title));
   const mlm = n.match(/\b(\d{2,4})\s*ml\b/);
   if (!mlm) return null;
   const ml = Number(mlm[1]);
