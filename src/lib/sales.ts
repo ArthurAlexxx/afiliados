@@ -27,11 +27,9 @@ const num = (v: unknown) => {
   return Number.isFinite(n) ? n : null;
 };
 
-/** Detecta se a variação veio em fração (0,19) ou em % (19) olhando o lote todo. */
-function toPercent(values: (number | null)[]) {
-  const xs = values.filter((x): x is number => x != null);
-  const fraction = xs.length > 0 && xs.every((x) => Math.abs(x) <= 5);
-  return (x: number | null) => (x == null ? null : fraction ? x * 100 : x);
+/** O RadarHub manda a variação sempre em fração (0,23 = +23%; 288 = +28.800%): vira % multiplicando por 100. */
+function toPercent(_values: (number | null)[]) {
+  return (x: number | null) => (x == null ? null : x * 100);
 }
 
 export function ingestSales(kind: "em_alta" | "mais_vendidos", payload: Payload): number {
