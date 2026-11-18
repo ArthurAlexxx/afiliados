@@ -1,5 +1,5 @@
 import { db } from "@/lib/db";
-import { analyze, deleteSnapshot, history, listSnapshots, pullMarket, radarConfig, radarGet, saveSnapshot } from "@/lib/market";
+import { analyze, deleteSnapshot, history, listSnapshots, pullState, radarConfig, radarGet, saveSnapshot, startPull } from "@/lib/market";
 
 export const dynamic = "force-dynamic";
 
@@ -41,7 +41,7 @@ export function GET(req: Request) {
   }
   seedFromSales();
   const c = radarConfig();
-  return Response.json({ snapshots: listSnapshots(), radar: { configured: !!c.url, host: c.url ? new URL(c.url).host : null, hasToken: c.hasToken, categorias: c.categorias } });
+  return Response.json({ snapshots: listSnapshots(), radar: { configured: !!c.url, host: c.url ? new URL(c.url).host : null, hasToken: c.hasToken, categorias: c.categorias }, pull: pullState });
 }
 
 /**
@@ -58,7 +58,8 @@ export async function POST(req: Request) {
   try {
     switch (body.acao) {
       case "puxar":
-        return Response.json({ ok: true, msg: await pullMarket({ categorias: body.categorias, dias: body.dias }) });
+        if (!radarConfig().url) return Response.json({ error: "RadarHub não configurado (falta RADARHUB_URL no servidor)" }, { status: 400 });
+        return Response.json({ ok: true, started: startPull({ categorias: body.categorias, dias: body.dias }) });
       case "consultar": {
         const path = String(body.caminho || "");
         const dados = await radarGet(path);
