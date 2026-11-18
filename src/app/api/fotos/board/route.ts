@@ -3,6 +3,7 @@ import { chosenImagePath } from "@/lib/curation";
 import { fragNow } from "@/lib/fragrantica";
 import { notPerfume } from "@/lib/perfume";
 import { apifyOff, dailyLimitUsd, spentTodayUsd } from "@/lib/apify";
+import { photosToFix } from "@/lib/framecheck";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,8 @@ type Frag = { state: "ready" | "busy" | "queued" | "found" | "nophotos" | "notfo
 /**
  * Tela única de escolha: cada perfume com a foto que vai no post e todas as opções
  * (Fragram Photos do Fragrantica, Pinterest esperando e as fotos do banco).
- * ?q= busca, ?f= all | none | fragram | pin, ?offset=
+ * ?q= busca, ?f= all | none | fragram | pin | fix, ?offset=
+ * fix = posts de hoje que saíram com as laterais borradas (foto fora do 1:1) e ainda não foram arrumados.
  */
 export async function GET(req: Request) {
   const u = new URL(req.url);
@@ -45,10 +47,12 @@ export async function GET(req: Request) {
        ORDER BY waiting IS NULL, waiting DESC, last DESC`,
     )
     .all(q) as (Row & { nfrag: number; npin: number; nimg: number; waiting: string | null })[];
+  const fix = await photosToFix();
   const list = all
-    .filter((r) => !notPerfume(r.name) && (r.nfrag || r.npin || r.nimg || r.waiting))
+    .filter((r) => !notPerfume(r.name) && (r.nfrag || r.npin || r.nimg || r.waiting || fix.has(r.id)))
     .filter((r) => !one || r.id === one)
-    .filter((r) => one || (f === "wait" ? !!r.waiting : f === "none" ? !r.main : f === "fragram" ? r.nfrag > 0 : f === "pin" ? r.npin > 0 : true));
+    .filter((r) => one || (f === "wait" ? !!r.waiting : f === "none" ? !r.main : f === "fragram" ? r.nfrag > 0 : f === "pin" ? r.npin > 0 : f === "fix" ? fix.has(r.id) : true));
+  if (f === "fix" && !one) list.sort((a, b) => (fix.get(b.id)!.sentAt || "").localeCompare(fix.get(a.id)!.sentAt || ""));
   const base = all.filter((r) => !notPerfume(r.name) && (r.nfrag || r.npin || r.nimg || r.waiting));
   const counts = {
     all: base.length,
@@ -56,6 +60,7 @@ export async function GET(req: Request) {
     none: base.filter((r) => !r.main).length,
     fragram: base.filter((r) => r.nfrag > 0).length,
     pin: base.filter((r) => r.npin > 0).length,
+    fix: fix.size,
   };
   const idOf = db().prepare("SELECT id FROM images WHERE path = ?");
   const imgs = db().prepare(
@@ -103,6 +108,8 @@ export async function GET(req: Request) {
       current: cur,
       currentCrop: cur ? ((db().prepare("SELECT crop FROM images WHERE id = ?").get(cur) as { crop: string | null } | undefined)?.crop ?? null) : null,
       waiting: r.waiting,
+      fixPost: fix.get(r.id)?.post ?? null,
+      fixAt: fix.get(r.id)?.sentAt ?? null,
       expires: r.waiting ? new Date(new Date(r.waiting.replace(" ", "T") + "Z").getTime() + 3 * 3600e3).toISOString() : null,
       frag: fragOf(r),
       ml: (mlOf.get(r.id) as { url: string; title: string; group_name: string } | undefined) ?? null,
