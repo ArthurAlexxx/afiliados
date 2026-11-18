@@ -31,6 +31,7 @@ import {
   BadgeDollarSign,
   Images,
   MessageCircle,
+  TrendingUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -41,6 +42,7 @@ const NAV = [
       { href: "/", label: "Visão geral", icon: LayoutDashboard },
       { href: "/curadoria", label: "Curadoria", icon: Sparkles },
       { href: "/precos", label: "Preços", icon: BadgeDollarSign },
+      { href: "/mercado", label: "Estudo de Mercado", icon: TrendingUp },
       { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
       { href: "/fila", label: "Posts", icon: ListOrdered },
       { href: "/fotos", label: "Fotos dos perfumes", icon: Images },
