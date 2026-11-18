@@ -623,6 +623,17 @@ export function startWorker() {
       setState("unmergeAquaticaV1", "1");
       if (n) log("info", `Agente de nomes: ${n} oferta(s) de Rayhaan Aquatica separadas de novo`);
     });
+  // junções erradas da 2ª rodada do agente de nomes: Profondo, MYSLF EDP e combo voltam a ser perfumes separados
+  if (!getState("unmergeV2"))
+    import("./curation.ts").then((m) => {
+      const n =
+        m.unmergeOffers("Giorgio Armani Acqua di Gio 50ml", /profondo/i) +
+        m.unmergeOffers("Giorgio Armani Acqua di Gio 200ml", /profondo/i) +
+        m.unmergeOffers("%MYSLF Le Parfum 100ml", /^(?![\s\S]*le parfum)[\s\S]*myslf/i) +
+        m.unmergeOffers("O Boticário Egeo Choc High%90ml", /\b(combo|kit)\b/i);
+      setState("unmergeV2", "1");
+      log("info", `Agente de nomes: ${n} oferta(s) separadas de junções erradas (Profondo, MYSLF EDP, combo)`);
+    });
   // busca do Fragrantica refeita com o nome limpo para quem está esperando foto e não foi achado (uma vez)
   if (!getState("fragRetryCleanV1")) {
     const r = db()

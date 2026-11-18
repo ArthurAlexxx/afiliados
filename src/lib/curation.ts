@@ -1236,14 +1236,20 @@ export function unmergeOffers(intoNameLike: string, titleRe: RegExp): number {
   if (!p) return 0;
   const offers = db().prepare("SELECT id, title FROM offers WHERE product_id = ?").all(p.id) as { id: number; title: string }[];
   let n = 0;
+  const moved = new Set<number>();
   for (const o of offers) {
     const info = o.title && titleRe.test(o.title) ? perfumeInfo(o.title) : null;
     if (!info) continue;
     const to = findOrCreateProduct(info, o.title);
     if (to === p.id) continue;
     db().prepare("UPDATE offers SET product_id = ? WHERE id = ?").run(to, o.id);
-    db().prepare("UPDATE posts SET product_id = ? WHERE product_id = ? AND original_text LIKE ?").run(to, p.id, `%${titleRe.source.replace(/\\b/g, "")}%`);
+    moved.add(to);
     n++;
+  }
+  if (moved.size === 1) {
+    const to = [...moved][0];
+    const posts = db().prepare("SELECT id, original_text FROM posts WHERE product_id = ?").all(p.id) as { id: number; original_text: string }[];
+    for (const q of posts) if (titleRe.test(q.original_text || "")) db().prepare("UPDATE posts SET product_id = ? WHERE id = ?").run(to, q.id);
   }
   return n;
 }
@@ -1320,7 +1326,11 @@ export function mergeDuplicateProducts(): number {
         (SELECT 1 FROM pin_photos f WHERE f.product_id = p.id AND f.status = 'approved' LIMIT 1) pin FROM products p ORDER BY p.ml, p.id`,
     )
     .all() as (ProductRow & { main_image_id: number | null; n: number; pin: number | null })[];
-  const infos = rows.map((r) => ({ r, a: { ml: r.ml, conc: r.conc, tokens: JSON.parse(r.tokens) as string[], key: r.pkey }, b: perfumeInfo(r.name) }));
+  // concentração lida do nome (a gravada pode ser de um título antigo sem ela)
+  const infos = rows.map((r) => {
+    const b = perfumeInfo(r.name);
+    return { r: { ...r, conc: b?.conc ?? r.conc }, a: { ml: r.ml, conc: b?.conc ?? r.conc, tokens: JSON.parse(r.tokens) as string[], key: r.pkey }, b };
+  });
   type FR = { frag_url?: string | null };
   const concOk = (a: string | null, b: string | null) => (a === "parfum") === (b === "parfum") && (!a || !b || a === b || (["colonia", "edt"].includes(a) && ["colonia", "edt"].includes(b)));
   const gen = (n: string) => (/\b(feminino|feminina|women|woman|femme|for her)\b/i.test(n) ? "f" : /\b(masculino|masculina|men|man|homme|for him)\b/i.test(n) ? "m" : null);

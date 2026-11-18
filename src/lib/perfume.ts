@@ -74,6 +74,21 @@ function fuzzyJaccard(a: string[], b: string[]) {
   return inter / (A.length + B.length - inter);
 }
 
+/** Palavras de um lado sem par do outro (com tolerância a erro de digitação). */
+function leftovers(a: string[], b: string[]): string[] {
+  const A = [...new Set(a)], B = [...new Set(b)];
+  const used = new Set<number>();
+  const left: string[] = [];
+  for (const x of A) {
+    let j = B.findIndex((y, k) => !used.has(k) && y === x);
+    if (j < 0 && x.length >= 5 && !/\d/.test(x)) j = B.findIndex((y, k) => !used.has(k) && y.length >= 5 && !/\d/.test(y) && x[0] === y[0] && dist(x, y) <= 1);
+    if (j >= 0) used.add(j);
+    else left.push(x);
+  }
+  B.forEach((y, k) => !used.has(k) && left.push(y));
+  return left;
+}
+
 export function norm(s: string) {
   return s
     .normalize("NFD")
@@ -186,7 +201,11 @@ export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
   // palavras que mudam o perfume (212 Men ≠ 212 VIP Wins, Sauvage ≠ Sauvage Elixir): têm que bater dos dois lados
   const ta = new Set(a.tokens), tb = new Set(b.tokens);
   for (const f of FLANKERS) if (ta.has(f) !== tb.has(f)) return false;
-  if (jaccard(a.tokens, b.tokens) >= 0.75 || fuzzyJaccard(a.tokens, b.tokens) >= 0.75) return true;
+  // kit/combo é outro produto (outro preço)
+  const kit = (t: string[]) => t.some((x) => x === "kit" || x === "combo" || x === "itens");
+  if (kit(a.tokens) !== kit(b.tokens)) return false;
+  // palavra a mais que muda o perfume ("Acqua di Gio Profondo" ≠ "Acqua di Gio"): sobra só pode ser curta ("di") ou opcional
+  if (leftovers(a.tokens, b.tokens).every((t) => t.length <= 2 || OPTIONAL.has(t))) return true;
   // "Identidad" = "Homem Identidad": sem as palavras opcionais, tem que bater inteiro
   const ca = a.tokens.filter((t) => !OPTIONAL.has(t)), cb = b.tokens.filter((t) => !OPTIONAL.has(t));
   return ca.length > 0 && cb.length > 0 && (ca.length !== a.tokens.length || cb.length !== b.tokens.length) && fuzzyJaccard(ca, cb) === 1;
