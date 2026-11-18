@@ -8,7 +8,7 @@
  */
 import { db, log } from "./db.ts";
 import { apifyFail, checkApify, overDailyBudget, priceTable, recordCall, refreshTier, tracked } from "./apify.ts";
-import { BRAND_WORDS, FLANKERS, NOISE, STOP, dist, isBrand, norm, notPerfume } from "./perfume.ts";
+import { BRAND_WORDS, FLANKERS, NOISE, STOP, dist, isBrand, norm, notPerfume, stripDescriptors } from "./perfume.ts";
 
 const ACTOR = "unfenced-group~fragrantica-perfume-scraper";
 type Hit = { name: string; brand: string; url: string; ratingCount?: number; year?: number };
@@ -170,7 +170,7 @@ function noteResult(kind: string, productId: number, result: string) {
 const AD_WORDS = NOISE;
 
 function core(name: string) {
-  return toks(name.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => !/^\d+$/.test(t) && !STOP.has(t) && !AD_WORDS.has(t) && t.length > 1);
+  return toks(stripDescriptors(name).replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => !/^\d+$/.test(t) && !STOP.has(t) && !AD_WORDS.has(t) && t.length > 1);
 }
 
 /** Concentração escrita no nome: colonia | edt | edp | extrait | parfum (sozinho, "Le Parfum") */

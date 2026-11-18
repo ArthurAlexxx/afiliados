@@ -1228,6 +1228,24 @@ export function cleanProductNames(): number {
 }
 
 /** Agente de nomes, rodando sempre: limpa os nomes e junta o mesmo perfume escrito de outro jeito. */
+/** Desfaz uma junção errada: ofertas com esse título voltam para um cadastro próprio. */
+export function unmergeOffers(intoNameLike: string, titleRe: RegExp): number {
+  const p = db().prepare("SELECT id FROM products WHERE name LIKE ?").get(intoNameLike) as { id: number } | undefined;
+  if (!p) return 0;
+  const offers = db().prepare("SELECT id, title FROM offers WHERE product_id = ?").all(p.id) as { id: number; title: string }[];
+  let n = 0;
+  for (const o of offers) {
+    const info = o.title && titleRe.test(o.title) ? perfumeInfo(o.title) : null;
+    if (!info) continue;
+    const to = findOrCreateProduct(info, o.title);
+    if (to === p.id) continue;
+    db().prepare("UPDATE offers SET product_id = ? WHERE id = ?").run(to, o.id);
+    db().prepare("UPDATE posts SET product_id = ? WHERE product_id = ? AND original_text LIKE ?").run(to, p.id, `%${titleRe.source.replace(/\\b/g, "")}%`);
+    n++;
+  }
+  return n;
+}
+
 export function syncNames(): number {
   const c = cleanProductNames();
   const m = mergeDuplicateProducts();
