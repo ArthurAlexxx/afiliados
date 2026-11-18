@@ -634,6 +634,14 @@ export function startWorker() {
       setState("unmergeV2", "1");
       log("info", `Agente de nomes: ${n} oferta(s) separadas de junções erradas (Profondo, MYSLF EDP, combo)`);
     });
+  // 3ª rodada: nomes de uma letra (YSL Y, Eudora H, Prada L'Homme) e "2x" tinham sido juntados errado
+  if (!getState("unmergeV3"))
+    import("./curation.ts").then((m) => {
+      m.reassignMismatched("Yves Saint Laurent Y 100ml");
+      m.reassignMismatched("O Boticário Liz Flora Desodorante Colônia 100ml");
+      m.reassignMismatched("Natura Kaiak 100ml");
+      setState("unmergeV3", "1");
+    });
   // busca do Fragrantica refeita com o nome limpo para quem está esperando foto e não foi achado (uma vez)
   if (!getState("fragRetryCleanV1")) {
     const r = db()

@@ -1311,6 +1311,32 @@ async function sweepKnown(): Promise<number> {
   return n;
 }
 
+/** Conserta um cadastro que juntou perfumes diferentes: ofertas e posts que não são ele voltam para o cadastro certo. */
+export function reassignMismatched(nameLike: string): number {
+  const p = db().prepare("SELECT id, name FROM products WHERE name LIKE ?").get(nameLike) as { id: number; name: string } | undefined;
+  const me = p ? perfumeInfo(p.name) : null;
+  if (!p || !me) return 0;
+  let n = 0;
+  const title = (t: string) => (t || "").split("\n").map((l) => l.replace(/[*_~]/g, "").trim()).find((l) => perfumeInfo(l)) || "";
+  const offers = db().prepare("SELECT id, title FROM offers WHERE product_id = ?").all(p.id) as { id: number; title: string }[];
+  for (const o of offers) {
+    const info = o.title ? perfumeInfo(o.title) : null;
+    if (!info || samePerfume(info, me)) continue;
+    const to = findOrCreateProduct(info, o.title);
+    if (to !== p.id) (db().prepare("UPDATE offers SET product_id = ? WHERE id = ?").run(to, o.id), n++);
+  }
+  const posts = db().prepare("SELECT id, original_text FROM posts WHERE product_id = ?").all(p.id) as { id: number; original_text: string }[];
+  for (const q of posts) {
+    const t = title(q.original_text);
+    const info = t ? perfumeInfo(t) : null;
+    if (!info || samePerfume(info, me)) continue;
+    const to = findOrCreateProduct(info, t);
+    if (to !== p.id) db().prepare("UPDATE posts SET product_id = ? WHERE id = ?").run(to, q.id);
+  }
+  if (n) log("info", `Agente de nomes: ${n} oferta(s) que não eram ${p.name} voltaram para o cadastro certo`);
+  return n;
+}
+
 export function syncNames(): number {
   const c = cleanProductNames();
   const m = mergeDuplicateProducts();

@@ -60,6 +60,7 @@ export function stripDescriptors(title: string): string {
 
 /** Linha da Natura/Boticário sem "Homem" no título do grupo ("Identidad" = "Homem Identidad"). */
 const OPTIONAL = new Set(["homem", "mulher", "him", "her"]);
+const CONNECTORS = new Set(["di", "de", "da", "do", "du", "of", "the", "by"]);
 
 function fuzzyJaccard(a: string[], b: string[]) {
   const A = [...new Set(a)], B = [...new Set(b)];
@@ -202,10 +203,14 @@ export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
   const ta = new Set(a.tokens), tb = new Set(b.tokens);
   for (const f of FLANKERS) if (ta.has(f) !== tb.has(f)) return false;
   // kit/combo é outro produto (outro preço)
-  const kit = (t: string[]) => t.some((x) => x === "kit" || x === "combo" || x === "itens");
+  const kit = (t: string[]) => t.some((x) => x === "kit" || x === "combo" || x === "itens" || /^\d+x$/.test(x));
   if (kit(a.tokens) !== kit(b.tokens)) return false;
   // palavra a mais que muda o perfume ("Acqua di Gio Profondo" ≠ "Acqua di Gio"): sobra só pode ser curta ("di") ou opcional
-  if (leftovers(a.tokens, b.tokens).every((t) => t.length <= 2 || OPTIONAL.has(t))) return true;
+  // e tem que bater pelo menos uma palavra de verdade (só "L" ou "Y" não identifica: Prada L'Homme ≠ Lacoste L.12.12 ≠ YSL Y)
+  const strong = (t: string[]) => t.filter((x) => x.length >= 3 && !OPTIONAL.has(x) && !/^\d+$/.test(x));
+  const lo = leftovers(a.tokens, b.tokens);
+  if (!lo.length) return true; // mesmas palavras ("Y", "212")
+  if (strong(a.tokens).length && strong(b.tokens).length && lo.every((t) => CONNECTORS.has(t) || OPTIONAL.has(t))) return true;
   // "Identidad" = "Homem Identidad": sem as palavras opcionais, tem que bater inteiro
   const ca = a.tokens.filter((t) => !OPTIONAL.has(t)), cb = b.tokens.filter((t) => !OPTIONAL.has(t));
   return ca.length > 0 && cb.length > 0 && (ca.length !== a.tokens.length || cb.length !== b.tokens.length) && fuzzyJaccard(ca, cb) === 1;
