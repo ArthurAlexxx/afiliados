@@ -64,8 +64,10 @@ export function refreshProductNames(): number {
 function displayName(title: string) {
   return title
     .replace(/[*_~]/g, "")
-    .replace(/^perfume\s+(árabe\s+)?/i, "")
-    .replace(/\s+(masculino|feminino|unissex)$/i, "")
+    .replace(/^(perfume\s+)?((árabe|arabe|masculino|feminino|unissex|unisex|importado|original|veoquiero)\s+)+/i, "")
+    .replace(/\s+com\s+nf\b/gi, "")
+    .replace(/\s+volume\s+da\s+unidade\b/gi, "")
+    .replace(/(\s+(masculino|feminino|masculina|feminina|unissex|unisex|amadeirado|amadeirada|oriental|floral|frutado|frutada|c[ií]trico|arom[aá]tico|especiado|adocicado|original|lacrado|importado))+\s*$/i, "")
     .replace(/\s+/g, " ")
     .trim();
 }
@@ -404,7 +406,29 @@ export function isHistoricLow(productId: number, price: number | null, messageId
  * Arthur (nov/2026): no post, nome do perfume como está no Fragrantica, e embaixo a marca e o tamanho.
  * Troca a linha do título já renderizada (funciona com qualquer template).
  */
-const CONC_WORDS = /\s+(?:extrait de parfum|eau de parfum|eau de toilette|eau de cologne|(?<!\ble\s)parfum|edp|edt)\b/gi;
+/** Marca escrita no nome, pelas marcas que o Fragrantica já nos deu ("French Avenue", "Rasasi", "O Boticário"). */
+function knownBrand(name: string): { name: string; re: string } | null {
+  const g = globalThis as { __brands?: { at: number; list: { name: string; key: string }[] } };
+  if (!g.__brands || Date.now() - g.__brands.at > 600_000) {
+    const rows = db().prepare("SELECT DISTINCT frag_brand b FROM products WHERE frag_brand IS NOT NULL").all() as { b: string }[];
+    const list = rows
+      .map((r) => {
+        const b = r.b.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim();
+        return { name: b === b.toUpperCase() && /[A-Z]{3}/.test(b) ? b.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : b, key: norm(b) };
+      })
+      .filter((x) => x.key.length >= 3)
+      .sort((a, b) => b.key.length - a.key.length);
+    g.__brands = { at: Date.now(), list };
+  }
+  const n = ` ${norm(name)} `;
+  const hit = g.__brands.list.find((b) => n.includes(` ${b.key} `));
+  if (!hit) return null;
+  // regex que acha a marca no nome original (com acento e maiúsculas)
+  const re = hit.key.split(" ").map((w) => w.split("").map((c) => (/[a-z]/.test(c) ? `[${c}${c.toUpperCase()}\\u00C0-\\u017F]` : c)).join("")).join("[\\s\\-]+");
+  return { name: hit.name, re };
+}
+
+const CONC_WORDS = /\s+(?:extrait de parfum|eau de parfum|eau de toilette|eau de cologne|deo[\s-]*parfum|deo[\s-]*col[oô]nia|col[oô]nia|(?<!\ble\s)parfum|edp|edt|edc)(?![\p{L}])/giu;
 
 export function withFragTitle(text: string, productId: number, oldTitle: string): string {
   const p = db().prepare("SELECT frag_name, frag_brand, ml, conc FROM products WHERE id = ?").get(productId) as
@@ -412,9 +436,19 @@ export function withFragTitle(text: string, productId: number, oldTitle: string)
     | undefined;
   if (!oldTitle) return text;
   if (!p?.frag_name || !p.frag_brand) {
-    // sem Fragrantica: tira a concentração do título que veio do grupo
-    const clean = oldTitle.replace(CONC_WORDS, "").replace(/\s{2,}/g, " ").trim();
-    return clean && clean !== oldTitle ? text.split("\n").map((l) => (l.includes(oldTitle) ? l.replace(oldTitle, clean) : l)).join("\n") : text;
+    // sem Fragrantica: mesmo padrão dos outros (nome + "🏷️ Marca · ml"), com a marca reconhecida no nome
+    const clean = displayName(oldTitle).replace(CONC_WORDS, "").replace(/\b\d{2,4}\s*ml\b/gi, "").replace(/\s{2,}/g, " ").trim();
+    const brand = knownBrand(clean);
+    const lines = text.split("\n");
+    const i = lines.findIndex((l) => l.includes(oldTitle));
+    if (i < 0 || !clean) return text;
+    if (!brand) {
+      lines[i] = lines[i].replace(oldTitle, clean);
+      return lines.join("\n");
+    }
+    const rest = clean.replace(new RegExp(`\\b${brand.re}\\b`, "i"), "").replace(/^[\s\-–·]+|[\s\-–·]+$/g, "").replace(/\s{2,}/g, " ");
+    lines.splice(i, 1, lines[i].replace(oldTitle, rest || clean), `🏷️ ${brand.name}${p?.ml ? ` · ${p.ml}ml` : ""}`);
+    return lines.join("\n");
   }
   const brand = p.frag_brand.replace(/\s+(Perfumes|Parfums|Fragrances|Paris)$/i, "").trim();
   const nice = brand === brand.toUpperCase() && /[A-Z]{3}/.test(brand) ? brand.toLowerCase().replace(/(^|[\s-])(\p{L})/gu, (m) => m.toUpperCase()) : brand;
@@ -1162,6 +1196,45 @@ export function fixParfumSplit(): number {
   return mergeDuplicateProducts();
 }
 
+/** Depois de juntar: aprovado no leque libera o "para aprovar"; com foto escolhida, o "esperando foto" sai. */
+async function continueMergedPosts(ids: number[]) {
+  for (const id of ids) {
+    try {
+      const p = db().prepare("SELECT approved, name FROM products WHERE id = ?").get(id) as { approved: number | null; name: string } | undefined;
+      if (!p) continue;
+      if (p.approved === 1) {
+        const rev = db().prepare("SELECT id FROM posts WHERE product_id = ? AND status = 'review'").all(id) as { id: number }[];
+        for (const r of rev) log("info", `Agente de nomes: #${r.id} ${p.name} já é do leque → ${await approveReview(r.id)}`);
+      }
+      if (chosenImagePath(id) && db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND status = 'photo'").get(id)) {
+        const r = await releaseWaiting(id);
+        if (r) log("info", `Agente de nomes: ${p.name} já tinha foto → ${r}`);
+      }
+    } catch (e) {
+      log("warn", `Agente de nomes: ${(e as Error).message}`);
+    }
+  }
+}
+
+/** Agente de nomes: tira as palavras de anúncio dos nomes ainda sem Fragrantica ("Masculino … Amadeirado Oriental"). */
+export function cleanProductNames(): number {
+  const rows = db().prepare("SELECT id, name FROM products WHERE frag_name IS NULL").all() as { id: number; name: string }[];
+  let n = 0;
+  for (const r of rows) {
+    const c = displayName(r.name);
+    if (c && c !== r.name && /\d{2,4}\s*ml/i.test(c)) (db().prepare("UPDATE products SET name = ? WHERE id = ?").run(c, r.id), n++);
+  }
+  return n;
+}
+
+/** Agente de nomes, rodando sempre: limpa os nomes e junta o mesmo perfume escrito de outro jeito. */
+export function syncNames(): number {
+  const c = cleanProductNames();
+  const m = mergeDuplicateProducts();
+  if (c || m) log("info", `Agente de nomes: ${c} nome(s) limpo(s), ${m} perfume(s) repetido(s) juntado(s)`);
+  return m;
+}
+
 export function mergeDuplicateProducts(): number {
   const rows = db()
     .prepare(
@@ -1180,6 +1253,7 @@ export function mergeDuplicateProducts(): number {
     samePerfume(x.a, y.a) ||
     (x.b && y.b ? samePerfume(x.b, y.b) : false));
   const gone = new Set<number>();
+  const touchedKeep = new Set<number>();
   let merged = 0;
   for (let i = 0; i < infos.length; i++) {
     if (gone.has(infos[i].r.id)) continue;
@@ -1203,6 +1277,8 @@ export function mergeDuplicateProducts(): number {
         const name = fk ? keep.r.name : fd ? drop.r.name : nameQuality(drop.r.name) > nameQuality(keep.r.name) ? drop.r.name : keep.r.name;
         if (!fk && fd) tx.prepare("UPDATE products SET frag_name = (SELECT frag_name FROM products WHERE id = ?), frag_brand = (SELECT frag_brand FROM products WHERE id = ?), frag_url = ? WHERE id = ?").run(d, d, fd, k);
         tx.prepare("UPDATE products SET main_image_id = ?, last_posted_at = ?, name = ? WHERE id = ?").run(main, last, name, k);
+        // já aprovado no nosso leque (de qualquer um dos dois cadastros): continua aprovado
+        tx.prepare("UPDATE products SET approved = CASE WHEN COALESCE(approved,0) = 1 OR (SELECT COALESCE(approved,0) FROM products WHERE id = ?) = 1 THEN 1 ELSE approved END WHERE id = ?").run(d, k);
         tx.prepare("DELETE FROM products WHERE id = ?").run(d);
         tx.exec("COMMIT");
       } catch (e) {
@@ -1214,8 +1290,11 @@ export function mergeDuplicateProducts(): number {
       if (keep === y) infos[i] = y; // segue comparando com o que ficou
       merged++;
       log("info", `Agente de cadastro: perfume repetido juntado: "${drop.r.name}" entrou em "${keep.r.name}"`);
+      touchedKeep.add(k);
     }
   }
+  // agente de nomes: o post que esperava aprovação/foto de um perfume que já temos segue sozinho
+  if (touchedKeep.size) setTimeout(() => void continueMergedPosts([...touchedKeep]), 0);
   // guarda as palavras do nome com as regras atuais (marca escrita errada fica de fora), para os próximos anúncios acharem
   const up = db().prepare("UPDATE products SET tokens = ? WHERE id = ?");
   for (const x of infos)

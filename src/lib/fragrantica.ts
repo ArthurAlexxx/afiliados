@@ -8,7 +8,7 @@
  */
 import { db, log } from "./db.ts";
 import { apifyFail, checkApify, overDailyBudget, priceTable, recordCall, refreshTier, tracked } from "./apify.ts";
-import { BRAND_WORDS, FLANKERS, STOP, dist, isBrand, norm, notPerfume } from "./perfume.ts";
+import { BRAND_WORDS, FLANKERS, NOISE, STOP, dist, isBrand, norm, notPerfume } from "./perfume.ts";
 
 const ACTOR = "unfenced-group~fragrantica-perfume-scraper";
 type Hit = { name: string; brand: string; url: string; ratingCount?: number; year?: number };
@@ -167,7 +167,7 @@ function noteResult(kind: string, productId: number, result: string) {
 
 /** Palavras que identificam o perfume no nosso nome (sem ml, concentração, gênero, "árabe"…). */
 // palavras de anúncio do Mercado Livre que não fazem parte do nome do perfume ("Frasco 100ml", "Spray")
-const AD_WORDS = new Set(["frasco", "spray", "vaporizador", "vapo", "lacrado", "original", "importado", "novo", "oficial", "lancamento", "unidade", "volume", "masculino", "feminino", "masculina", "feminina", "unissex", "perfume"]);
+const AD_WORDS = NOISE;
 
 function core(name: string) {
   return toks(name.replace(/\b\d{2,4}\s*ml\b/gi, " ")).filter((t) => !/^\d+$/.test(t) && !STOP.has(t) && !AD_WORDS.has(t) && t.length > 1);
@@ -319,7 +319,8 @@ async function searchGoogle(name: string, productId?: number): Promise<Hit[]> {
 
 async function searchGoogleRaw(name: string): Promise<Hit[]> {
   checkApify();
-  const q = name.replace(/\b\d{2,4}\s*ml\b/gi, " ").replace(/\s+/g, " ").trim();
+  // nome limpo (sem "Masculino", "com NF", família olfativa, ml): o mesmo que se colaria no Google
+  const q = core(name).join(" ") || name.replace(/\b\d{2,4}\s*ml\b/gi, " ").replace(/\s+/g, " ").trim();
   const r = await fetch("https://apify--web-search.apify.actor/", {
     method: "POST",
     headers: { authorization: `Bearer ${process.env.APIFY_TOKEN}`, "content-type": "application/json" },

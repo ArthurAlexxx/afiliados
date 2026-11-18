@@ -31,6 +31,37 @@ export const STOP = new Set(
   pour femme woman women for al el ml lacrada caixa selo novo nova contratipo inspiracao`.split(/\s+/).filter(Boolean),
 );
 
+/**
+ * Palavras de anúncio que os grupos colam no nome e não são do perfume (agente de nomes, Arthur 17/nov):
+ * "Masculino Rasasi Hawas Black 100 ml Amadeirado Oriental", "Arabe Vulcan Feu EDP 100ML Unisex com NF",
+ * "Veoquiero French Avenue Royal Blend" (loja). Saem do nome na comparação e na busca do Fragrantica.
+ */
+export const NOISE = new Set(
+  `frasco spray vaporizador vapo lacrado lacrada original originais importado importada novo nova oficial lancamento unidade
+  volume masculino masculina feminino feminina unissex unisex perfume perfumes arabe arabes nf nota fiscal com
+  amadeirado amadeirada oriental floral frutado frutada citrico citrica aromatico aromatica especiado especiada adocicado
+  adocicada almiscarado almiscarada ambarado ambarada gourmand fougere chipre aquatico aquatica olfativo familia
+  pronta entrega envio imediato produto caixa selo garantia autentico veoquiero promocao oferta kit? da do`
+    .split(/\s+/)
+    .filter((w) => w && !w.endsWith("?")),
+);
+
+/** Linha da Natura/Boticário sem "Homem" no título do grupo ("Identidad" = "Homem Identidad"). */
+const OPTIONAL = new Set(["homem", "mulher"]);
+
+function fuzzyJaccard(a: string[], b: string[]) {
+  const A = [...new Set(a)], B = [...new Set(b)];
+  let inter = 0;
+  const used = new Set<number>();
+  for (const x of A) {
+    let j = B.findIndex((y, k) => !used.has(k) && y === x);
+    // erro de digitação ("Hawass" = "Hawas"): só palavra comprida e sem número
+    if (j < 0 && x.length >= 5 && !/\d/.test(x)) j = B.findIndex((y, k) => !used.has(k) && y.length >= 5 && !/\d/.test(y) && x[0] === y[0] && dist(x, y) <= 1);
+    if (j >= 0) (used.add(j), inter++);
+  }
+  return inter / (A.length + B.length - inter);
+}
+
 export function norm(s: string) {
   return s
     .normalize("NFD")
@@ -108,7 +139,7 @@ export function perfumeInfo(title: string): PerfumeInfo | null {
       n
         .replace(/\b\d{2,4}\s*ml\b/g, " ")
         .split(" ")
-        .filter((t) => t && !STOP.has(t) && !isBrand(t)),
+        .filter((t) => t && !STOP.has(t) && !NOISE.has(t) && !isBrand(t)),
     ),
   ].sort();
   if (!tokens.length) return null;
@@ -138,7 +169,10 @@ export function samePerfume(a: PerfumeInfo, b: PerfumeInfo) {
   // palavras que mudam o perfume (212 Men ≠ 212 VIP Wins, Sauvage ≠ Sauvage Elixir): têm que bater dos dois lados
   const ta = new Set(a.tokens), tb = new Set(b.tokens);
   for (const f of FLANKERS) if (ta.has(f) !== tb.has(f)) return false;
-  return jaccard(a.tokens, b.tokens) >= 0.75;
+  if (jaccard(a.tokens, b.tokens) >= 0.75 || fuzzyJaccard(a.tokens, b.tokens) >= 0.75) return true;
+  // "Identidad" = "Homem Identidad": sem as palavras opcionais, tem que bater inteiro
+  const ca = a.tokens.filter((t) => !OPTIONAL.has(t)), cb = b.tokens.filter((t) => !OPTIONAL.has(t));
+  return ca.length > 0 && cb.length > 0 && (ca.length !== a.tokens.length || cb.length !== b.tokens.length) && fuzzyJaccard(ca, cb) === 1;
 }
 
 export const FLANKERS = [

@@ -606,6 +606,24 @@ export function startWorker() {
     }
     if (n) log("info", `Concentração tirada de ${n} post(s) da fila`);
   }
+    // agente de nomes (Arthur, 17/nov): sincroniza o tempo todo os nomes que chegam dos grupos com o que já temos no banco
+  {
+    const g = globalThis as { __syncNames?: NodeJS.Timeout };
+    const run = () =>
+      import("./curation.ts")
+        .then((m) => m.syncNames())
+        .catch((e) => log("warn", `Agente de nomes: ${(e as Error).message}`));
+    setTimeout(run, 20e3);
+    if (!g.__syncNames) g.__syncNames = setInterval(run, 10 * 60e3);
+  }
+  // busca do Fragrantica refeita com o nome limpo para quem está esperando foto e não foi achado (uma vez)
+  if (!getState("fragRetryCleanV1")) {
+    const r = db()
+      .prepare("UPDATE products SET frag_searched = 0, frag_checked_at = NULL WHERE frag_url IS NULL AND frag_searched > 0 AND id IN (SELECT product_id FROM posts WHERE status = 'photo')")
+      .run();
+    setState("fragRetryCleanV1", "1");
+    if (r.changes) log("info", `Fragrantica: ${r.changes} perfume(s) esperando foto vão ser procurados de novo com o nome limpo`);
+  }
     // "Parfum" separado da versão comum (Arthur, 17/nov: Stronger With You Parfum foi postado com o nome do comum)
   import("./curation.ts").then(({ splitParfum, fixParfumSplit }) => {
     if (!getState("splitParfumV1")) {
