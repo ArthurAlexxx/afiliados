@@ -26,12 +26,15 @@ type Row = {
   current: number | null;
   currentCrop: string | null;
   waiting: string | null;
+  /** post de hoje que saiu com as laterais borradas, ainda sem foto arrumada */
+  fixPost?: number | null;
+  fixAt?: string | null;
   frag: { state: string; text: string; call?: string | null };
   ml: { url: string; title: string; group_name: string } | null;
   bank: Opt[];
   fragram: Opt[];
 };
-type Resp = { rows: Row[]; total: number; more: boolean; counts: { all: number; wait: number; none: number; fragram: number } };
+type Resp = { rows: Row[]; total: number; more: boolean; counts: { all: number; wait: number; none: number; fragram: number; fix?: number } };
 type Kind = "bank" | "fragram";
 type Item = { k: Kind; o: Opt };
 
@@ -54,6 +57,8 @@ const itemsOf = (r: Row): Item[] => {
 };
 
 /* ---------------- card da galeria ---------------- */
+
+const hhmm = (utc: string) => new Date(utc.replace(" ", "T") + "Z").toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
 
 function PerfumeCard({ r, onOpen }: { r: Row; onOpen: () => void }) {
   const items = itemsOf(r);
@@ -84,6 +89,11 @@ function PerfumeCard({ r, onOpen }: { r: Row; onOpen: () => void }) {
           {r.current ? <Star className="size-3" /> : null}
           {r.current ? "Escolhida" : "Sem foto escolhida"}
         </span>
+        {r.fixPost ? (
+          <span className="absolute bottom-2 left-2 rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-semibold text-white">
+            Saiu borrada{r.fixAt ? ` às ${hhmm(r.fixAt)}` : ""}
+          </span>
+        ) : null}
         {r.waiting ? <span className="absolute top-2 right-2 rounded-full bg-amber-400 px-2 py-0.5 text-[11px] font-semibold text-gray-900">Post esperando</span> : null}
         {r.blocked ? <span className="absolute right-2 bottom-2 rounded-full bg-rose-600 px-2 py-0.5 text-[11px] font-semibold text-white">Não postar</span> : null}
       </div>
@@ -378,6 +388,7 @@ const FILTERS = [
   { k: "none", l: "Sem foto escolhida" },
   { k: "fragram", l: "Com fotos do Fragrantica" },
   { k: "wait", l: "Post esperando" },
+  { k: "fix", l: "Fotos para arrumar" },
 ] as const;
 
 export default function FotosPage() {
@@ -436,7 +447,7 @@ export default function FotosPage() {
         </div>
         <div className="flex flex-wrap gap-1">
           {FILTERS.map((x) => {
-            const n = c ? (x.k === "all" ? c.all : x.k === "none" ? c.none : x.k === "fragram" ? c.fragram : c.wait) : null;
+            const n = c ? (x.k === "all" ? c.all : x.k === "none" ? c.none : x.k === "fragram" ? c.fragram : x.k === "fix" ? (c.fix ?? 0) : c.wait) : null;
             return (
               <button
                 key={x.k}
@@ -460,8 +471,14 @@ export default function FotosPage() {
             <div key={n} className="aspect-[4/5] animate-pulse rounded-xl bg-muted" />
           ))}
         </div>
-      ) : !data.rows.length ? (
-        <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">Nenhum perfume nesse filtro.</Card>
+      ) : null}
+      {data && f === "fix" ? (
+        <div className="mb-3 text-[12.5px] text-muted-foreground">
+          Posts de hoje que saíram com as laterais borradas, fora do quadrado 1:1. Abra o perfume e escolha outra foto ou ajuste o enquadramento. Quando a foto passa a sair no quadrado, o perfume sai desta lista.
+        </div>
+      ) : null}
+      {!data ? null : !data.rows.length ? (
+        <Card className="px-5 py-12 text-center text-[13px] text-muted-foreground">{f === "fix" ? "Nenhuma foto para arrumar hoje." : "Nenhum perfume nesse filtro."}</Card>
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
@@ -479,7 +496,17 @@ export default function FotosPage() {
         <PerfumeModal
           id={open}
           onClose={() => setOpen(null)}
-          onChanged={(row) => row && setData((d) => (d ? { ...d, rows: d.rows.map((x) => (x.id === row.id ? row : x)) } : d))}
+          onChanged={(row) =>
+            row &&
+            setData((d) =>
+              !d
+                ? d
+                : f === "fix" && !row.fixPost
+                  ? // arrumada: sai da aba
+                    { ...d, rows: d.rows.filter((x) => x.id !== row.id), counts: { ...d.counts, fix: Math.max(0, (d.counts.fix || 1) - 1) } }
+                  : { ...d, rows: d.rows.map((x) => (x.id === row.id ? row : x)) },
+            )
+          }
         />
       ) : null}
     </>
