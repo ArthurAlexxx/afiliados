@@ -651,6 +651,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   // busca as opções do Pinterest (uma vez por perfume) para o Arthur escolher a foto fixa
   // import tardio para evitar ciclo pipeline ↔ curation
   const { buildPost } = await import("./pipeline.ts");
+  // agente de nomes: perfume que já é nosso (outro anúncio, outro ml, já postado) não pede aprovação nem foto de novo
+  adoptKnown(item.productId);
   // Arthur (17/nov): só posta direto com a foto que ele escolheu; sem foto escolhida, vai para "esperando foto"
   const bankPath = chosenImagePath(item.productId);
   const built = await buildPost(item.best.text, s, { groupName: item.best.group_name, wantImage: !bankPath });
@@ -1132,8 +1134,8 @@ function scheduleDupCheck() {
   g.__dupTimer = setTimeout(() => {
     g.__dupTimer = undefined;
     try {
-      const n = mergeDuplicateProducts();
-      log("info", n ? `Agente de cadastro: ${n} repetido(s) arrumado(s)` : "Agente de cadastro: nenhum repetido");
+      const n = syncNames();
+      if (n) log("info", `Agente de cadastro: ${n} repetido(s) arrumado(s)`);
     } catch (e) {
       log("warn", `Agente de cadastro: ${(e as Error).message}`);
     }
@@ -1246,9 +1248,67 @@ export function unmergeOffers(intoNameLike: string, titleRe: RegExp): number {
   return n;
 }
 
+/**
+ * Já é nosso? Aprovado, já postado alguma vez, ou o mesmo perfume em outro tamanho (Le Male Elixir 75ml → 125ml).
+ * Marca como aprovado e, sem foto escolhida, usa a foto do outro tamanho (o frasco é o mesmo).
+ */
+export function adoptKnown(productId: number): { approved: boolean; photo: boolean } {
+  const p = db().prepare("SELECT id, name, ml, conc, tokens, approved, blocked, main_image_id FROM products WHERE id = ?").get(productId) as
+    | { id: number; name: string; ml: number; conc: string | null; tokens: string; approved: number | null; blocked: number; main_image_id: number | null }
+    | undefined;
+  if (!p || p.blocked) return { approved: false, photo: false };
+  const sent = (id: number) => !!db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND status = 'sent' LIMIT 1").get(id);
+  let approved = p.approved === 1 || sent(p.id);
+  let photo = false;
+  const me = perfumeInfo(p.name) ?? { ml: p.ml, conc: p.conc, tokens: JSON.parse(p.tokens || "[]") as string[], key: "" };
+  if (!approved || !p.main_image_id) {
+    const sibs = db()
+      .prepare(
+        `SELECT id, name, ml, conc, tokens, approved, main_image_id FROM products
+         WHERE id != ? AND blocked = 0 AND (approved = 1 OR main_image_id IS NOT NULL OR EXISTS (SELECT 1 FROM posts q WHERE q.product_id = products.id AND q.status = 'sent'))`,
+      )
+      .all(p.id) as { id: number; name: string; ml: number; conc: string | null; tokens: string; approved: number | null; main_image_id: number | null }[];
+    for (const s2 of sibs) {
+      const o = perfumeInfo(s2.name) ?? { ml: s2.ml, conc: s2.conc, tokens: JSON.parse(s2.tokens || "[]") as string[], key: "" };
+      if (!samePerfume({ ...me, ml: o.ml }, o)) continue;
+      if (!approved && (s2.approved === 1 || sent(s2.id))) approved = true;
+      if (!p.main_image_id && s2.main_image_id && !photo) {
+        db().prepare("UPDATE products SET main_image_id = ? WHERE id = ? AND main_image_id IS NULL").run(s2.main_image_id, p.id);
+        photo = true;
+        log("info", `Agente de nomes: ${p.name} usa a foto de ${s2.name}`);
+      }
+      if (approved && (p.main_image_id || photo)) break;
+    }
+  }
+  if (approved && p.approved !== 1) db().prepare("UPDATE products SET approved = 1 WHERE id = ?").run(p.id);
+  return { approved, photo };
+}
+
+/** Passa pelos posts "para aprovar" e "esperando foto": o que já é nosso segue sozinho. */
+async function sweepKnown(): Promise<number> {
+  let n = 0;
+  const rows = db().prepare("SELECT id, product_id, status FROM posts WHERE status IN ('review','photo') AND product_id IS NOT NULL").all() as { id: number; product_id: number; status: string }[];
+  for (const r of rows) {
+    try {
+      const k = adoptKnown(r.product_id);
+      if (r.status === "review" && k.approved) {
+        log("info", `Agente de nomes: post #${r.id} já é perfume nosso → ${await approveReview(r.id)}`);
+        n++;
+      } else if (r.status === "photo" && chosenImagePath(r.product_id)) {
+        const res = await releaseWaiting(r.product_id);
+        if (res) (log("info", `Agente de nomes: post #${r.id} já tinha foto → ${res}`), n++);
+      }
+    } catch (e) {
+      log("warn", `Agente de nomes: ${(e as Error).message}`);
+    }
+  }
+  return n;
+}
+
 export function syncNames(): number {
   const c = cleanProductNames();
   const m = mergeDuplicateProducts();
+  void sweepKnown().then((k) => k && log("info", `Agente de nomes: ${k} post(s) liberado(s) por já serem perfumes nossos`));
   if (c || m) log("info", `Agente de nomes: ${c} nome(s) limpo(s), ${m} perfume(s) repetido(s) juntado(s)`);
   return m;
 }

@@ -17,7 +17,7 @@ export type PerfumeInfo = {
 
 export const BRAND_WORDS = new Set(
   `emporio lattafa rasasi armaf wataniah lipx boticario natura hugo boss jean paul gaultier jpg azzaro calvin klein ck
-  ysl yves saint laurent rabanne paco armani giorgio versace ralph lauren carolina herrera ch french avenue khadlaj
+  lab ysl yves saint laurent rabanne paco armani giorgio versace ralph lauren carolina herrera ch french avenue khadlaj
   maison alhambra afnan bidaya mawwal dior chanel prada montblanc mont blanc ferrari antonio banderas givenchy lancome
   kenzo issey miyake diesel dolce gabbana tommy hilfiger lacoste nautica ellis eudora avon jequiti zara mancera
   orientica emper fragrance world fragrances perfume lab ard zaafaran zimaya riiffs nusuk asdaaf ahmed maghribi
@@ -40,7 +40,8 @@ export const NOISE = new Set(
   `frasco spray vaporizador vapo lacrado lacrada original originais importado importada novo nova oficial lancamento unidade
   volume masculino masculina feminino feminina unissex unisex perfume perfumes arabe arabes nf nota fiscal com
   amadeirado amadeirada adocicado adocicada almiscarado almiscarada ambarado ambarada olfativo familia
-  pronta entrega envio imediato produto caixa selo garantia autentico veoquiero promocao oferta kit? da do`
+  pronta entrega envio imediato produto caixa selo garantia autentico veoquiero promocao oferta kit? da do
+  parf homens mulheres compartilhavel niche tradicional`
     .split(/\s+/)
     .filter((w) => w && !w.endsWith("?")),
 );
@@ -51,13 +52,14 @@ export const NOISE = new Set(
  */
 const TRAIL = /(\s+(perfume|amadeirad[oa]|oriental|floral|frutad[oa]|c[ií]tric[oa]|arom[aá]tic[oa]|especiad[oa]|adocicad[oa]|aqu[aá]tic[oa]|fresc[oa]|doce|fougere|chipre|gourmand|masculin[oa]|feminin[oa]|unissex|unisex|com nf))+\s*$/i;
 export function stripDescriptors(title: string): string {
-  let t = title.replace(/[*_~]/g, " ").replace(/\s+/g, " ").trim();
+  // "Cor.Agio" = "Coragio"; "( Tradicional )" vira palavra solta
+  let t = title.replace(/[*_~()]/g, " ").replace(/(\p{L})\.(?=\p{L})/gu, "$1").replace(/\s+/g, " ").trim();
   for (let i = 0; i < 3; i++) t = t.replace(TRAIL, "").trim();
   return t;
 }
 
 /** Linha da Natura/Boticário sem "Homem" no título do grupo ("Identidad" = "Homem Identidad"). */
-const OPTIONAL = new Set(["homem", "mulher"]);
+const OPTIONAL = new Set(["homem", "mulher", "him", "her"]);
 
 function fuzzyJaccard(a: string[], b: string[]) {
   const A = [...new Set(a)], B = [...new Set(b)];
@@ -129,7 +131,8 @@ export function tokenSimilarity(a: string[], b: string[]) {
 }
 
 export function perfumeInfo(title: string): PerfumeInfo | null {
-  const n = norm(stripDescriptors(title));
+  // marca com número ("Lab 8"): o número é da marca, não do perfume
+  const n = norm(stripDescriptors(title)).replace(/\blab 8\b/g, "lab");
   const mlm = n.match(/\b(\d{2,4})\s*ml\b/);
   if (!mlm) return null;
   const ml = Number(mlm[1]);
@@ -144,9 +147,13 @@ export function perfumeInfo(title: string): PerfumeInfo | null {
   // Natura/Boticário chamam o "Deo Parfum" só de "Parfum" nos grupos: é a mesma coisa
   if (conc === "parfum" && perfumeOrigin(title) === "nacional") conc = "deo";
 
+  // depois do "100ml" vem loja e enfeite ("100ml Isabelle", "100 Ml - Lab 8 Niche"): só fica concentração e versão
+  const at = n.search(/\b\d{2,4}\s*ml\b/);
+  const head = n.slice(0, at), tail = n.slice(at).replace(/^\d{2,4}\s*ml\b/, " ");
+  const keepTail = tail.split(" ").filter((t) => FLANKERS.includes(t) || /^(eau|de|parfum|toilette|edp|edt|extrait|elixir|intense|absolu)$/.test(t) || isBrand(t)).join(" ");
   const tokens = [
     ...new Set(
-      n
+      `${head} ${keepTail}`
         .replace(/\b\d{2,4}\s*ml\b/g, " ")
         .split(" ")
         .filter((t) => t && !STOP.has(t) && !NOISE.has(t) && !isBrand(t)),
