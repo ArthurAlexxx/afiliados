@@ -2,12 +2,12 @@
 
 import * as React from "react";
 import { toast } from "sonner";
-import { Copy, Flame, Pause, Play, Radio, Search, TrendingDown } from "lucide-react";
+import { Check, Copy, Flame, ImagePlus, Pause, Play, Radio, Search, TrendingDown, X } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { clockOf } from "@/lib/client";
+import { api, clockOf } from "@/lib/client";
 import { cn } from "@/lib/utils";
 
 type Item = {
@@ -34,6 +34,92 @@ function adText(t: { name: string; price: number | null; ref: number | null; pct
   return `🔥 ${t.name} por ${brl(t.price)}${t.ref ? ` (costuma sair por ${brl(t.ref)}, ${t.pct}% abaixo)` : ""}\nSó no nosso grupo de ofertas de perfume. Entre pelo link e ative as notificações!`;
 }
 
+type Foto = { id: number; width: number; height: number; disabled: number; group_name: string };
+
+/** Fotos do perfume: escolher a que vai nos próximos posts ou mandar uma nova. */
+function PhotoSheet({ pid, name, onClose }: { pid: number; name: string; onClose: () => void }) {
+  const [data, setData] = React.useState<{ images: Foto[]; used: number | null; product: { main_image_id: number | null } } | null>(null);
+  const [busy, setBusy] = React.useState(false);
+  const file = React.useRef<HTMLInputElement>(null);
+  const load = React.useCallback(() => fetch(`/api/fotos?id=${pid}`).then((r) => r.json()).then(setData), [pid]);
+  React.useEffect(() => {
+    load();
+  }, [load]);
+  const setMain = async (id: number) => {
+    setBusy(true);
+    try {
+      await api("/api/fotos", { method: "PATCH", json: { productId: pid, mainImageId: id } });
+      toast.success("Essa foto vai nos próximos posts");
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const send = async (src: { data?: string; url?: string }) => {
+    setBusy(true);
+    try {
+      const r = await api<{ msg: string }>("/api/fotos/upload", { method: "POST", json: { productId: pid, ...src } });
+      toast.success(r.msg);
+      await load();
+    } catch (e) {
+      toast.error((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const onFile = (f?: File | null) => {
+    if (!f) return;
+    const rd = new FileReader();
+    rd.onload = () => send({ data: String(rd.result) });
+    rd.readAsDataURL(f);
+  };
+  const used = data?.product?.main_image_id ?? data?.used ?? null;
+  const imgs = (data?.images || []).filter((i) => !i.disabled);
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
+      <div
+        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-background p-4 shadow-xl sm:max-w-2xl sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+        onPaste={(e) => onFile([...e.clipboardData.files].find((f) => f.type.startsWith("image/")))}
+      >
+        <div className="mb-3 flex items-start gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-[14px] font-semibold">{name}</div>
+            <div className="text-[12px] text-muted-foreground">Toque numa foto para usar nos próximos posts, ou mande uma nova (também dá para colar).</div>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted" aria-label="Fechar">
+            <X className="size-4" />
+          </button>
+        </div>
+        <input ref={file} type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
+          <button
+            onClick={() => file.current?.click()}
+            disabled={busy}
+            className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed text-[12px] text-muted-foreground hover:bg-muted"
+          >
+            <ImagePlus className="size-5" /> {busy ? "Enviando…" : "Nova foto"}
+          </button>
+          {imgs.map((i) => (
+            <button key={i.id} onClick={() => setMain(i.id)} disabled={busy} className={cn("relative aspect-square overflow-hidden rounded-lg border-2", used === i.id ? "border-green-500" : "border-transparent")}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={`/api/fotos/${i.id}?w=300`} alt="" loading="lazy" className="size-full object-cover" />
+              {used === i.id && (
+                <span className="absolute top-1 right-1 rounded-full bg-green-500 p-0.5 text-white">
+                  <Check className="size-3" />
+                </span>
+              )}
+            </button>
+          ))}
+        </div>
+        {data && !imgs.length && <p className="mt-3 text-[12px] text-muted-foreground">Esse perfume ainda não tem foto no banco: os posts usam a foto do anúncio do ML.</p>}
+      </div>
+    </div>
+  );
+}
+
 export default function AoVivoPage() {
   const [items, setItems] = React.useState<Item[]>([]);
   const [stats, setStats] = React.useState<Stats | null>(null);
@@ -42,6 +128,7 @@ export default function AoVivoPage() {
   const [group, setGroup] = React.useState("");
   const [q, setQ] = React.useState("");
   const [fresh, setFresh] = React.useState<Set<number>>(new Set());
+  const [sheet, setSheet] = React.useState<{ pid: number; name: string } | null>(null);
   const last = React.useRef(0);
   const tick = React.useRef(0);
   const pausedRef = React.useRef(false);
@@ -182,8 +269,9 @@ export default function AoVivoPage() {
               {shown.map((i) => (
                 <li
                   key={i.id}
+                  onClick={() => setSheet({ pid: i.pid, name: i.name })}
                   style={{ contentVisibility: "auto", containIntrinsicSize: "0 64px" }}
-                  className={cn("grid grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors", fresh.has(i.id) && "bg-violet-500/10", i.ok && "border-l-2 border-l-green-500")}
+                  className={cn("grid cursor-pointer grid-cols-[52px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-2.5 transition-colors hover:bg-muted/50", fresh.has(i.id) && "bg-violet-500/10", i.ok && "border-l-2 border-l-green-500")}
                 >
                   <div className="text-[11.5px] text-muted-foreground tabular-nums">{clockOf(i.at)}</div>
                   <div className="min-w-0">
@@ -268,6 +356,7 @@ export default function AoVivoPage() {
           </Card>
         </div>
       </div>
+      {sheet && <PhotoSheet pid={sheet.pid} name={sheet.name} onClose={() => setSheet(null)} />}
     </>
   );
 }
