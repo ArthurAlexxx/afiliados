@@ -35,6 +35,38 @@ export class Evolution {
     return this.call("DELETE", `/group/leaveGroup/${this.inst}?groupJid=${encodeURIComponent(jid)}`);
   }
 
+  /** Dados do grupo (nome, descrição, participantes, só admins falam). */
+  groupInfo(jid: string) {
+    return this.call<Record<string, unknown> & { subject?: string; desc?: string; announce?: boolean; participants?: { id: string; phoneNumber?: string; jid?: string; admin?: string | null }[] }>(
+      "GET",
+      `/group/findGroupInfos/${this.inst}?groupJid=${encodeURIComponent(jid)}`,
+    );
+  }
+
+  /** Número do próprio bot (dono da instância). */
+  async ownerJid(): Promise<string> {
+    const r = await this.call<unknown>("GET", `/instance/fetchInstances?instanceName=${this.inst}`);
+    const row = (Array.isArray(r) ? r[0] : r) as { ownerJid?: string; instance?: { owner?: string } } | undefined;
+    return row?.ownerJid || row?.instance?.owner || "";
+  }
+
+  createGroup(subject: string, participants: string[], description?: string) {
+    return this.call<{ id?: string; groupJid?: string } & Record<string, unknown>>("POST", `/group/create/${this.inst}`, { subject, description, participants });
+  }
+
+  updateParticipants(jid: string, action: "add" | "promote" | "remove" | "demote", participants: string[]) {
+    return this.call("POST", `/group/updateParticipant/${this.inst}?groupJid=${encodeURIComponent(jid)}`, { action, participants });
+  }
+
+  /** announcement = só admins mandam mensagem; locked = só admins mudam os dados do grupo. */
+  updateGroupSetting(jid: string, action: "announcement" | "not_announcement" | "locked" | "unlocked") {
+    return this.call("POST", `/group/updateSetting/${this.inst}?groupJid=${encodeURIComponent(jid)}`, { action });
+  }
+
+  updateGroupPicture(jid: string, image: string) {
+    return this.call("POST", `/group/updateGroupPicture/${this.inst}?groupJid=${encodeURIComponent(jid)}`, { image });
+  }
+
   private get inst() {
     return encodeURIComponent(this.s.evolutionInstance);
   }
