@@ -195,7 +195,7 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
       ? `📉 ${title}: nos outros grupos sai por R$ ${formatPrice(ml.median)}. Aqui está ${vsOthers}% mais barato`
       : offer.price <= ml.min
         ? `📉 ${title}: menor preço que os grupos postaram no mês`
-        : `📉 ${title}: mesmo preço dos outros grupos, R$ ${formatPrice(ml.median)}`;
+        : ""; // mesmo preço dos outros grupos: sem linha (não ajuda a vender)
   const { createCuratedPost } = await import("./curation.ts");
   const res = await createCuratedPost(item, s, { follow: `Ofertas boas (${v.why})`, dest: g.jid, destName: g.name, extraLine });
   log("info", `Ofertas boas: ${p.name} R$ ${formatPrice(offer.price)} de ${offer.group_name} · ${v.why} → #${res.id} ${res.status}`);
