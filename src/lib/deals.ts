@@ -160,7 +160,12 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
   }
 
   const ml = v.ref!;
+  // Arthur (22/nov): só é boa oferta se estiver abaixo da média do que os outros grupos postaram
+  const others = othersAvg(productId, offer.group_jid);
+  if (others && offer.price > others.avg * 0.97) return "";
   const pct = Math.round(v.pct! * 100);
+  // "Baixou X%" do post = o de/por do próprio post
+  const ownPct = offer.old_price && offer.old_price > offer.price ? Math.round((1 - offer.price / offer.old_price) * 100) : null;
   const groupsAll = (db().prepare("SELECT COUNT(DISTINCT group_jid) n FROM offers WHERE product_id = ? AND created_at >= datetime('now','-30 days')").get(productId) as { n: number }).n;
   const item: RankItem = {
     productId,
@@ -173,9 +178,8 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     medianPrice: v.refPrice ?? ml.median,
     best: offer,
     bestPrice: offer.price,
-    pctVsMedian: v.pct!,
-    // o desconto mostrado é contra o preço normal dos grupos (não o "DE" do anúncio)
-    declaredPct: pct,
+    pctVsMedian: ownPct == null ? 0 : v.pct!,
+    declaredPct: ownPct,
     image: null,
     images: 0,
     lastPostedAt: p.last_posted_at,
@@ -187,7 +191,7 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     real: { ref: v.refPrice ?? ml.median, samples: ml.samples, groups: ml.groups, discount: v.pct!, label: v.label!, inflated: false },
     score: 0,
   };
-  const extraLine = dealLine(offer.price, ml, v.label!, othersAvg(productId, offer.group_jid));
+  const extraLine = dealLine(offer.price, ml, v.label!, others);
   const { createCuratedPost } = await import("./curation.ts");
   const res = await createCuratedPost(item, s, { follow: `Ofertas boas (${v.why})`, dest: g.jid, destName: g.name, extraLine });
   log("info", `Ofertas boas: ${p.name} R$ ${formatPrice(offer.price)} de ${offer.group_name} · ${v.why} → #${res.id} ${res.status}`);
@@ -223,15 +227,13 @@ export function othersAvg(productId: number, excludeGroup: string | null, days =
   return { avg: Math.round(avg * 100) / 100, groups: new Set(ok.map((r) => r.group_jid)).size, samples: ok.length };
 }
 
-/** A faixa "📉 Boa/Ótima oferta" (sempre aparece): média dos outros grupos. */
+/** A faixa "📉 Boa/Ótima oferta" (sempre aparece): média dos outros grupos, sem número de grupos; % só a partir de 10%. */
 export function dealLine(price: number, ml: DealPrice, label: "boa" | "otima", others: { avg: number; groups: number } | null): string {
   const title = label === "otima" ? "Ótima oferta" : "Boa oferta";
   const ref = others?.avg ?? ml.median;
-  const n = others?.groups ?? ml.groups;
-  const grupos = n === 1 ? "1 grupo" : `${n} grupos`;
   const cheaper = Math.round((1 - price / ref) * 100);
-  const base = `📉 ${title}: a média de outros grupos é R$ ${formatPrice(ref)} (${grupos})`;
-  return cheaper >= 1 ? `${base}. Aqui está ${cheaper}% mais barato` : base;
+  const base = `📉 ${title}: a média de promoção dos outros grupos é de R$ ${formatPrice(ref)}`;
+  return cheaper >= 10 ? `${base}. Aqui está ${cheaper}% mais barato` : base;
 }
 
 /**
