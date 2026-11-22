@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
  */
 const NAMES: Record<string, string> = { destination: "2R PROMOS · Perfumes", deals: "2R PROMOS · Achados" };
 export async function POST(req: Request) {
-  const b = (await req.json().catch(() => ({}))) as { dry?: boolean; profile?: boolean; names?: boolean };
+  const b = (await req.json().catch(() => ({}))) as { dry?: boolean; profile?: boolean; names?: boolean; only?: "destination" | "deals" };
   const file = path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "brand", "2r-promos-640.jpg");
   if (!fs.existsSync(file)) return Response.json({ ok: false, error: "logo não encontrado no servidor" }, { status: 500 });
   const b64 = fs.readFileSync(file).toString("base64");
@@ -30,7 +30,7 @@ export async function POST(req: Request) {
     }
   }
   if (b.names) {
-    for (const g of groups) {
+    for (const g of groups.filter((x) => !b.only || x.role === b.only)) {
       try {
         await evo.updateGroupSubject(g.jid, NAMES[g.role]);
         db().prepare("UPDATE groups SET name = ? WHERE jid = ?").run(NAMES[g.role], g.jid);
