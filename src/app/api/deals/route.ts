@@ -6,9 +6,13 @@ import { dealRules, dealsGroup, setDealRules, simulateDeals, type DealRules } fr
 export const dynamic = "force-dynamic";
 
 /** Grupo de ofertas boas: regras, o que saiu e a simulação das últimas 48h com as regras atuais. */
-export function GET() {
+export function GET(req: Request) {
   const group = dealsGroup() || null;
-  const rules = dealRules();
+  // simulação com outras regras: ?minPct=0.08&nearMin=9&hours=24
+  const q = new URL(req.url).searchParams;
+  const rules = { ...dealRules() } as DealRules;
+  for (const k of Object.keys(rules) as (keyof DealRules)[]) if (q.get(k)) rules[k] = Number(q.get(k));
+  const hours = Number(q.get("hours")) || 48;
   const posts = group
     ? db()
         .prepare("SELECT id, status, reason, source_name, created_at, sent_at, data_json FROM posts WHERE dest = ? ORDER BY id DESC LIMIT 20")
@@ -28,8 +32,9 @@ export function GET() {
   const prices = db()
     .prepare("SELECT COUNT(*) n, COUNT(DISTINCT product_id) p, COUNT(DISTINCT group_jid) g FROM offers WHERE price > 0 AND created_at >= datetime('now','-30 days')")
     .get() as { n: number; p: number; g: number };
-  const sim = simulateDeals(48, rules);
-  return Response.json({ group, rules, posts, prices, sim: { checked: sim.checked, deals: sim.deals.slice(0, 30), total: sim.deals.length } });
+  const sim = simulateDeals(hours, rules);
+  const perHour = db().prepare("SELECT COUNT(*) n FROM offers WHERE price > 0 AND url IS NOT NULL AND created_at >= datetime('now', ?)").get(`-${hours} hours`) as { n: number };
+  return Response.json({ group, rules, posts, prices, sim: { hours, checked: sim.checked, offersPerHour: Math.round(perHour.n / hours), deals: sim.deals.slice(0, 30), total: sim.deals.length } });
 }
 
 export async function PATCH(req: Request) {
