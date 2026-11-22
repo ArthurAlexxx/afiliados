@@ -43,7 +43,7 @@ export async function PATCH(req: Request) {
  * e já marca o grupo como "Ofertas boas" no painel.
  */
 export async function POST(req: Request) {
-  const { subject, dry } = (await req.json().catch(() => ({}))) as { subject?: string; dry?: boolean };
+  const { subject, dry, exclude } = (await req.json().catch(() => ({}))) as { subject?: string; dry?: boolean; exclude?: string[] };
   if (dealsGroup()) return Response.json({ ok: false, error: "já existe um grupo de ofertas boas" }, { status: 400 });
   const dest = db().prepare("SELECT jid, name FROM groups WHERE role = 'destination' ORDER BY name LIMIT 1").get() as { jid: string; name: string } | undefined;
   if (!dest) return Response.json({ ok: false, error: "sem grupo de destino para copiar as pessoas" }, { status: 400 });
@@ -56,7 +56,7 @@ export async function POST(req: Request) {
       const j = [p.phoneNumber, p.jid, p.id].find((x) => x && /@s\.whatsapp\.net$/.test(x)) || "";
       return j.replace(/@.*/, "").replace(/:.*/, "");
     };
-    const people = (info.participants || []).map((p) => ({ n: num(p), admin: Boolean(p.admin) })).filter((p) => p.n && p.n !== owner);
+    const people = (info.participants || []).map((p) => ({ n: num(p), admin: Boolean(p.admin) })).filter((p) => p.n && p.n !== owner && !(exclude || []).some((x) => x && p.n.endsWith(x.replace(/\D/g, ""))));
     steps.push(`grupo atual: ${info.participants?.length || 0} participantes, ${people.length} para adicionar`);
     if (dry) return Response.json({ ok: true, dry: true, owner, people, announce: info.announce, raw: (info.participants || []).slice(0, 5) });
     if (!people.length) return Response.json({ ok: false, error: "não consegui ler os números do grupo atual", steps, info }, { status: 400 });
