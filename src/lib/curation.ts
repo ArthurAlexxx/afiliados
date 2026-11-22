@@ -593,7 +593,8 @@ export function fragProfileLines(productId: number): string[] {
 }
 
 /** Linha das notas no post (pode desligar com FRAG_PROFILE=0). */
-export const FRAG_PROFILE = process.env.FRAG_PROFILE !== "0";
+// Arthur (22/nov): "menos é mais": sem a linha 🎯 (amadeirado, cítrico…) nos posts
+export const FRAG_PROFILE = process.env.FRAG_PROFILE === "1";
 
 /** Põe as notas do Fragrantica antes do link do produto (uma vez só). */
 export function withFragProfile(text: string, productId: number): string {

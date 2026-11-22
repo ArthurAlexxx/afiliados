@@ -732,6 +732,9 @@ export function startWorker() {
       log("info", `Sem aprovação manual: ${n} post(s) que esperavam saíram com a melhor foto`);
     })();
   }
+  // Arthur (22/nov): tira a linha 🎯 dos posts que ainda não saíram
+  for (const r of db().prepare("SELECT id, formatted_text FROM posts WHERE status IN ('review','photo','queued') AND formatted_text LIKE '%🎯 %'").all() as { id: number; formatted_text: string }[])
+    db().prepare("UPDATE posts SET formatted_text = ? WHERE id = ?").run(r.formatted_text.replace(/^🎯 .*\n?(\n)?/m, ""), r.id);
   if (!getState("fragRetryCleanV1")) {
     const r = db()
       .prepare("UPDATE products SET frag_searched = 0, frag_checked_at = NULL WHERE frag_url IS NULL AND frag_searched > 0 AND id IN (SELECT product_id FROM posts WHERE status = 'photo')")
