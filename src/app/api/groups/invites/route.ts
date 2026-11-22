@@ -20,7 +20,7 @@ export function GET() {
 
 /**
  * Arthur (22/nov): "entre em mais quantos grupos precisar". Para cada convite: lê o nome, entra
- * e marca como origem (preço e promoções). `check` só lê os nomes, sem entrar.
+ * e marca como origem só de preço (promo=0, fotos não usadas: pode ter marca d'água; o grupo de ofertas boas lê todos). `check` só lê os nomes, sem entrar.
  */
 export async function POST(req: Request) {
   const { codes, check } = (await req.json()) as { codes: string[]; check?: boolean };
@@ -44,7 +44,7 @@ export async function POST(req: Request) {
       if (jid) {
         db()
           .prepare(
-            `INSERT INTO groups (jid, name, role, promo, follow) VALUES (?, ?, 'source', 1, 0)
+            `INSERT INTO groups (jid, name, role, promo, follow, watermark) VALUES (?, ?, 'source', 0, 0, 1)
              ON CONFLICT(jid) DO UPDATE SET role = CASE WHEN groups.role IN ('destination','deals') THEN groups.role ELSE 'source' END, name = excluded.name`,
           )
           .run(jid, subject);
