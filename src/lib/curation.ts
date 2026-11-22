@@ -428,9 +428,8 @@ function destination() {
 }
 
 export function brandName(s: Settings = getSettings()) {
-  if (s.brandName) return s.brandName;
-  const d = destination();
-  return (d?.name || "Ofertas").replace(/\s*\((teste|test)\)\s*/i, " ").trim();
+  // Arthur (22/nov): o sistema todo se chama 2R PROMOS
+  return s.brandName || "2R PROMOS";
 }
 
 /** Foto do grupo de destino (cache de 1 dia). */

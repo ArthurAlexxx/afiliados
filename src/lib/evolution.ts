@@ -72,6 +72,16 @@ export class Evolution {
     return this.call("POST", `/chat/updateProfilePicture/${this.inst}`, { picture });
   }
 
+  /** Nome do grupo. */
+  updateGroupSubject(jid: string, subject: string) {
+    return this.call("POST", `/group/updateGroupSubject/${this.inst}?groupJid=${encodeURIComponent(jid)}`, { subject });
+  }
+
+  /** Nome do perfil do nosso número. */
+  updateProfileName(name: string) {
+    return this.call("POST", `/chat/updateProfileName/${this.inst}`, { name });
+  }
+
   /** Nome e tamanho de um grupo pelo código do convite (sem entrar). */
   inviteInfo(code: string) {
     return this.call<{ id?: string; subject?: string; size?: number; desc?: string } & Record<string, unknown>>("GET", `/group/inviteInfo/${this.inst}?inviteCode=${encodeURIComponent(code)}`);

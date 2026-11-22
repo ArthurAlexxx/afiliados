@@ -66,7 +66,7 @@ export async function POST(req: Request) {
     steps.push(`grupo atual: ${info.participants?.length || 0} participantes, ${people.length} para adicionar`);
     if (dry) return Response.json({ ok: true, dry: true, owner, people, announce: info.announce, raw: (info.participants || []).slice(0, 5) });
     if (!people.length) return Response.json({ ok: false, error: "não consegui ler os números do grupo atual", steps, info }, { status: 400 });
-    const name = subject || "Radar Ofertas · Achados (teste 2)";
+    const name = subject || "2R PROMOS · Achados";
     const desc = "Só as melhores promoções de perfume: preço bem abaixo do normal dos grupos.";
     const g = await evo.createGroup(name, people.map((p) => p.n), desc);
     const jid = String(g.id || g.groupJid || "");

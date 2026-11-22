@@ -8,15 +8,16 @@ export const dynamic = "force-dynamic";
 
 /**
  * Arthur (22/nov): logo 2R PROMOS na foto dos nossos grupos (principal e ofertas boas) e no perfil do WhatsApp.
- * POST { dry?: boolean, profile?: boolean }
+ * POST { dry?: boolean, profile?: boolean, names?: boolean } — names: troca também os nomes (grupos e perfil).
  */
+const NAMES: Record<string, string> = { destination: "2R PROMOS · Perfumes", deals: "2R PROMOS · Achados" };
 export async function POST(req: Request) {
-  const b = (await req.json().catch(() => ({}))) as { dry?: boolean; profile?: boolean };
+  const b = (await req.json().catch(() => ({}))) as { dry?: boolean; profile?: boolean; names?: boolean };
   const file = path.join(/*turbopackIgnore: true*/ process.cwd(), "public", "brand", "2r-promos-640.jpg");
   if (!fs.existsSync(file)) return Response.json({ ok: false, error: "logo não encontrado no servidor" }, { status: 500 });
   const b64 = fs.readFileSync(file).toString("base64");
   const groups = db().prepare("SELECT jid, name, role FROM groups WHERE role IN ('destination','deals') ORDER BY role").all() as { jid: string; name: string; role: string }[];
-  if (b.dry) return Response.json({ ok: true, groups: groups.map((g) => g.name), profile: b.profile !== false });
+  if (b.dry) return Response.json({ ok: true, groups: groups.map((g) => `${g.name} → ${NAMES[g.role]}`), profile: b.profile !== false });
   const evo = new Evolution(getSettings());
   const done: string[] = [];
   const failed: string[] = [];
@@ -28,7 +29,25 @@ export async function POST(req: Request) {
       failed.push(`${g.name}: ${(e as Error).message}`);
     }
   }
-  if (b.profile !== false) {
+  if (b.names) {
+    for (const g of groups) {
+      try {
+        await evo.updateGroupSubject(g.jid, NAMES[g.role]);
+        db().prepare("UPDATE groups SET name = ? WHERE jid = ?").run(NAMES[g.role], g.jid);
+        done.push(`nome: ${NAMES[g.role]}`);
+      } catch (e) {
+        failed.push(`nome ${g.name}: ${(e as Error).message}`);
+      }
+    }
+    if (b.profile !== false)
+      try {
+        await evo.updateProfileName("2R PROMOS");
+        done.push("nome do perfil: 2R PROMOS");
+      } catch (e) {
+        failed.push(`nome do perfil: ${(e as Error).message}`);
+      }
+  }
+  if (b.profile !== false && !b.names) {
     try {
       await evo.updateProfilePicture(b64);
       done.push("perfil do WhatsApp");
