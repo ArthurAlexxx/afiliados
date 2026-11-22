@@ -34,7 +34,7 @@ export default function LoginPage() {
             <div className="flex-1">
               <div className="flex h-16 items-center px-4 sm:px-6 lg:px-8">
                 <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">A</span>
-                <span className="ml-3 font-bold text-gray-800 dark:text-gray-100">Afiliados</span>
+                <span className="ml-3 font-bold text-gray-800 dark:text-gray-100">2R PROMOS</span>
               </div>
             </div>
             <motion.form

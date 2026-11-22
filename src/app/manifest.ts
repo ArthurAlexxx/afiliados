@@ -3,8 +3,8 @@ import type { MetadataRoute } from "next";
 /** App no celular (PWA): abre direto em Posts, em tela cheia. */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Afiliados · Painel",
-    short_name: "Afiliados",
+    name: "2R PROMOS · Painel",
+    short_name: "2R PROMOS",
     description: "Aprovar posts, escolher fotos e acompanhar a fila do grupo",
     start_url: "/fila",
     scope: "/",

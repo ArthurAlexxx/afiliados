@@ -319,7 +319,7 @@ export default function WhatsAppPage() {
           {!chat ? (
             <div className="m-auto max-w-sm px-6 text-center text-[#667781] dark:text-[#8696a0]">
               <div className="mx-auto mb-4 flex size-20 items-center justify-center rounded-full bg-[#25d366]/15 text-[#25d366]"><Lock className="size-8" /></div>
-              <div className="text-[22px] font-light text-[#41525d] dark:text-[#e9edef]">WhatsApp do Radar</div>
+              <div className="text-[22px] font-light text-[#41525d] dark:text-[#e9edef]">WhatsApp do 2R PROMOS</div>
               <p className="mt-2 text-[14px]">Escolha uma conversa para ver as mensagens. O nosso grupo fica fixado no topo.</p>
             </div>
           ) : (

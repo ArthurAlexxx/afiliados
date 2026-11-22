@@ -9,6 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { api, clockOf } from "@/lib/client";
 import { cn } from "@/lib/utils";
+import { CropSquare, type Crop } from "@/components/crop-square";
+import { DropPhoto } from "../fotos/drop";
 
 type Item = {
   id: number; pid: number; name: string; group: string; price: number | null; old: number | null; url: string | null; at: string;
@@ -34,21 +36,22 @@ function adText(t: { name: string; price: number | null; ref: number | null; pct
   return `🔥 ${t.name} por ${brl(t.price)}${t.ref ? ` (costuma sair por ${brl(t.ref)}, ${t.pct}% abaixo)` : ""}\nSó no nosso grupo de ofertas de perfume. Entre pelo link e ative as notificações!`;
 }
 
-type Foto = { id: number; width: number; height: number; disabled: number; group_name: string };
+type Foto = { id: number; width: number; height: number; disabled: number; group_name: string; crop?: string | null };
 
 /** Fotos do perfume: escolher a que vai nos próximos posts ou mandar uma nova. */
 function PhotoSheet({ pid, name, onClose }: { pid: number; name: string; onClose: () => void }) {
   const [data, setData] = React.useState<{ images: Foto[]; used: number | null; product: { main_image_id: number | null } } | null>(null);
   const [busy, setBusy] = React.useState(false);
-  const file = React.useRef<HTMLInputElement>(null);
+  // Arthur (22/nov): ao escolher/soltar a foto, abre o ajuste do quadrado do post antes de salvar
+  const [crop, setCrop] = React.useState<{ id: number; initial: Crop | null } | null>(null);
   const load = React.useCallback(() => fetch(`/api/fotos?id=${pid}`).then((r) => r.json()).then(setData), [pid]);
   React.useEffect(() => {
     load();
   }, [load]);
-  const setMain = async (id: number) => {
+  const setMain = async (id: number, c?: Crop) => {
     setBusy(true);
     try {
-      await api("/api/fotos", { method: "PATCH", json: { productId: pid, mainImageId: id } });
+      await api("/api/fotos", { method: "PATCH", json: { productId: pid, mainImageId: id, crop: c } });
       toast.success("Essa foto vai nos próximos posts");
       await load();
     } catch (e) {
@@ -57,55 +60,49 @@ function PhotoSheet({ pid, name, onClose }: { pid: number; name: string; onClose
       setBusy(false);
     }
   };
-  const send = async (src: { data?: string; url?: string }) => {
-    setBusy(true);
+  const parse = (c?: string | null): Crop | null => {
     try {
-      const r = await api<{ msg: string }>("/api/fotos/upload", { method: "POST", json: { productId: pid, ...src } });
-      toast.success(r.msg);
-      await load();
-    } catch (e) {
-      toast.error((e as Error).message);
-    } finally {
-      setBusy(false);
+      return c ? (JSON.parse(c) as Crop) : null;
+    } catch {
+      return null;
     }
-  };
-  const onFile = (f?: File | null) => {
-    if (!f) return;
-    const rd = new FileReader();
-    rd.onload = () => send({ data: String(rd.result) });
-    rd.readAsDataURL(f);
   };
   const used = data?.product?.main_image_id ?? data?.used ?? null;
   const imgs = (data?.images || []).filter((i) => !i.disabled);
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center" onClick={onClose}>
-      <div
-        className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-background p-4 shadow-xl sm:max-w-2xl sm:rounded-2xl"
-        onClick={(e) => e.stopPropagation()}
-        onPaste={(e) => onFile([...e.clipboardData.files].find((f) => f.type.startsWith("image/")))}
-      >
+      <div className="max-h-[85vh] w-full overflow-y-auto rounded-t-2xl bg-background p-4 shadow-xl sm:max-w-2xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <div className="truncate text-[14px] font-semibold">{name}</div>
-            <div className="text-[12px] text-muted-foreground">Toque numa foto para usar nos próximos posts, ou mande uma nova (também dá para colar).</div>
+            <div className="text-[12px] text-muted-foreground">Toque numa foto para ajustar o quadrado do post e usar nos próximos posts.</div>
           </div>
           <button onClick={onClose} className="rounded-md p-1 text-muted-foreground hover:bg-muted" aria-label="Fechar">
             <X className="size-4" />
           </button>
         </div>
-        <input ref={file} type="file" accept="image/*" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
+        <div className="mb-3">
+          <DropPhoto
+            productId={pid}
+            compact
+            label="Arraste uma foto aqui (do Google, WhatsApp ou do computador)"
+            onAdded={load}
+            onUploaded={(id) => {
+              void load();
+              setCrop({ id, initial: null });
+            }}
+          />
+        </div>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
-          <button
-            onClick={() => file.current?.click()}
-            disabled={busy}
-            className="flex aspect-square flex-col items-center justify-center gap-1 rounded-lg border-2 border-dashed text-[12px] text-muted-foreground hover:bg-muted"
-          >
-            <ImagePlus className="size-5" /> {busy ? "Enviando…" : "Nova foto"}
-          </button>
           {imgs.map((i) => (
-            <button key={i.id} onClick={() => setMain(i.id)} disabled={busy} className={cn("relative aspect-square overflow-hidden rounded-lg border-2", used === i.id ? "border-green-500" : "border-transparent")}>
+            <button
+              key={i.id}
+              onClick={() => setCrop({ id: i.id, initial: parse(i.crop) })}
+              disabled={busy}
+              className={cn("relative aspect-square overflow-hidden rounded-lg border-2", used === i.id ? "border-green-500" : "border-transparent")}
+            >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={`/api/fotos/${i.id}?w=300`} alt="" loading="lazy" className="size-full object-cover" />
+              <img src={`/api/fotos/square?img=${i.id}&w=300`} alt="" loading="lazy" className="size-full object-cover" />
               {used === i.id && (
                 <span className="absolute top-1 right-1 rounded-full bg-green-500 p-0.5 text-white">
                   <Check className="size-3" />
@@ -116,6 +113,27 @@ function PhotoSheet({ pid, name, onClose }: { pid: number; name: string; onClose
         </div>
         {data && !imgs.length && <p className="mt-3 text-[12px] text-muted-foreground">Esse perfume ainda não tem foto no banco: os posts usam a foto do anúncio do ML.</p>}
       </div>
+      {crop ? (
+        <div onClick={(e) => e.stopPropagation()}>
+          <CropSquare
+            src={`/api/fotos/${crop.id}?w=1200`}
+            title={name}
+            initial={crop.initial}
+            confirmLabel="Usar nos próximos posts"
+            onCancel={() => {
+              const x = crop;
+              setCrop(null);
+              // foto nova solta: sem ajuste, salva do jeito que veio
+              if (!x.initial && used !== x.id) void setMain(x.id);
+            }}
+            onConfirm={async (c) => {
+              const x = crop;
+              setCrop(null);
+              await setMain(x.id, c);
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

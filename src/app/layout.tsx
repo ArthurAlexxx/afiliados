@@ -4,10 +4,10 @@ import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Afiliados · Painel",
+  title: "2R PROMOS · Painel",
   description: "Automação de promoções do WhatsApp com links de afiliado do Mercado Livre",
-  applicationName: "Afiliados",
-  appleWebApp: { capable: true, title: "Afiliados", statusBarStyle: "default" },
+  applicationName: "2R PROMOS",
+  appleWebApp: { capable: true, title: "2R PROMOS", statusBarStyle: "default" },
   icons: { icon: "/icons/icon-192.png", apple: "/icons/apple-touch-icon.png" },
   formatDetection: { telephone: false },
 };

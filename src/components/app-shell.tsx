@@ -74,7 +74,7 @@ function Logo({ collapsed }: { collapsed: boolean }) {
       <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white shadow-xs">A</span>
       {!collapsed && (
         <span className="min-w-0 leading-none">
-          <span className="block truncate text-[15px] font-bold text-foreground">Afiliados</span>
+          <span className="block truncate text-[15px] font-bold text-foreground">2R PROMOS</span>
           <span className="mt-1 block truncate text-xs text-muted-foreground">Promoções no WhatsApp</span>
         </span>
       )}

@@ -14,7 +14,7 @@ export async function GET(req: Request) {
     const product = db().prepare("SELECT id, name, main_image_id, blocked, frag_data, frag_url FROM products WHERE id = ?").get(id);
     const images = db()
       .prepare(
-        `SELECT i.id, i.path, i.width, i.height, i.score, i.disabled, i.created_at, i.message_id, COALESCE(g.name, '') group_name
+        `SELECT i.id, i.path, i.width, i.height, i.score, i.disabled, i.crop, i.created_at, i.message_id, COALESCE(g.name, '') group_name
          FROM images i LEFT JOIN groups g ON g.jid = i.group_jid WHERE i.product_id = ? AND COALESCE(i.message_id,'') NOT LIKE 'frag:%' ORDER BY i.disabled, i.score DESC`,
       )
       .all(id) as { id: number; path?: string }[];
