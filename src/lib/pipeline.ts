@@ -713,6 +713,25 @@ export function startWorker() {
   // busca do Fragrantica refeita com o nome limpo para quem está esperando foto e não foi achado (uma vez)
   // Arthur (22/nov): "costuma sair por R$ X em outros grupos" (era "nos grupos") nos posts de ofertas que ainda não saíram
   db().prepare("UPDATE posts SET formatted_text = replace(formatted_text, ' nos grupos', ' em outros grupos') WHERE dest IS NOT NULL AND status IN ('review','photo','queued') AND formatted_text LIKE '%costuma sair por%nos grupos%'").run();
+  // Arthur (22/nov): sem aprovação manual. O que estava esperando (aprovação ou foto) na última hora sai agora com a melhor foto
+  if (!getState("autoNoReviewV1")) {
+    setState("autoNoReviewV1", "1");
+    void (async () => {
+      const { approveReview, releaseWaiting } = await import("./curation.ts");
+      const waiting = db().prepare("SELECT id, product_id, status FROM posts WHERE status IN ('review','photo') AND created_at >= datetime('now','-60 minutes')").all() as { id: number; product_id: number; status: string }[];
+      let n = 0;
+      for (const w of waiting) {
+        try {
+          if (w.status === "review") await approveReview(w.id);
+          if ((await releaseWaiting(w.product_id)).startsWith("post")) n++;
+        } catch (e) {
+          log("warn", `Liberar #${w.id}: ${(e as Error).message}`);
+        }
+      }
+      db().prepare("UPDATE posts SET status='skipped', reason='Sem aprovação manual: ficou velho na espera' WHERE status IN ('review','photo')").run();
+      log("info", `Sem aprovação manual: ${n} post(s) que esperavam saíram com a melhor foto`);
+    })();
+  }
   if (!getState("fragRetryCleanV1")) {
     const r = db()
       .prepare("UPDATE products SET frag_searched = 0, frag_checked_at = NULL WHERE frag_url IS NULL AND frag_searched > 0 AND id IN (SELECT product_id FROM posts WHERE status = 'photo')")

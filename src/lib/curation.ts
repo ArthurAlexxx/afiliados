@@ -545,7 +545,9 @@ export function withLineBeforeLink(text: string, line: string): string {
 async function ensureFragData(_productId: number) {}
 
 /** Sem foto boa no banco, o post fica esperando a escolha do Arthur (status 'photo') em vez de sair com a foto do anúncio. */
-export const WAIT_FOR_PHOTO = true;
+// Arthur (22/nov): "não deve ter mais aprovação manual, todo o processo deve ser automático"
+export const WAIT_FOR_PHOTO = false;
+export const MANUAL_REVIEW = false;
 const WAIT_HOURS = 3;
 
 /**
@@ -699,7 +701,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   // agente de nomes: perfume que já é nosso (outro anúncio, outro ml, já postado) não pede aprovação nem foto de novo
   adoptKnown(item.productId);
   // Arthur (17/nov): só posta direto com a foto que ele escolheu; sem foto escolhida, vai para "esperando foto"
-  const bankPath = chosenImagePath(item.productId);
+  // automático: a foto escolhida, senão a melhor do banco pelo gosto aprendido, senão a foto do anúncio do ML
+  const bankPath = chosenImagePath(item.productId) || (WAIT_FOR_PHOTO ? null : bestImagePath(item.productId));
   const built = await buildPost(item.best.text, s, { groupName: item.best.group_name, wantImage: !bankPath });
   const parsed = parsePromo(item.best.text);
   const discount = item.declaredPct && item.declaredPct > 0 ? item.declaredPct : item.pctVsMedian && item.pctVsMedian > 0.05 ? Math.round(item.pctVsMedian * 100) : null;
@@ -758,7 +761,9 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
       );
   // Arthur (17/nov): perfume fora do nosso leque espera a aprovação dele (e só então vai ao Fragrantica)
   const approved = (db().prepare("SELECT approved FROM products WHERE id = ?").get(item.productId) as { approved: number | null } | undefined)?.approved === 1;
-  const review = decision.approve && !approved;
+  const review = MANUAL_REVIEW && decision.approve && !approved;
+  // automático: perfume que o agente posta passa a ser do nosso leque
+  if (!MANUAL_REVIEW && decision.approve && !approved) db().prepare("UPDATE products SET approved = 1 WHERE id = ? AND COALESCE(blocked, 0) = 0").run(item.productId);
   const waitPhoto = decision.approve && !review && !bankPath && WAIT_FOR_PHOTO;
   const status = review ? "review" : waitPhoto ? "photo" : decision.approve ? "queued" : "skipped";
   const reason = review ? "Perfume novo: esperando sua aprovação" : waitPhoto ? "Esperando você escolher a foto (tela Fotos)" : decision.reason;
