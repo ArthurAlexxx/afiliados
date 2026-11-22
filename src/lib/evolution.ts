@@ -67,6 +67,11 @@ export class Evolution {
     return this.call("POST", `/group/updateGroupPicture/${this.inst}?groupJid=${encodeURIComponent(jid)}`, { image });
   }
 
+  /** Foto do perfil do nosso número (URL ou base64). */
+  updateProfilePicture(picture: string) {
+    return this.call("POST", `/chat/updateProfilePicture/${this.inst}`, { picture });
+  }
+
   /** Nome e tamanho de um grupo pelo código do convite (sem entrar). */
   inviteInfo(code: string) {
     return this.call<{ id?: string; subject?: string; size?: number; desc?: string } & Record<string, unknown>>("GET", `/group/inviteInfo/${this.inst}?inviteCode=${encodeURIComponent(code)}`);

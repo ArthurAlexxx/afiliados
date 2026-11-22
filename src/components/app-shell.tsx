@@ -67,11 +67,12 @@ const NAV = [
 
 const EASE: [number, number, number, number] = [0.23, 1, 0.32, 1];
 
-/** Logo no lugar do símbolo do Mosaic: quadrado violeta com a inicial. */
+/** Logo 2R PROMOS (Arthur, 22/nov). */
 function Logo({ collapsed }: { collapsed: boolean }) {
   return (
     <Link href="/" className="flex min-w-0 items-center gap-3">
-      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white shadow-xs">A</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/icons/icon-192.png" alt="2R PROMOS" className="size-8 shrink-0 rounded-lg shadow-xs" />
       {!collapsed && (
         <span className="min-w-0 leading-none">
           <span className="block truncate text-[15px] font-bold text-foreground">2R PROMOS</span>

@@ -33,7 +33,8 @@ export default function LoginPage() {
           <div className="flex min-h-dvh flex-col after:flex-1">
             <div className="flex-1">
               <div className="flex h-16 items-center px-4 sm:px-6 lg:px-8">
-                <span className="flex size-8 items-center justify-center rounded-lg bg-accent text-sm font-bold text-white">A</span>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src="/icons/icon-192.png" alt="2R PROMOS" className="size-8 rounded-lg" />
                 <span className="ml-3 font-bold text-gray-800 dark:text-gray-100">2R PROMOS</span>
               </div>
             </div>
