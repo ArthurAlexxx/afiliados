@@ -187,9 +187,15 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     real: { ref: v.refPrice ?? ml.median, samples: ml.samples, groups: ml.groups, discount: v.pct!, label: v.label!, inflated: false },
     score: 0,
   };
-  const extraLine = v.byDe
-    ? `📉 ${v.label === "otima" ? "Ótima oferta" : "Boa oferta"}: de R$ ${formatPrice(v.refPrice!)} por R$ ${formatPrice(offer.price)} (-${pct}%)`
-    : `📉 ${v.label === "otima" ? "Ótima oferta" : "Boa oferta"}: costuma sair por R$ ${formatPrice(ml.median)} em outros grupos`;
+  // Arthur (22/nov): a linha compara com os OUTROS grupos (o "de/por" do próprio post já aparece em cima)
+  const vsOthers = Math.round((1 - offer.price / ml.median) * 100);
+  const title = v.label === "otima" ? "Ótima oferta" : "Boa oferta";
+  const extraLine =
+    vsOthers >= 3
+      ? `📉 ${title}: nos outros grupos sai por R$ ${formatPrice(ml.median)}. Aqui está ${vsOthers}% mais barato`
+      : offer.price <= ml.min
+        ? `📉 ${title}: menor preço que os grupos postaram no mês`
+        : `📉 ${title}: mesmo preço dos outros grupos, R$ ${formatPrice(ml.median)}`;
   const { createCuratedPost } = await import("./curation.ts");
   const res = await createCuratedPost(item, s, { follow: `Ofertas boas (${v.why})`, dest: g.jid, destName: g.name, extraLine });
   log("info", `Ofertas boas: ${p.name} R$ ${formatPrice(offer.price)} de ${offer.group_name} · ${v.why} → #${res.id} ${res.status}`);
