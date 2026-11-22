@@ -67,6 +67,16 @@ export class Evolution {
     return this.call("POST", `/group/updateGroupPicture/${this.inst}?groupJid=${encodeURIComponent(jid)}`, { image });
   }
 
+  /** Nome e tamanho de um grupo pelo código do convite (sem entrar). */
+  inviteInfo(code: string) {
+    return this.call<{ id?: string; subject?: string; size?: number; desc?: string } & Record<string, unknown>>("GET", `/group/inviteInfo/${this.inst}?inviteCode=${encodeURIComponent(code)}`);
+  }
+
+  /** Entra no grupo pelo convite. */
+  acceptInvite(code: string) {
+    return this.call<{ accepted?: boolean; groupJid?: string } & Record<string, unknown>>("GET", `/group/acceptInviteCode/${this.inst}?inviteCode=${encodeURIComponent(code)}`);
+  }
+
   private get inst() {
     return encodeURIComponent(this.s.evolutionInstance);
   }
