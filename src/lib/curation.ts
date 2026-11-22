@@ -22,7 +22,56 @@ const sqlNow = (d: Date) => d.toISOString().slice(0, 19).replace("T", " ");
 
 type ProductRow = { id: number; pkey: string; name: string; ml: number; conc: string | null; tokens: string; last_posted_at: string | null };
 
-function findOrCreateProduct(info: PerfumeInfo, title: string): number {
+/** Chave do dicionário de nomes: o título como o grupo escreveu, sem acento/pontuação (ml e concentração continuam nele). */
+export function aliasKey(title: string) {
+  return norm(displayName(title)).slice(0, 160);
+}
+
+/** Concentrações que não podem ser o mesmo perfume (EDP x EDT, Parfum x EDP…). */
+function concClash(a: string | null | undefined, b: string | null | undefined) {
+  if (!a || !b) return false;
+  const loose = (x: string) => (x === "colonia" ? "edt" : x);
+  return loose(a) !== loose(b);
+}
+
+/** Aprende: esse título e esse anúncio do ML são desse perfume. */
+export function learnName(productId: number, title: string, meliId?: string | null) {
+  const k = aliasKey(title);
+  if (k.length >= 4)
+    db()
+      .prepare(
+        `INSERT INTO name_aliases (alias, product_id, title) VALUES (?, ?, ?)
+         ON CONFLICT(alias) DO UPDATE SET hits = hits + 1, last_at = datetime('now'),
+           product_id = CASE WHEN name_aliases.product_id = excluded.product_id THEN name_aliases.product_id ELSE excluded.product_id END`,
+      )
+      .run(k, productId, title.slice(0, 200));
+  if (meliId)
+    db()
+      .prepare(
+        `INSERT INTO meli_refs (meli_id, product_id, title) VALUES (?, ?, ?)
+         ON CONFLICT(meli_id) DO UPDATE SET hits = hits + 1, last_at = datetime('now')`,
+      )
+      .run(meliId, productId, title.slice(0, 200));
+}
+
+function findOrCreateProduct(info: PerfumeInfo, title: string, meliId?: string | null): number {
+  const pick = (id: number | undefined) => {
+    if (!id) return 0;
+    const p = db().prepare("SELECT id, ml, name, conc FROM products WHERE id = ?").get(id) as { id: number; ml: number; name: string; conc: string | null } | undefined;
+    // mesmo anúncio/nome, mas outro tamanho ou outra concentração: não é o mesmo perfume
+    if (!p || p.ml !== info.ml || concClash(perfumeInfo(p.name)?.conc ?? p.conc, info.conc)) return 0;
+    return p.id;
+  };
+  // 1) o mesmo anúncio do ML já foi visto com outro nome
+  if (meliId) {
+    const id = pick((db().prepare("SELECT product_id FROM meli_refs WHERE meli_id = ?").get(meliId) as { product_id: number } | undefined)?.product_id);
+    if (id) return id;
+  }
+  // 2) esse jeito de escrever o nome já é conhecido
+  {
+    const id = pick((db().prepare("SELECT product_id FROM name_aliases WHERE alias = ?").get(aliasKey(title)) as { product_id: number } | undefined)?.product_id);
+    if (id) return id;
+  }
   const rows = db().prepare("SELECT * FROM products WHERE ml = ?").all(info.ml) as ProductRow[];
   for (const r of rows) {
     const byName = perfumeInfo(r.name);
@@ -85,6 +134,25 @@ export type OfferInput = {
   createdAt?: Date;
 };
 
+const meliIds = new Map<string, string | null>();
+/** Código do anúncio no ML (MLB…) por trás do link curto, para reconhecer o mesmo produto com outro nome. */
+async function meliIdOf(url: string): Promise<string | null> {
+  if (meliIds.has(url)) return meliIds.get(url)!;
+  const { resolveRedirects, findMeliId } = await import("./links.ts");
+  let id = findMeliId(url)?.id || null;
+  if (!id) {
+    try {
+      const final = await resolveRedirects(url, 6000);
+      id = findMeliId(decodeURIComponent(final))?.id || null;
+    } catch {
+      id = null;
+    }
+  }
+  meliIds.set(url, id);
+  if (meliIds.size > 5000) meliIds.delete(meliIds.keys().next().value!);
+  return id;
+}
+
 const meliTitles = new Map<string, string | null>();
 /** Nome do produto no anúncio do ML (og:title), para promoção que não traz o ml no texto. */
 async function titleFromMeli(url: string): Promise<string | null> {
@@ -119,7 +187,9 @@ export async function recordOffer(o: OfferInput): Promise<string> {
   if (!info) return "não identifiquei o perfume (sem ml no título)";
   if (!url) return "sem link de produto do Mercado Livre";
 
-  const productId = findOrCreateProduct(info, titulo);
+  const meliId = url ? await meliIdOf(url) : null;
+  const productId = findOrCreateProduct(info, titulo, meliId);
+  learnName(productId, titulo, meliId);
   const created = sqlNow(o.createdAt || new Date());
   const r = db()
     .prepare(
@@ -1391,9 +1461,53 @@ export function reassignMismatched(nameLike: string): number {
   return n;
 }
 
+/**
+ * Dicionário de nomes a partir de todas as promoções gravadas: cada título aponta para o perfume
+ * que mais tem promoções com ele (acompanha as junções e separações do agente de nomes).
+ */
+export function rebuildAliases(): number {
+  const rows = db().prepare("SELECT product_id, title, COUNT(*) n, MAX(created_at) last FROM offers WHERE title IS NOT NULL GROUP BY product_id, title").all() as {
+    product_id: number; title: string; n: number; last: string;
+  }[];
+  const best = new Map<string, { pid: number; n: number; title: string; total: number; last: string }>();
+  for (const r of rows) {
+    const k = aliasKey(r.title);
+    if (k.length < 4) continue;
+    const b = best.get(k);
+    if (!b) best.set(k, { pid: r.product_id, n: r.n, title: r.title, total: r.n, last: r.last });
+    else {
+      b.total += r.n;
+      if (r.last > b.last) b.last = r.last;
+      if (r.n > b.n) Object.assign(b, { pid: r.product_id, n: r.n, title: r.title });
+    }
+  }
+  const up = db().prepare(
+    `INSERT INTO name_aliases (alias, product_id, title, hits, last_at) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(alias) DO UPDATE SET product_id = excluded.product_id, hits = MAX(name_aliases.hits, excluded.hits)`,
+  );
+  let n = 0;
+  db().exec("BEGIN");
+  try {
+    for (const [k, b] of best) n += Number(up.run(k, b.pid, b.title.slice(0, 200), b.total, b.last).changes);
+    // apontava para um perfume que não existe mais
+    db().exec("DELETE FROM name_aliases WHERE product_id NOT IN (SELECT id FROM products)");
+    db().exec("DELETE FROM meli_refs WHERE product_id NOT IN (SELECT id FROM products)");
+    db().exec("COMMIT");
+  } catch (e) {
+    db().exec("ROLLBACK");
+    throw e;
+  }
+  return n;
+}
+
 export function syncNames(): number {
   const c = cleanProductNames();
   const m = mergeDuplicateProducts();
+  try {
+    rebuildAliases();
+  } catch (e) {
+    log("warn", `Dicionário de nomes: ${(e as Error).message}`);
+  }
   void sweepKnown().then((k) => k && log("info", `Agente de nomes: ${k} post(s) liberado(s) por já serem perfumes nossos`));
   if (c || m) log("info", `Agente de nomes: ${c} nome(s) limpo(s), ${m} perfume(s) repetido(s) juntado(s)`);
   return m;
@@ -1434,7 +1548,7 @@ export function mergeDuplicateProducts(): number {
       const tx = db();
       tx.exec("BEGIN");
       try {
-        for (const t of ["offers", "images", "posts", "wishes", "image_fixes"]) tx.prepare(`UPDATE ${t} SET product_id = ? WHERE product_id = ?`).run(k, d);
+        for (const t of ["offers", "images", "posts", "wishes", "image_fixes", "name_aliases", "meli_refs"]) tx.prepare(`UPDATE ${t} SET product_id = ? WHERE product_id = ?`).run(k, d);
         tx.prepare("UPDATE OR IGNORE pin_photos SET product_id = ? WHERE product_id = ?").run(k, d);
         tx.prepare("DELETE FROM pin_photos WHERE product_id = ?").run(d);
         // o que já está aprovado no que fica manda; opções pendentes do outro viram recusadas se já há escolha

@@ -194,6 +194,24 @@ function migrate(db: DatabaseSync) {
       UNIQUE(frag_url, url)
     );
 
+    -- dicionário de nomes (Arthur, 22/nov): cada jeito que os grupos escrevem o perfume, e o código do anúncio no ML
+    CREATE TABLE IF NOT EXISTS name_aliases (
+      alias      TEXT PRIMARY KEY,
+      product_id INTEGER NOT NULL,
+      title      TEXT,
+      hits       INTEGER NOT NULL DEFAULT 1,
+      last_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_alias_product ON name_aliases(product_id);
+    CREATE TABLE IF NOT EXISTS meli_refs (
+      meli_id    TEXT PRIMARY KEY,
+      product_id INTEGER NOT NULL,
+      title      TEXT,
+      hits       INTEGER NOT NULL DEFAULT 1,
+      last_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_meliref_product ON meli_refs(product_id);
+
     CREATE TABLE IF NOT EXISTS logs (
       id         INTEGER PRIMARY KEY AUTOINCREMENT,
       level      TEXT NOT NULL,

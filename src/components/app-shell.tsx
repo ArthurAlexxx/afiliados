@@ -33,6 +33,7 @@ import {
   MessageCircle,
   TrendingUp,
   Radio,
+  BookA,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -44,6 +45,7 @@ const NAV = [
       { href: "/aovivo", label: "Ao vivo", icon: Radio },
       { href: "/curadoria", label: "Curadoria", icon: Sparkles },
       { href: "/precos", label: "Preços", icon: BadgeDollarSign },
+      { href: "/nomes", label: "Nomes dos perfumes", icon: BookA },
       { href: "/mercado", label: "Estudo de Mercado", icon: TrendingUp },
       { href: "/whatsapp", label: "WhatsApp", icon: MessageCircle },
       { href: "/fila", label: "Posts", icon: ListOrdered },
