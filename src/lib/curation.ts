@@ -85,16 +85,41 @@ export type OfferInput = {
   createdAt?: Date;
 };
 
+const meliTitles = new Map<string, string | null>();
+/** Nome do produto no anúncio do ML (og:title), para promoção que não traz o ml no texto. */
+async function titleFromMeli(url: string): Promise<string | null> {
+  if (meliTitles.has(url)) return meliTitles.get(url)!;
+  let t: string | null = null;
+  try {
+    const { resolveRedirects, fetchHtml, findOgTitle } = await import("./links.ts");
+    const final = await resolveRedirects(url, 8000);
+    t = findOgTitle(await fetchHtml(final, 10000));
+    if (t) t = t.replace(/\s*\|\s*Mercado\s*Livre.*$/i, "").trim();
+  } catch {
+    t = null;
+  }
+  meliTitles.set(url, t);
+  if (meliTitles.size > 3000) meliTitles.delete(meliTitles.keys().next().value!);
+  return t;
+}
+
 /** Registra a promoção (e a foto, se servir) no banco da curadoria. */
 export async function recordOffer(o: OfferInput): Promise<string> {
   const p = parsePromo(o.text);
   if (p.cupomOnly || !p.titulo) return "sem produto (post de cupom/aviso)";
-  const info = perfumeInfo(p.titulo);
-  if (!info) return "não identifiquei o perfume (sem ml no título)";
   const url = extractUrls(o.text).find((u) => isMeliUrl(u) && !/\/sec\//.test(u)) || null;
+  let info = perfumeInfo(p.titulo);
+  let titulo = p.titulo;
+  // Arthur (22/nov): grupo que não põe o ml no texto (GR Promos…) — lê o nome completo no anúncio do ML
+  if (!info && url && !notPerfume(p.titulo)) {
+    const t = await titleFromMeli(url);
+    const i2 = t ? perfumeInfo(t) : null;
+    if (i2) (info = i2), (titulo = t!);
+  }
+  if (!info) return "não identifiquei o perfume (sem ml no título)";
   if (!url) return "sem link de produto do Mercado Livre";
 
-  const productId = findOrCreateProduct(info, p.titulo);
+  const productId = findOrCreateProduct(info, titulo);
   const created = sqlNow(o.createdAt || new Date());
   const r = db()
     .prepare(
@@ -106,7 +131,7 @@ export async function recordOffer(o: OfferInput): Promise<string> {
       productId,
       o.groupJid,
       o.groupName,
-      p.titulo,
+      titulo,
       Number.isNaN(p.precoNum) ? null : p.precoNum,
       Number.isNaN(p.precoAntigoNum) ? null : p.precoAntigoNum,
       p.descontoPct,

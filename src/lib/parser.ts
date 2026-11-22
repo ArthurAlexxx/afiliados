@@ -134,8 +134,8 @@ export function isHookLine(raw: string) {
 
 /** Número em formato brasileiro ("1.234,56", "750", "634,23"). */
 const NUM = String.raw`(\d{1,3}(?:\.\d{3})+(?:,\d{1,2})?|\d+(?:,\d{1,2})?)`;
-const DE_RE = new RegExp(String.raw`(?:^|[\s❌✖️:(])(?:de|era|antes)\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
-const POR_RE = new RegExp(String.raw`(?:^|[\s✅✔️:)~])(?:por|apenas|agora|s[óo]|hoje)\s*(?:apenas)?\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
+const DE_RE = new RegExp(String.raw`(?:^|[^A-Za-zÀ-ÿ0-9])(?:de|era|antes)\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
+const POR_RE = new RegExp(String.raw`(?:^|[^A-Za-zÀ-ÿ0-9])(?:por|apenas|agora|s[óo]|hoje)\s*(?:apenas)?\s*:?\s*[~*_\s]*(?:R\$)?\s*[~*_\s]*` + NUM, "i");
 
 export type ParsedPromo = Omit<PromoData, "link" | "links" | "texto" | "grupo_origem" | "loja" | "desconto_pct" | "economia" | "loja_info" | "loja_nome" | "frete_tag" | "historico" | "manchete"> & {
   desconto_pct: string;
