@@ -187,7 +187,7 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     real: { ref: v.refPrice ?? ml.median, samples: ml.samples, groups: ml.groups, discount: v.pct!, label: v.label!, inflated: false },
     score: 0,
   };
-  const extraLine = dealLine(offer.price, ml, v.label!, pct, v.refPrice);
+  const extraLine = dealLine(offer.price, ml, v.label!, othersAvg(productId, offer.group_jid));
   const { createCuratedPost } = await import("./curation.ts");
   const res = await createCuratedPost(item, s, { follow: `Ofertas boas (${v.why})`, dest: g.jid, destName: g.name, extraLine });
   log("info", `Ofertas boas: ${p.name} R$ ${formatPrice(offer.price)} de ${offer.group_name} · ${v.why} → #${res.id} ${res.status}`);
@@ -202,13 +202,36 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
  * Simulação para a tela: das promoções dos últimos `hours`, quais teriam saído com as regras atuais.
  * Usa o histórico até 6h antes de cada promoção (igual à regra ao vivo).
  */
-/** A faixa "📉 Boa/Ótima oferta" (sempre aparece). Compara com os OUTROS grupos, não com o de/por do próprio post. */
-export function dealLine(price: number, ml: DealPrice, label: "boa" | "otima", pct: number, refPrice?: number): string {
-  const vsOthers = Math.round((1 - price / ml.median) * 100);
+/**
+ * Arthur (22/nov): a comparação é a MÉDIA do preço final ("por") que os outros grupos postaram desse perfume
+ * nos últimos 30 dias, sem o grupo de onde veio a oferta (senão parece que copiamos o "de" do próprio post).
+ * Um valor por grupo por dia (o menor), sem os absurdos.
+ */
+export function othersAvg(productId: number, excludeGroup: string | null, days = 30): { avg: number; groups: number; samples: number } | null {
+  const rows = db()
+    .prepare(
+      `SELECT group_jid, date(created_at, '-3 hours') d, MIN(price) price FROM offers
+       WHERE product_id = ? AND price > 0 AND created_at >= datetime('now', ?) AND group_jid IS NOT ?
+       GROUP BY group_jid, d`,
+    )
+    .all(productId, `-${days} days`, excludeGroup) as { group_jid: string; price: number }[];
+  if (!rows.length) return null;
+  const m = median(rows.map((r) => r.price));
+  const ok = rows.filter((r) => r.price >= m * 0.5 && r.price <= m * 2);
+  if (!ok.length) return null;
+  const avg = ok.reduce((a, r) => a + r.price, 0) / ok.length;
+  return { avg: Math.round(avg * 100) / 100, groups: new Set(ok.map((r) => r.group_jid)).size, samples: ok.length };
+}
+
+/** A faixa "📉 Boa/Ótima oferta" (sempre aparece): média dos outros grupos. */
+export function dealLine(price: number, ml: DealPrice, label: "boa" | "otima", others: { avg: number; groups: number } | null): string {
   const title = label === "otima" ? "Ótima oferta" : "Boa oferta";
-  if (vsOthers >= 3) return `📉 ${title}: nos outros grupos sai por R$ ${formatPrice(ml.median)}. Aqui está ${vsOthers}% mais barato`;
-  if (price <= ml.min) return `📉 ${title}: menor preço que outros grupos postaram no mês`;
-  return `📉 ${title}: abaixo do preço cheio de outros grupos (R$ ${formatPrice(refPrice ?? ml.median)})`;
+  const ref = others?.avg ?? ml.median;
+  const n = others?.groups ?? ml.groups;
+  const grupos = n === 1 ? "1 grupo" : `${n} grupos`;
+  const cheaper = Math.round((1 - price / ref) * 100);
+  const base = `📉 ${title}: a média de outros grupos é R$ ${formatPrice(ref)} (${grupos})`;
+  return cheaper >= 1 ? `${base}. Aqui está ${cheaper}% mais barato` : base;
 }
 
 /**
@@ -242,7 +265,7 @@ export async function repostMissingLine(hours = 24, dry = false) {
     if (!price || !ml) { out.push({ id, why: "sem preço de referência" }); continue; }
     const v = judgeDeal(price, ml, r);
     const pct = Math.round((v.pct ?? Math.max(0, 1 - price / (ml.de ?? ml.median))) * 100);
-    const line = dealLine(price, ml, label || v.label || (pct >= r.greatPct * 100 ? "otima" : "boa"), pct, v.refPrice ?? ml.de ?? undefined);
+    const line = dealLine(price, ml, label || v.label || (pct >= r.greatPct * 100 ? "otima" : "boa"), othersAvg(Number(p.product_id), (p.source_jid as string) || null));
     if (dry) { out.push({ id, line }); continue; }
     const info = db()
       .prepare(
