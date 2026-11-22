@@ -49,5 +49,16 @@ export async function GET(req: Request) {
     }
     out.push({ group: g.name, msgs, recorded, reasons, samples });
   }
-  return Response.json({ hours, groups: out.sort((a, b) => b.msgs - a.msgs) });
+  // ritmo gravado por grupo nos últimos 3 dias: média e pico por hora
+  const perHour = db()
+    .prepare(
+      `SELECT group_name g, MAX(n) peak, ROUND(AVG(n), 1) avg FROM (
+         SELECT group_name, strftime('%Y-%m-%d %H', created_at) h, COUNT(*) n FROM offers WHERE created_at >= datetime('now','-3 days') GROUP BY group_name, h
+       ) GROUP BY g ORDER BY peak DESC`,
+    )
+    .all();
+  const total = db()
+    .prepare(`SELECT MAX(n) peak, ROUND(AVG(n),1) avg FROM (SELECT strftime('%Y-%m-%d %H', created_at) h, COUNT(*) n FROM offers WHERE created_at >= datetime('now','-3 days') GROUP BY h)`)
+    .get();
+  return Response.json({ hours, groups: out.sort((a, b) => b.msgs - a.msgs), perHour, total });
 }
