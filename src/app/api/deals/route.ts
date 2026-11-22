@@ -1,7 +1,7 @@
 import { db, log } from "@/lib/db";
 import { Evolution } from "@/lib/evolution";
 import { getSettings } from "@/lib/settings";
-import { dealRules, dealsGroup, setDealRules, simulateDeals, type DealRules } from "@/lib/deals";
+import { dealRules, dealsGroup, repostMissingLine, setDealRules, simulateDeals, type DealRules } from "@/lib/deals";
 
 export const dynamic = "force-dynamic";
 
@@ -38,7 +38,8 @@ export function GET(req: Request) {
 }
 
 export async function PATCH(req: Request) {
-  const body = (await req.json()) as Partial<DealRules>;
+  const body = (await req.json()) as Partial<DealRules> & { repost?: { hours?: number; dry?: boolean } };
+  if (body.repost) return Response.json(await repostMissingLine(body.repost.hours || 24, !!body.repost.dry));
   return Response.json({ ok: true, rules: setDealRules(body) });
 }
 

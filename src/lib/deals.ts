@@ -187,16 +187,7 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     real: { ref: v.refPrice ?? ml.median, samples: ml.samples, groups: ml.groups, discount: v.pct!, label: v.label!, inflated: false },
     score: 0,
   };
-  // Arthur (22/nov): a linha compara com os OUTROS grupos (o "de/por" do próprio post já aparece em cima)
-  const vsOthers = Math.round((1 - offer.price / ml.median) * 100);
-  const title = v.label === "otima" ? "Ótima oferta" : "Boa oferta";
-  const extraLine =
-    vsOthers >= 3
-      ? `📉 ${title}: nos outros grupos sai por R$ ${formatPrice(ml.median)}. Aqui está ${vsOthers}% mais barato`
-      : offer.price <= ml.min
-        ? `📉 ${title}: menor preço que os grupos postaram no mês`
-        : // Arthur (22/nov): a faixa de boa/ótima oferta sempre aparece
-          `📉 ${title}: ${pct}% abaixo do preço cheio dos grupos (R$ ${formatPrice(v.refPrice ?? ml.median)})`;
+  const extraLine = dealLine(offer.price, ml, v.label!, pct, v.refPrice);
   const { createCuratedPost } = await import("./curation.ts");
   const res = await createCuratedPost(item, s, { follow: `Ofertas boas (${v.why})`, dest: g.jid, destName: g.name, extraLine });
   log("info", `Ofertas boas: ${p.name} R$ ${formatPrice(offer.price)} de ${offer.group_name} · ${v.why} → #${res.id} ${res.status}`);
@@ -211,6 +202,66 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
  * Simulação para a tela: das promoções dos últimos `hours`, quais teriam saído com as regras atuais.
  * Usa o histórico até 6h antes de cada promoção (igual à regra ao vivo).
  */
+/** A faixa "📉 Boa/Ótima oferta" (sempre aparece). Compara com os OUTROS grupos, não com o de/por do próprio post. */
+export function dealLine(price: number, ml: DealPrice, label: "boa" | "otima", pct: number, refPrice?: number): string {
+  const vsOthers = Math.round((1 - price / ml.median) * 100);
+  const title = label === "otima" ? "Ótima oferta" : "Boa oferta";
+  if (vsOthers >= 3) return `📉 ${title}: nos outros grupos sai por R$ ${formatPrice(ml.median)}. Aqui está ${vsOthers}% mais barato`;
+  if (price <= ml.min) return `📉 ${title}: menor preço que os grupos postaram no mês`;
+  return `📉 ${title}: ${pct}% abaixo do preço cheio dos grupos (R$ ${formatPrice(refPrice ?? ml.median)})`;
+}
+
+/**
+ * Arthur (22/nov): "reposte os que sairam sem essa info". Copia os posts do grupo de ofertas que saíram
+ * sem a faixa, já com ela, e põe na fila (sai um a cada 90s). As mensagens antigas ficam.
+ */
+export async function repostMissingLine(hours = 24, dry = false) {
+  const g = dealsGroup();
+  if (!g) return { ok: false, error: "sem grupo de ofertas", reposted: [] as number[] };
+  const { withLineBeforeLink } = await import("./curation.ts");
+  const rows = db()
+    .prepare(
+      `SELECT * FROM posts WHERE dest = ? AND status = 'sent' AND sent_at >= datetime('now', ?)
+       AND formatted_text NOT LIKE '%📉%oferta%' ORDER BY id`,
+    )
+    .all(g.jid, `-${hours} hours`) as Record<string, unknown>[];
+  const r = dealRules();
+  const out: { id: number; newId?: number; line?: string; why?: string }[] = [];
+  for (const p of rows) {
+    const id = Number(p.id);
+    // já tem repost na fila ou enviado
+    const dup = db().prepare("SELECT id FROM posts WHERE message_id = ?").get(`repost-${id}`);
+    if (dup) { out.push({ id, why: "já repostado" }); continue; }
+    let price = 0, label: "boa" | "otima" | undefined;
+    try {
+      const j = JSON.parse(String(p.data_json));
+      price = Number(j.curation?.bestPrice) || 0;
+      label = j.curation?.real?.label;
+    } catch {}
+    const ml = p.product_id ? dealPrice(Number(p.product_id), "datetime('now')") : null;
+    if (!price || !ml) { out.push({ id, why: "sem preço de referência" }); continue; }
+    const v = judgeDeal(price, ml, r);
+    const pct = Math.round((v.pct ?? Math.max(0, 1 - price / (ml.de ?? ml.median))) * 100);
+    const line = dealLine(price, ml, label || v.label || (pct >= r.greatPct * 100 ? "otima" : "boa"), pct, v.refPrice ?? ml.de ?? undefined);
+    if (dry) { out.push({ id, line }); continue; }
+    const info = db()
+      .prepare(
+        `INSERT INTO posts (message_id, source_jid, source_name, original_text, formatted_text, data_json,
+          media_path, media_mime, product_key, product_id, origin, status, reason, dest)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'deal', 'queued', ?, ?)`,
+      )
+      .run(
+        `repost-${id}`, p.source_jid as string, p.source_name as string, p.original_text as string,
+        withLineBeforeLink(String(p.formatted_text), line), p.data_json as string,
+        (p.media_path as string) ?? null, (p.media_mime as string) ?? null, (p.product_key as string) ?? null,
+        (p.product_id as number) ?? null, `Repost de #${id} com a faixa de oferta`, g.jid,
+      );
+    out.push({ id, newId: Number(info.lastInsertRowid), line });
+  }
+  if (!dry) log("info", `Ofertas boas: repost de ${out.filter((o) => o.newId).length} post(s) sem a faixa`);
+  return { ok: true, checked: rows.length, reposted: out };
+}
+
 export function simulateDeals(hours = 48, rules: DealRules = dealRules()) {
   const offers = db()
     .prepare(
