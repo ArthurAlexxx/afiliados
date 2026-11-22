@@ -144,6 +144,13 @@ async function meliIdOf(url: string): Promise<string | null> {
     try {
       const final = await resolveRedirects(url, 6000);
       id = findMeliId(decodeURIComponent(final))?.id || null;
+      // link curto de afiliado cai numa página do ML sem o código na URL: procura no HTML (canonical/og:url)
+      if (!id) {
+        const { fetchHtml } = await import("./links.ts");
+        const html = await fetchHtml(final, 8000);
+        const canon = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)/i)?.[1] || html.match(/property=["']og:url["'][^>]+content=["']([^"']+)/i)?.[1] || "";
+        id = findMeliId(canon)?.id || findMeliId(html.slice(0, 200000))?.id || null;
+      }
     } catch {
       id = null;
     }
