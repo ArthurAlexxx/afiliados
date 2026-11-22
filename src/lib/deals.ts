@@ -207,8 +207,8 @@ export function dealLine(price: number, ml: DealPrice, label: "boa" | "otima", p
   const vsOthers = Math.round((1 - price / ml.median) * 100);
   const title = label === "otima" ? "Ótima oferta" : "Boa oferta";
   if (vsOthers >= 3) return `📉 ${title}: nos outros grupos sai por R$ ${formatPrice(ml.median)}. Aqui está ${vsOthers}% mais barato`;
-  if (price <= ml.min) return `📉 ${title}: menor preço que os grupos postaram no mês`;
-  return `📉 ${title}: ${pct}% abaixo do preço cheio dos grupos (R$ ${formatPrice(refPrice ?? ml.median)})`;
+  if (price <= ml.min) return `📉 ${title}: menor preço que outros grupos postaram no mês`;
+  return `📉 ${title}: abaixo do preço cheio de outros grupos (R$ ${formatPrice(refPrice ?? ml.median)})`;
 }
 
 /**

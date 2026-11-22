@@ -711,6 +711,9 @@ export function startWorker() {
       setState("unmergeV3", "1");
     });
   // busca do Fragrantica refeita com o nome limpo para quem está esperando foto e não foi achado (uma vez)
+  // Arthur (22/nov): sem o "%", só "abaixo do preço cheio de outros grupos (R$ X)"
+  for (const r of db().prepare("SELECT id, formatted_text t FROM posts WHERE status IN ('review','photo','queued') AND formatted_text LIKE '%\% abaixo do preço cheio%'").all() as { id: number; t: string }[])
+    db().prepare("UPDATE posts SET formatted_text = ? WHERE id = ?").run(r.t.replace(/: \d+% abaixo do preço cheio dos grupos/g, ": abaixo do preço cheio de outros grupos"), r.id);
   // Arthur (22/nov): "costuma sair por R$ X em outros grupos" (era "nos grupos") nos posts de ofertas que ainda não saíram
   db().prepare("UPDATE posts SET formatted_text = replace(formatted_text, ' nos grupos', ' em outros grupos') WHERE dest IS NOT NULL AND status IN ('review','photo','queued') AND formatted_text LIKE '%costuma sair por%nos grupos%'").run();
   // Arthur (22/nov): sem aprovação manual. O que estava esperando (aprovação ou foto) na última hora sai agora com a melhor foto
