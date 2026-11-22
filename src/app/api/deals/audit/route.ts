@@ -40,7 +40,7 @@ export async function GET(req: Request) {
             else why = "deveria ter gravado (perdida)";
           }
           reasons[why] = (reasons[why] || 0) + 1;
-          if (why !== "gravada" && (samples[why]?.length || 0) < 3) (samples[why] ||= []).push((text || "").replace(/\s+/g, " ").slice(0, 140));
+          if (why !== "gravada" && (samples[why]?.length || 0) < 3) (samples[why] ||= []).push(text ? text.replace(/\s+/g, " ").slice(0, 140) : `tipos: ${JSON.stringify(m.message || {}).slice(0, 300)}`);
         }
         if (page >= pages) break;
       }

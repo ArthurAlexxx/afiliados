@@ -131,13 +131,38 @@ type UpsertData = {
 
 export function extractText(m?: WAMessage): string {
   if (!m) return "";
-  return (
+  const direct = (
     m.conversation ||
     m.extendedTextMessage?.text ||
     m.imageMessage?.caption ||
     m.videoMessage?.caption ||
     ""
   ).trim();
+  if (direct) return direct;
+  // mensagens "embrulhadas" (temporárias, ver uma vez, documento com legenda, editadas, botões, álbum…)
+  const x = m as unknown as Record<string, any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+  for (const k of ["ephemeralMessage", "viewOnceMessage", "viewOnceMessageV2", "viewOnceMessageV2Extension", "documentWithCaptionMessage", "editedMessage", "botInvokeMessage", "lottieStickerMessage"]) {
+    const inner = x[k]?.message;
+    if (inner) {
+      const t = extractText(inner);
+      if (t) return t;
+    }
+  }
+  const pm = x.protocolMessage?.editedMessage;
+  if (pm) {
+    const t = extractText(pm);
+    if (t) return t;
+  }
+  const candidates = [
+    x.documentMessage?.caption,
+    x.buttonsMessage?.contentText,
+    x.templateMessage?.hydratedTemplate?.hydratedContentText,
+    x.templateMessage?.hydratedFourRowTemplate?.hydratedContentText,
+    x.interactiveMessage?.body?.text,
+    x.listMessage?.description,
+    x.pollCreationMessage?.name,
+  ];
+  return String(candidates.find((c) => typeof c === "string" && c.trim()) || "").trim();
 }
 
 export async function handleWebhook(payload: unknown): Promise<{ ok: boolean; info: string }> {
