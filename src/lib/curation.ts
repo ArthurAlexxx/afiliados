@@ -618,6 +618,8 @@ async function ensureFragData(_productId: number) {}
 // Arthur (22/nov): "não deve ter mais aprovação manual, todo o processo deve ser automático"
 export const WAIT_FOR_PHOTO = false;
 export const MANUAL_REVIEW = false;
+/** Arthur (22/nov): título do post igual ao da fonte, sem o padrão nome + 🏷️ marca · ml */
+export const SOURCE_TITLE = true;
 const WAIT_HOURS = 3;
 
 /**
@@ -656,7 +658,7 @@ async function releaseWaitingFor(productId: number, dest: string): Promise<strin
     title = JSON.parse(post.data_json)?.data?.titulo || "";
   } catch {}
   await ensureFragData(productId);
-  const text = withFragProfile(/🏷️/.test(cur.formatted_text) ? cur.formatted_text : withFragTitle(cur.formatted_text, productId, title), productId);
+  const text = withFragProfile(SOURCE_TITLE || /🏷️/.test(cur.formatted_text) ? cur.formatted_text : withFragTitle(cur.formatted_text, productId, title), productId);
   db()
     .prepare("UPDATE posts SET media_path = ?, media_mime = 'image/jpeg', formatted_text = ?, status = 'queued', reason = 'Foto escolhida por você' WHERE id = ? AND status = 'photo'")
     .run(mediaPath, text, post.id);
@@ -778,7 +780,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   const discount = item.declaredPct && item.declaredPct > 0 ? item.declaredPct : item.pctVsMedian && item.pctVsMedian > 0.05 ? Math.round(item.pctVsMedian * 100) : null;
   const data = {
     ...built.data,
-    titulo: item.name,
+    // Arthur (22/nov): o nome sai exatamente como veio da fonte (sem reorganizar marca/ml)
+    titulo: SOURCE_TITLE ? parsed.titulo || item.name : item.name,
     desconto: discount ? `(-${discount}%)` : built.data.desconto,
     desconto_pct: discount ? String(discount) : built.data.desconto_pct,
     grupo_origem: item.best.group_name,
@@ -788,7 +791,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   // perfume do leque que já vai sair: lê a ficha (dia/noite, notas) antes de montar o texto
   if (bankPath && (db().prepare("SELECT approved FROM products WHERE id = ?").get(item.productId) as { approved: number | null } | undefined)?.approved === 1)
     await ensureFragData(item.productId);
-  let formatted = withFragProfile(withFragTitle(renderTemplate(s.template, data), item.productId, data.titulo), item.productId);
+  const rendered = renderTemplate(s.template, data);
+  let formatted = withFragProfile(SOURCE_TITLE ? rendered : withFragTitle(rendered, item.productId, data.titulo), item.productId);
   // grupo de ofertas boas: linha com o preço normal, antes do link
   if (opts.extraLine) formatted = withLineBeforeLink(formatted, opts.extraLine);
 
