@@ -13,7 +13,7 @@ export function GET() {
          (SELECT COUNT(*) FROM images i WHERE i.group_jid = g.jid) photos,
          (SELECT COUNT(*) FROM posts p WHERE p.source_jid = g.jid) captured,
          (SELECT COUNT(*) FROM posts p WHERE p.source_jid = g.jid AND p.status='sent') sent
-       FROM groups g ORDER BY CASE g.role WHEN 'destination' THEN 0 WHEN 'source' THEN 1 ELSE 2 END, g.name COLLATE NOCASE`,
+       FROM groups g ORDER BY CASE g.role WHEN 'destination' THEN 0 WHEN 'deals' THEN 1 WHEN 'source' THEN 2 ELSE 3 END, g.name COLLATE NOCASE`,
     )
     .all();
   return Response.json({ rows });
@@ -29,14 +29,14 @@ export async function POST() {
   }
 }
 
-/** Atualiza o papel de um grupo: none | source | destination. Também permite adicionar um JID manual. */
+/** Atualiza o papel de um grupo: none | source | destination | deals (ofertas boas, teste 2). Também permite adicionar um JID manual. */
 export async function PATCH(req: Request) {
   const { jid, role, name, watermark, wmCorner, promo, follow, leave } = (await req.json()) as {
     jid: string; role?: string; name?: string; watermark?: boolean; wmCorner?: string; promo?: boolean; follow?: boolean; leave?: boolean;
   };
   if (jid && leave) {
     const g = db().prepare("SELECT role FROM groups WHERE jid = ?").get(jid) as { role: string } | undefined;
-    if (g?.role === "destination") return Response.json({ error: "não sai do grupo de destino" }, { status: 400 });
+    if (g?.role === "destination" || g?.role === "deals") return Response.json({ error: "não sai do grupo de destino" }, { status: 400 });
     try {
       await new Evolution(getSettings()).leaveGroup(jid);
     } catch (e) {
@@ -66,9 +66,11 @@ export async function PATCH(req: Request) {
     else db().prepare("UPDATE images SET disabled = 0 WHERE group_jid = ?").run(jid);
     return Response.json({ ok: true });
   }
-  if (!jid || !role || !["none", "source", "destination"].includes(role)) {
+  if (!jid || !role || !["none", "source", "destination", "deals"].includes(role)) {
     return Response.json({ error: "dados inválidos" }, { status: 400 });
   }
+  // só um grupo de ofertas boas por vez
+  if (role === "deals") db().prepare("UPDATE groups SET role = 'none' WHERE role = 'deals' AND jid <> ?").run(jid.trim());
   db()
     .prepare(
       `INSERT INTO groups (jid, name, role) VALUES (?, ?, ?)

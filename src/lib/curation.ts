@@ -155,7 +155,7 @@ export async function addImage(productId: number, buf: Buffer, messageId?: strin
 /* Ranking                                                              */
 /* ------------------------------------------------------------------ */
 
-type OfferRow = {
+export type OfferRow = {
   id: number; product_id: number; group_jid: string; group_name: string; title: string;
   price: number | null; old_price: number | null; pct: number | null; coupon: string | null; url: string | null; text: string; created_at: string;
 };
@@ -506,6 +506,16 @@ export function withFragProfile(text: string, productId: number): string {
   return all.join("\n");
 }
 
+/** Põe uma linha antes do link do post (ou no fim, se não achar o link). */
+export function withLineBeforeLink(text: string, line: string): string {
+  if (text.includes(line)) return text;
+  const all = text.split("\n");
+  const at = all.findIndex((l) => /LINK DO PRODUTO|https?:\/\//i.test(l));
+  if (at < 0) return `${text.trimEnd()}\n\n${line}`;
+  all.splice(at, 0, line, "");
+  return all.join("\n");
+}
+
 /** Sem custo extra: não chama a ficha; só aproveita o que já foi lido. */
 async function ensureFragData(_productId: number) {}
 
@@ -518,9 +528,19 @@ const WAIT_HOURS = 3;
  * (só o mais recente, e só se tiver menos de WAIT_HOURS horas).
  */
 export async function releaseWaiting(productId: number): Promise<string> {
+  // um post esperando por grupo (o principal e o de ofertas boas saem cada um no seu)
+  const dests = db()
+    .prepare("SELECT DISTINCT COALESCE(dest, '') d FROM posts WHERE product_id = ? AND status = 'photo' AND created_at >= datetime('now', ?)")
+    .all(productId, `-${WAIT_HOURS} hours`) as { d: string }[];
+  let out = "";
+  for (const { d } of dests) out = (await releaseWaitingFor(productId, d)) || out;
+  return out;
+}
+
+async function releaseWaitingFor(productId: number, dest: string): Promise<string> {
   const post = db()
-    .prepare("SELECT id, data_json FROM posts WHERE product_id = ? AND status = 'photo' AND created_at >= datetime('now', ?) ORDER BY id DESC LIMIT 1")
-    .get(productId, `-${WAIT_HOURS} hours`) as { id: number; data_json: string } | undefined;
+    .prepare("SELECT id, data_json FROM posts WHERE product_id = ? AND status = 'photo' AND COALESCE(dest, '') = ? AND created_at >= datetime('now', ?) ORDER BY id DESC LIMIT 1")
+    .get(productId, dest, `-${WAIT_HOURS} hours`) as { id: number; data_json: string } | undefined;
   if (!post) return "";
   const bank = bestImagePath(productId);
   if (!bank) return "";
@@ -543,11 +563,11 @@ export async function releaseWaiting(productId: number): Promise<string> {
   db()
     .prepare("UPDATE posts SET media_path = ?, media_mime = 'image/jpeg', formatted_text = ?, status = 'queued', reason = 'Foto escolhida por você' WHERE id = ? AND status = 'photo'")
     .run(mediaPath, text, post.id);
-  db().prepare("UPDATE posts SET status = 'skipped', reason = 'Saiu outro post com a foto escolhida' WHERE product_id = ? AND status = 'photo'").run(productId);
-  db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(productId);
+  db().prepare("UPDATE posts SET status = 'skipped', reason = 'Saiu outro post com a foto escolhida' WHERE product_id = ? AND status = 'photo' AND COALESCE(dest, '') = ?").run(productId, dest);
+  if (!dest) db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(productId);
   log("info", `Post #${post.id} saiu da espera: foto escolhida`);
-  const { processQueue } = await import("./pipeline.ts");
-  void processQueue();
+  const { processQueue, processDeals } = await import("./pipeline.ts");
+  void (dest ? processDeals() : processQueue());
   return `post #${post.id} enviado com a foto escolhida`;
 }
 
@@ -646,7 +666,7 @@ export function bestImagePath(productId: number): string | null {
  * Cria o post do perfume escolhido: converte o link da melhor oferta para o seu link de afiliado,
  * monta o texto no seu template e prepara a melhor foto com as etiquetas.
  */
-export async function createCuratedPost(item: RankItem, s: Settings = getSettings(), opts: { follow?: string } = {}): Promise<{ id: number; status: string; reason: string | null }> {
+export async function createCuratedPost(item: RankItem, s: Settings = getSettings(), opts: { follow?: string; dest?: string; destName?: string; extraLine?: string } = {}): Promise<{ id: number; status: string; reason: string | null }> {
   if (!item.best) throw new Error("Esse perfume não tem oferta recente");
   // busca as opções do Pinterest (uma vez por perfume) para o Arthur escolher a foto fixa
   // import tardio para evitar ciclo pipeline ↔ curation
@@ -670,7 +690,9 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   // perfume do leque que já vai sair: lê a ficha (dia/noite, notas) antes de montar o texto
   if (bankPath && (db().prepare("SELECT approved FROM products WHERE id = ?").get(item.productId) as { approved: number | null } | undefined)?.approved === 1)
     await ensureFragData(item.productId);
-  const formatted = withFragProfile(withFragTitle(renderTemplate(s.template, data), item.productId, data.titulo), item.productId);
+  let formatted = withFragProfile(withFragTitle(renderTemplate(s.template, data), item.productId, data.titulo), item.productId);
+  // grupo de ofertas boas: linha com o preço normal, antes do link
+  if (opts.extraLine) formatted = withLineBeforeLink(formatted, opts.extraLine);
 
   let mediaPath: string | null = null;
   try {
@@ -719,13 +741,13 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   const info = db()
     .prepare(
       `INSERT INTO posts (message_id, source_jid, source_name, original_text, formatted_text, data_json,
-        media_path, media_mime, product_key, product_id, origin, status, reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'curated', ?, ?)`,
+        media_path, media_mime, product_key, product_id, origin, status, reason, dest)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .run(
-      `cur-${item.productId}-${Date.now()}`,
+      `${opts.dest ? "deal" : "cur"}-${item.productId}-${Date.now()}`,
       item.best.group_jid,
-      `Curadoria · ${item.groups} grupo(s)`,
+      opts.dest ? `${opts.destName || "Ofertas boas"} · via ${item.best.group_name}` : `Curadoria · ${item.groups} grupo(s)`,
       item.best.text,
       formatted,
       JSON.stringify({
@@ -741,10 +763,12 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
       mediaPath ? "image/jpeg" : null,
       built.productKey,
       item.productId,
+      opts.dest ? "deal" : "curated",
       status,
       reason,
+      opts.dest || null,
     );
-  if (decision.approve) db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(item.productId);
+  if (decision.approve && !opts.dest) db().prepare("UPDATE products SET last_posted_at = datetime('now') WHERE id = ?").run(item.productId);
   const id = Number(info.lastInsertRowid);
   log(
     "info",
@@ -840,7 +864,7 @@ export async function followPost(productId: number, groupJid: string): Promise<s
   if (!p) return "";
   if (p.last_posted_at && Date.now() - new Date(p.last_posted_at.replace(" ", "T") + "Z").getTime() < FOLLOW_DEDUP_HOURS * 3600e3)
     return `cópia: já postado nas últimas ${FOLLOW_DEDUP_HOURS}h`;
-  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now', ?) AND status IN ('queued','sending','sent','photo','review')").get(productId, `-${FOLLOW_DEDUP_HOURS} hours`);
+  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND dest IS NULL AND created_at >= datetime('now', ?) AND status IN ('queued','sending','sent','photo','review')").get(productId, `-${FOLLOW_DEDUP_HOURS} hours`);
   if (busy) return "cópia: já na fila/postado";
   const item = ranking(s).find((i) => i.productId === productId);
   if (!item?.best) return "cópia: sem oferta com link";
@@ -945,7 +969,7 @@ export async function evaluateInstant(productId: number): Promise<string> {
   if (item.score < s.curationInstantScore) return `nota ${item.score} < ${s.curationInstantScore}`;
   if (!slotOpen(s) && !exceptional(item, s)) return `nota ${item.score}, aguardando o ritmo (${pace(s).mirror ? `${MIRROR_GROUP}: ${pace(s).theirs} na última hora, nós ${pace(s).ours}` : `${s.curationPerHour}/h`})`;
   // evita duas escolhas simultâneas do mesmo perfume (várias mensagens chegando juntas)
-  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND created_at >= datetime('now','-10 minutes')").get(productId);
+  const busy = db().prepare("SELECT 1 FROM posts WHERE product_id = ? AND dest IS NULL AND created_at >= datetime('now','-10 minutes')").get(productId);
   if (busy) return "já escolhido";
   setState("lastCurationAt", String(Date.now()));
   const r = await createCuratedPost(item, s);

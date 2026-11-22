@@ -210,6 +210,12 @@ async function ingestMessage(d: UpsertData): Promise<string> {
       const copied = pid ? await followPost(Number(pid), jid).catch((e) => `erro na cópia: ${(e as Error).message}`) : "";
       if (copied) log("info", `Copiar grupos: ${copied}`);
       const now = pid && !copied ? await evaluateInstant(Number(pid)).catch((e) => `erro: ${(e as Error).message}`) : "";
+      // grupo de ofertas boas (teste 2): olha a promoção de qualquer grupo contra o banco de preços
+      if (pid && messageId) {
+        const { dealCheck } = await import("./deals.ts");
+        const deal = await dealCheck(Number(pid), messageId).catch((e) => `erro: ${(e as Error).message}`);
+        if (deal) log("info", `Ofertas boas: ${deal}`);
+      }
       return `curadoria: ${r}${now ? ` · ${now}` : ""}`;
     }
   }
@@ -337,7 +343,7 @@ export async function processQueue(): Promise<string> {
          AND created_at < datetime('now', ?) AND COALESCE(reason,'') NOT IN ('Foto escolhida por você', 'Liberado por você')`,
       )
       .run(`-${Math.max(5, s.curationLookbackMinutes)} minutes`);
-    const next = db().prepare("SELECT id FROM posts WHERE status = 'queued' ORDER BY id LIMIT 1").get() as
+    const next = db().prepare("SELECT id FROM posts WHERE status = 'queued' AND dest IS NULL ORDER BY id LIMIT 1").get() as
       | { id: number }
       | undefined;
     if (!next) return "fila vazia";
@@ -347,24 +353,60 @@ export async function processQueue(): Promise<string> {
   }
 }
 
+type GD = typeof globalThis & { __dealsQueueRunning?: boolean };
+
+/** Fila do grupo de ofertas boas (teste 2): própria, com o mesmo intervalo, sem atrasar o grupo principal. */
+export async function processDeals(): Promise<string> {
+  const gd = globalThis as GD;
+  if (gd.__dealsQueueRunning) return "ocupado";
+  gd.__dealsQueueRunning = true;
+  try {
+    const s = getSettings();
+    if (!inActiveWindow(s)) return "fora do horário";
+    // oferta que esperou demais (sem foto/aprovação a tempo) pode já ter acabado
+    db()
+      .prepare(
+        `UPDATE posts SET status='skipped', reason='Oferta ficou velha na fila' WHERE status='queued' AND dest IS NOT NULL
+         AND created_at < datetime('now','-90 minutes') AND COALESCE(reason,'') NOT IN ('Foto escolhida por você', 'Liberado por você')`,
+      )
+      .run();
+    const next = db().prepare("SELECT id, dest FROM posts WHERE status = 'queued' AND dest IS NOT NULL ORDER BY id LIMIT 1").get() as
+      | { id: number; dest: string }
+      | undefined;
+    if (!next) return "fila vazia";
+    const last = Number(getState(`lastSentAt:${next.dest}`) || 0);
+    if (Date.now() - last < s.minIntervalSeconds * 1000) return "aguardando intervalo";
+    return await sendPost(next.id);
+  } finally {
+    gd.__dealsQueueRunning = false;
+  }
+}
+
 export async function sendPost(id: number): Promise<string> {
   const s = getSettings();
   const post = db().prepare("SELECT * FROM posts WHERE id = ?").get(id) as
-    | { id: number; formatted_text: string; media_path: string | null; media_mime: string | null; attempts: number; origin: string; product_id: number | null; data_json: string }
+    | { id: number; formatted_text: string; media_path: string | null; media_mime: string | null; attempts: number; origin: string; product_id: number | null; data_json: string; dest: string | null }
     | undefined;
   if (!post) throw new Error("Post não encontrado");
 
-  const dests = db().prepare("SELECT jid, name FROM groups WHERE role = 'destination'").all() as {
+  // post do grupo de ofertas boas vai só para ele; os outros vão para todos os grupos de destino
+  const dests = (post.dest
+    ? db().prepare("SELECT jid, name FROM groups WHERE jid = ?").all(post.dest)
+    : db().prepare("SELECT jid, name FROM groups WHERE role = 'destination'").all()) as {
     jid: string;
     name: string;
   }[];
+  if (!dests.length && post.dest) {
+    db().prepare("UPDATE posts SET status='skipped', reason=? WHERE id=?").run("O grupo de ofertas boas saiu da lista", id);
+    return "sem destino";
+  }
   if (!dests.length) {
     db().prepare("UPDATE posts SET status='queued', reason=? WHERE id=?").run("Nenhum grupo de destino configurado", id);
     return "sem destino";
   }
 
   db().prepare("UPDATE posts SET status='sending', attempts = attempts + 1 WHERE id=?").run(id);
-  setState("lastSentAt", String(Date.now()));
+  setState(post.dest ? `lastSentAt:${post.dest}` : "lastSentAt", String(Date.now()));
   const evo = new Evolution(s);
   const errors: string[] = [];
   const waIds: { jid: string; id: string }[] = [];
@@ -419,6 +461,7 @@ export function startWorker() {
   import("./curation.ts").then((m) => m.startCuration());
   w.__afiliadosWorker = setInterval(() => {
     processQueue().catch((e) => log("error", `Worker: ${(e as Error).message}`));
+    processDeals().catch((e) => log("error", `Ofertas boas: ${(e as Error).message}`));
   }, 15000);
   // não existe mais aprovação manual: o que ficou parado esperando aprovação é descartado
   const old = db().prepare("UPDATE posts SET status='skipped', reason='Descartado: aprovação manual não existe mais (o agente decide)' WHERE status='pending'").run();

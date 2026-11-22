@@ -10,9 +10,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, useApi } from "@/lib/client";
 import { cn } from "@/lib/utils";
+import { DealsCard } from "./deals-card";
 
 type Group = {
-  jid: string; name: string; size: number; role: "none" | "source" | "destination"; captured: number; sent: number;
+  jid: string; name: string; size: number; role: "none" | "source" | "destination" | "deals"; captured: number; sent: number;
   watermark: number; promo?: number; follow?: number; photo_priority?: number; offers: number; photos: number;
 };
 
@@ -20,6 +21,7 @@ const ROLES = [
   { key: "none", label: "Ignorar" },
   { key: "source", label: "Origem" },
   { key: "destination", label: "Destino" },
+  { key: "deals", label: "Ofertas boas" },
 ] as const;
 
 /** Controle segmentado com pílula animada (mesmo padrão do sidebar do 21st.dev). */
@@ -35,7 +37,7 @@ function RoleSwitch({ jid, value, onChange }: { jid: string; value: Group["role"
             className={cn(
               "relative h-7 rounded-[8px] px-2.5 text-[12px] font-medium transition-colors",
               active
-                ? r.key === "destination"
+                ? r.key === "destination" || r.key === "deals"
                   ? "text-accent-foreground"
                   : r.key === "source"
                     ? "text-primary-foreground"
@@ -49,7 +51,7 @@ function RoleSwitch({ jid, value, onChange }: { jid: string; value: Group["role"
                 transition={{ type: "spring", stiffness: 520, damping: 42 }}
                 className={cn(
                   "absolute inset-0 rounded-[8px]",
-                  r.key === "destination" ? "bg-accent" : r.key === "source" ? "bg-primary" : "bg-muted",
+                  r.key === "destination" || r.key === "deals" ? "bg-accent" : r.key === "source" ? "bg-primary" : "bg-muted",
                 )}
               />
             )}
@@ -169,6 +171,8 @@ export default function GruposPage() {
           </button>
         ))}
       </div>
+
+      <DealsCard />
 
       <Card>
         <CardHeader

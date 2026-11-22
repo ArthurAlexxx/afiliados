@@ -233,6 +233,8 @@ function migrate(db: DatabaseSync) {
     "ALTER TABLE products ADD COLUMN approved INTEGER",
     "ALTER TABLE pin_photos ADD COLUMN chosen_by TEXT",
     "ALTER TABLE products ADD COLUMN frag_accords TEXT",
+    // grupo de ofertas boas (teste 2): post com destino próprio, fora da fila do grupo principal
+    "ALTER TABLE posts ADD COLUMN dest TEXT",
   ]) {
     try {
       db.exec(sql);
