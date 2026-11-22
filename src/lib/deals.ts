@@ -159,7 +159,7 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     real: { ref: ml.median, samples: ml.samples, groups: ml.groups, discount: v.pct!, label: v.label!, inflated: false },
     score: 0,
   };
-  const extraLine = `📉 ${v.label === "otima" ? "Ótima oferta" : "Boa oferta"}: costuma sair por R$ ${formatPrice(ml.median)} nos grupos`;
+  const extraLine = `📉 ${v.label === "otima" ? "Ótima oferta" : "Boa oferta"}: costuma sair por R$ ${formatPrice(ml.median)} em outros grupos`;
   const { createCuratedPost } = await import("./curation.ts");
   const res = await createCuratedPost(item, s, { follow: `Ofertas boas (${v.why})`, dest: g.jid, destName: g.name, extraLine });
   log("info", `Ofertas boas: ${p.name} R$ ${formatPrice(offer.price)} de ${offer.group_name} · ${v.why} → #${res.id} ${res.status}`);

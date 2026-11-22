@@ -711,6 +711,8 @@ export function startWorker() {
       setState("unmergeV3", "1");
     });
   // busca do Fragrantica refeita com o nome limpo para quem está esperando foto e não foi achado (uma vez)
+  // Arthur (22/nov): "costuma sair por R$ X em outros grupos" (era "nos grupos") nos posts de ofertas que ainda não saíram
+  db().prepare("UPDATE posts SET formatted_text = replace(formatted_text, ' nos grupos', ' em outros grupos') WHERE dest IS NOT NULL AND status IN ('review','photo','queued') AND formatted_text LIKE '%costuma sair por%nos grupos%'").run();
   if (!getState("fragRetryCleanV1")) {
     const r = db()
       .prepare("UPDATE products SET frag_searched = 0, frag_checked_at = NULL WHERE frag_url IS NULL AND frag_searched > 0 AND id IN (SELECT product_id FROM posts WHERE status = 'photo')")
