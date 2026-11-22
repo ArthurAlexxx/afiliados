@@ -21,7 +21,7 @@ function evaluate(r: Row): Eval {
   else {
     const ref = dealPrice(r.product_id, `datetime('${r.created_at}', '-6 hours')`);
     const v = judgeDeal(r.price, ref, dealRules());
-    e = { ok: v.ok, label: v.label || null, pct: v.pct != null ? Math.round(v.pct * 100) : null, ref: ref?.median ?? null, min: ref?.min ?? null, samples: ref?.samples || 0, groups: ref?.groups || 0, why: v.why };
+    e = { ok: v.ok, label: v.label || null, pct: v.pct != null ? Math.round(v.pct * 100) : null, ref: v.refPrice ?? ref?.median ?? null, min: ref?.min ?? null, samples: ref?.samples || 0, groups: ref?.groups || 0, why: v.why };
   }
   cache.set(r.id, e);
   if (cache.size > 20000) cache.delete(cache.keys().next().value!);

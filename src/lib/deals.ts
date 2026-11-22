@@ -23,9 +23,11 @@ export type DealRules = {
   minGroups: number;
   /** não repete o mesmo perfume nessas horas, a não ser que fique pelo menos 5% mais barato */
   repeatHours: number;
+  /** contra o quê comparar: 1 = o "DE" (preço cheio) que os grupos anunciam (Arthur, 22/nov); 2 = o "POR" de sempre */
+  base: number;
 };
 
-export const DEFAULT_RULES: DealRules = { minPct: 0.12, greatPct: 0.2, nearMin: 1.03, minSamples: 5, minGroups: 2, repeatHours: 24 };
+export const DEFAULT_RULES: DealRules = { minPct: 0.12, greatPct: 0.2, nearMin: 1.03, minSamples: 5, minGroups: 2, repeatHours: 24, base: 1 };
 
 export function dealRules(): DealRules {
   try {
@@ -56,7 +58,7 @@ const median = (xs: number[]) => {
   return v.length % 2 ? v[m] : (v[m - 1] + v[m]) / 2;
 };
 
-export type DealPrice = { median: number; min: number; samples: number; groups: number };
+export type DealPrice = { median: number; min: number; samples: number; groups: number; de: number | null; deSamples: number };
 
 /**
  * Banco de preços: o preço "POR" que cada grupo anunciou nos últimos 30 dias.
@@ -73,25 +75,51 @@ export function dealPrice(productId: number, before = "datetime('now','-6 hours'
     )
     .all(productId, `-${days} days`) as { group_jid: string; d: string; price: number }[];
   if (rows.length < 3) return null;
+  // "DE" (preço cheio) anunciado pelos grupos: mediana, um por grupo por dia, sem os absurdos
+  const deRows = db()
+    .prepare(
+      `SELECT group_jid, date(created_at, '-3 hours') d, MAX(old_price) old FROM offers
+       WHERE product_id = ? AND old_price > price AND price > 0 AND created_at >= datetime('now', ?) AND created_at < ${before}
+       GROUP BY group_jid, d`,
+    )
+    .all(productId, `-${days} days`) as { old: number }[];
   const m0 = median(rows.map((r) => r.price));
   const ok = rows.filter((r) => r.price >= m0 * 0.5 && r.price <= m0 * 2);
   if (!ok.length) return null;
   const prices = ok.map((r) => r.price);
-  return { median: Math.round(median(prices) * 100) / 100, min: Math.min(...prices), samples: ok.length, groups: new Set(ok.map((r) => r.group_jid)).size };
+  const med = median(prices);
+  const des = deRows.map((r) => r.old).filter((x) => x >= med && x <= med * 3);
+  return {
+    median: Math.round(med * 100) / 100,
+    min: Math.min(...prices),
+    samples: ok.length,
+    groups: new Set(ok.map((r) => r.group_jid)).size,
+    de: des.length >= 3 ? Math.round(median(des) * 100) / 100 : null,
+    deSamples: des.length,
+  };
 }
 
-export type DealVerdict = { ok: boolean; why: string; pct?: number; label?: "boa" | "otima"; ref?: DealPrice };
+export type DealVerdict = { ok: boolean; why: string; pct?: number; label?: "boa" | "otima"; ref?: DealPrice; refPrice?: number; byDe?: boolean };
 
 /** A regra em si (sem efeito colateral), usada na hora e na simulação da tela. */
 export function judgeDeal(price: number, ref: DealPrice | null, r: DealRules = dealRules()): DealVerdict {
   if (!ref || ref.samples < r.minSamples || ref.groups < r.minGroups)
     return { ok: false, why: `pouco histórico (${ref?.samples || 0} preços em ${ref?.groups || 0} grupo(s))`, ref: ref || undefined };
+  if (r.base === 1) {
+    // comparado com o "DE" que os grupos anunciam; mas nunca acima do preço final de sempre
+    if (!ref.de) return { ok: false, why: `os grupos não anunciam "DE" desse perfume (${ref.deSamples})`, ref };
+    const pct = 1 - price / ref.de;
+    const great = pct >= r.greatPct;
+    if (pct < r.minPct) return { ok: false, why: `${Math.round(pct * 100)}% abaixo do DE (R$ ${formatPrice(ref.de)}), precisa de ${Math.round(r.minPct * 100)}%`, pct, ref, refPrice: ref.de, byDe: true };
+    if (price > ref.median * 1.02) return { ok: false, why: `${Math.round(pct * 100)}% abaixo do DE, mas acima do preço final de sempre (R$ ${formatPrice(ref.median)})`, pct, ref, refPrice: ref.de, byDe: true };
+    return { ok: true, why: `${Math.round(pct * 100)}% abaixo do DE (R$ ${formatPrice(ref.de)})`, pct, label: great ? "otima" : "boa", ref, refPrice: ref.de, byDe: true };
+  }
   const pct = 1 - price / ref.median;
   const great = pct >= r.greatPct;
-  if (pct < r.minPct) return { ok: false, why: `${Math.round(pct * 100)}% abaixo do normal (R$ ${formatPrice(ref.median)}), precisa de ${Math.round(r.minPct * 100)}%`, pct, ref };
+  if (pct < r.minPct) return { ok: false, why: `${Math.round(pct * 100)}% abaixo do normal (R$ ${formatPrice(ref.median)}), precisa de ${Math.round(r.minPct * 100)}%`, pct, ref, refPrice: ref.median };
   if (!great && price > ref.min * r.nearMin)
-    return { ok: false, why: `${Math.round(pct * 100)}% abaixo do normal, mas já saiu por R$ ${formatPrice(ref.min)} no mês`, pct, ref };
-  return { ok: true, why: `${Math.round(pct * 100)}% abaixo do normal (R$ ${formatPrice(ref.median)})`, pct, label: great ? "otima" : "boa", ref };
+    return { ok: false, why: `${Math.round(pct * 100)}% abaixo do normal, mas já saiu por R$ ${formatPrice(ref.min)} no mês`, pct, ref, refPrice: ref.median };
+  return { ok: true, why: `${Math.round(pct * 100)}% abaixo do normal (R$ ${formatPrice(ref.median)})`, pct, label: great ? "otima" : "boa", ref, refPrice: ref.median };
 }
 
 /** Promoção nova de qualquer grupo: se for realmente boa, vira post do grupo de ofertas boas. */
@@ -142,7 +170,7 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     groups: groupsAll,
     recentGroups: 1,
     minPrice: ml.min,
-    medianPrice: ml.median,
+    medianPrice: v.refPrice ?? ml.median,
     best: offer,
     bestPrice: offer.price,
     pctVsMedian: v.pct!,
@@ -156,10 +184,12 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     why: "",
     sales: null,
     origin: perfumeOrigin(`${p.name}\n${offer.text.slice(0, 400)}`),
-    real: { ref: ml.median, samples: ml.samples, groups: ml.groups, discount: v.pct!, label: v.label!, inflated: false },
+    real: { ref: v.refPrice ?? ml.median, samples: ml.samples, groups: ml.groups, discount: v.pct!, label: v.label!, inflated: false },
     score: 0,
   };
-  const extraLine = `📉 ${v.label === "otima" ? "Ótima oferta" : "Boa oferta"}: costuma sair por R$ ${formatPrice(ml.median)} em outros grupos`;
+  const extraLine = v.byDe
+    ? `📉 ${v.label === "otima" ? "Ótima oferta" : "Boa oferta"}: de R$ ${formatPrice(v.refPrice!)} por R$ ${formatPrice(offer.price)} (-${pct}%)`
+    : `📉 ${v.label === "otima" ? "Ótima oferta" : "Boa oferta"}: costuma sair por R$ ${formatPrice(ml.median)} em outros grupos`;
   const { createCuratedPost } = await import("./curation.ts");
   const res = await createCuratedPost(item, s, { follow: `Ofertas boas (${v.why})`, dest: g.jid, destName: g.name, extraLine });
   log("info", `Ofertas boas: ${p.name} R$ ${formatPrice(offer.price)} de ${offer.group_name} · ${v.why} → #${res.id} ${res.status}`);
@@ -194,7 +224,7 @@ export function simulateDeals(hours = 48, rules: DealRules = dealRules()) {
     const prev = lastBy.get(o.product_id);
     if (prev && t - prev.t < rules.repeatHours * 3600e3 && (t - prev.t < 30 * 60e3 || o.price > prev.price * 0.95)) continue;
     lastBy.set(o.product_id, { t, price: o.price });
-    out.push({ at: o.created_at, name: o.name, group: o.group_name, price: o.price, ref: v.ref!.median, pct: Math.round(v.pct! * 100), label: v.label! });
+    out.push({ at: o.created_at, name: o.name, group: o.group_name, price: o.price, ref: v.refPrice ?? v.ref!.median, pct: Math.round(v.pct! * 100), label: v.label! });
   }
   return { checked, deals: out.reverse() };
 }
