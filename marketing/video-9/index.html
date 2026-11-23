@@ -27,9 +27,10 @@ html,body{width:1080px;height:1920px;overflow:hidden;background:#000}
 .w.hl{color:var(--L)}
 .w.rd{color:var(--R)}
 /* HOOK */
-#bottle{position:absolute;left:50%;top:150px;width:1000px;height:1000px;margin-left:-500px;border-radius:40px;overflow:hidden}
-#bottle img{width:100%;height:100%;object-fit:cover;object-position:30% 50%}
-#tag{top:560px;left:560px;width:430px;padding:26px 0 30px;border-radius:24px;background:#fff;text-align:center;transform-origin:50% -60px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
+#bottle{position:absolute;left:50%;top:130px;width:1100px;height:1100px;margin-left:-550px}
+#bottle img{width:100%;height:100%;object-fit:contain;filter:drop-shadow(0 40px 50px rgba(0,0,0,.7))}
+#halo{left:50%;top:660px;width:1100px;height:1100px;margin:-550px 0 0 -550px;border-radius:50%;background:radial-gradient(circle,rgba(182,255,26,.35),rgba(182,255,26,.08) 45%,transparent 68%)}
+#tag{top:960px;left:610px;width:430px;padding:26px 0 30px;border-radius:24px;background:#fff;text-align:center;transform-origin:50% -60px;box-shadow:0 20px 50px rgba(0,0,0,.6)}
 #tag:before{content:"";position:absolute;top:-70px;left:50%;width:4px;height:70px;background:#ddd}
 #tag .h{font:800 26px Pop;color:#555;letter-spacing:3px}
 #tag .p{font:900 92px Pop;color:#000;letter-spacing:-2px}
@@ -111,7 +112,7 @@ html,body{width:1080px;height:1920px;overflow:hidden;background:#000}
 
 <!-- HOOK -->
 <div id="sH" class="sc">
- <div id="bottle"><img src="cdn.jpg"></div>
+ <div id="halo" class="abs"></div><div id="bottle"><img src="clubnuit.png"></div>
  <div id="tag" class="abs"><div class="h">PREÇO NA LOJA</div><div class="p">R$209,90</div><div id="tagx"></div></div>
  <svg id="crack" viewBox="0 0 1080 1920"><g stroke="#fff" stroke-width="5" fill="none" opacity=".85"><path d="M540 900 L420 700 L380 520 L300 380"/><path d="M540 900 L700 760 L860 720 L1000 600"/><path d="M540 900 L520 1100 L600 1300 L560 1500"/><path d="M540 900 L320 980 L160 1100"/><path d="M420 700 L260 690"/><path d="M700 760 L760 600"/><path d="M520 1100 L380 1200"/></g></svg>
  <div id="caro" class="abs cx">CARO.</div>
@@ -158,7 +159,7 @@ html,body{width:1080px;height:1920px;overflow:hidden;background:#000}
  <div id="avg" class="abs cx">média nos outros grupos: R$ 201,58</div>
 </div>
 <!-- S6 -->
-<div id="t1" class="sc"><div class="trio"><div class="ic">🛒</div><div class="tt">LINK DO<br>MERCADO LIVRE<small>você compra direto no ML</small></div><div class="chip">✓ LOJA IDENTIFICADA EM TODO POST</div></div></div>
+<div id="t1" class="sc"><div class="trio"><div class="ic">🛒</div><div class="tt">LINK DO<br>MERCADO LIVRE<small>você compra direto no ML</small></div><div class="chip" id="vchip">✓ VENDEDORES VERIFICADOS</div></div></div>
 <div id="t2" class="sc"><div class="trio"><div class="ic">🛡</div><div class="tt">COMPRA<br>GARANTIDA<small>dinheiro protegido pelo ML</small></div></div></div>
 <div id="t3" class="sc"><div class="trio"><div class="ic">🔕</div><div class="tt">SEM<br>SPAM<small>só oferta que vale a pena</small></div></div></div>
 <!-- S7 -->
@@ -195,7 +196,7 @@ const gc=$('grain').getContext('2d');const gimgs=[];for(let k=0;k<6;k++){const i
 $('grain').style.width='1180px';$('grain').style.height='2020px';
 // radar blips
 const names=['Promo do Dia','Caça Preço','Ofertas VIP','Achados','Mega Ofertas','Preço Baixo','Super Promo','Descontos','Oferta Certa','Promo Hoje','Só Ofertas','Promo Max','Cupons','Ofertas 24h','Baixou!','Promo Flash'];
-const blips=[];for(let i=0;i<54;i++){const a=rnd(i)*360,r=90+rnd(i+50)*330;const d=document.createElement('div');d.className='blip';d.style.left=(440+Math.cos(a*Math.PI/180)*r)+'px';d.style.top=(440+Math.sin(a*Math.PI/180)*r)+'px';$('blips').appendChild(d);
+const blips=[];for(let i=0;i<110;i++){const a=rnd(i)*360,r=90+rnd(i+50)*330;const d=document.createElement('div');d.className='blip';d.style.left=(440+Math.cos(a*Math.PI/180)*r)+'px';d.style.top=(440+Math.sin(a*Math.PI/180)*r)+'px';$('blips').appendChild(d);
  let lab=null;if(i<names.length&&i%2==0||i<6){lab=document.createElement('div');lab.className='blab';lab.textContent=names[i%names.length];lab.style.left=d.style.left;lab.style.top=d.style.top;$('blips').appendChild(lab)}
  blips.push({d,lab,a})}
 // slot reel
@@ -203,33 +204,36 @@ const prices=['R$ 249,90','R$ 231,00','R$ 219,90','R$ 239,00','R$ 209,90','R$ 22
 const reel=$('reel');const NR=60;for(let i=0;i<NR;i++){const r=document.createElement('div');r.className='row';const last=i==NR-3;r.innerHTML=(last?'R$ 163,00':prices[i%prices.length])+'<span>'+(last?'2R PROMOS':'grupo '+String.fromCharCode(65+(i*7)%26))+'</span>';if(last){r.id='winrow'}reel.appendChild(r)}
 // captions (raw VO time)
 const caps=[
- [0.0,2.7,[['PAGOU',0],['+160',.36,'hl'],['NUM',1.36],['CLUB DE NUIT?',1.78,'hl']]],
+ [0.0,2.7,[['PAGOU',0],['+200',.36,'hl'],['NUM',1.36],['CLUB DE NUIT?',1.78,'hl']]],
  [2.7,4.55,[['ENTÃO',2.78],['VOCÊ',3.2],['PAGOU',3.46],['CARO',3.8,'rd']]],
  [4.55,7.0,[['OLHA',4.64],['O',4.82],['QUE',4.94],['CAIU',4.98],['NO',5.28],['NOSSO',5.36],['GRUPO',5.56,'hl']]],
  [7.0,9.6,[['R$ 163',7.06,'hl'],['COM',7.7],['FRETE',8.14],['GRÁTIS',8.6,'hl']]],
- [11.1,14.0,[['UM',11.2],['ROBÔ',11.36],['VIGIA',11.74,'hl'],['+50 GRUPOS',12.14,'hl'],['DE',13.46],['OFERTAS',13.64]]],
+ [11.1,14.0,[['UM',11.2],['ROBÔ',11.36],['VIGIA',11.74,'hl'],['+200 GRUPOS',12.14,'hl'],['DE',13.46],['OFERTAS',13.64]]],
  [14.0,16.0,[['24 HORAS',14.08,'hl'],['POR',15.28],['DIA',15.5]]],
  [16.0,18.4,[['COMPARA',16.18],['COM',16.7],['+7 MIL',17.1,'hl'],['PREÇOS',17.94]]],
  [18.4,20.6,[['E',18.44],['SÓ',18.84],['MANDA',18.98],['O',19.36],['MENOR',19.44,'hl'],['DE',19.68],['TODOS',19.94,'hl']]],
- [20.6,22.1,[['LINK',20.74],['DO',21.02],['MERCADO LIVRE',21.2,'hl']]],
+ [20.6,21.62,[['LINK',20.74],['DO',21.02],['MERCADO LIVRE',21.2,'hl']]],
+ [21.62,22.1,[['VENDEDORES',21.64],['VERIFICADOS',21.8,'hl']]],
  [22.1,23.0,[['COMPRA',22.24],['GARANTIDA',22.44,'hl']]],
  [23.0,24.25,[['SEM',23.16],['SPAM',23.58,'hl']]],
 ];
 const capEls=caps.map(c=>{const box=document.createElement('div');box.className='cl';box.style.display='none';
  const ws=c[2].map(([w,ts,cls])=>{const s=document.createElement('span');s.className='w'+(cls?' '+cls:'');s.textContent=w;box.appendChild(s);return {s,ts}});$('cap').appendChild(box);return {c,box,ws}});
 const QTXT='COMO A GENTE<br>ACHA <b>ISSO?</b>';
-const K=1.06, DUR=25.6;
+const K=1.06, DUR=25.4;
+const AN=[[0,0],[1.62,2.16],[2.28,2.78],[3.34,3.8],[4.16,4.64],[6.58,7.06],[9.04,9.66],[10.48,11.2],[11.76,12.52],[12.1,12.98],[13.31,14.08],[15.13,16.18],[18.17,19.44],[19.49,20.74],[20.25,21.56],[20.93,21.64],[22.11,22.1],[22.31,22.24],[23.61,23.16],[23.81,23.58],[24.51,24.36],[25.49,25.34]];
+function M(n){for(let i=1;i<AN.length;i++){if(n<=AN[i][0]){const[a0,b0]=AN[i-1],[a1,b1]=AN[i];return b0+(b1-b0)*(n-a0)/(a1-a0)}}const L=AN[AN.length-1];return L[1]+(n-L[0])}
 // punches (raw times) : zoom kicks
-const punches=[0,1.78,3.8,7.06,8.6,12.14,14.08,17.1,19.44,20.74,22.24,23.16,24.36,25.34];
-const flashes=[3.8,4.55,7.06,9.6,11.1,16.0,20.6,22.1,23.0,24.25];
-window.render=function(tv){const t=tv*K;
+const punches=[7.06,8.6,12.14,14.08,17.1,19.44,20.74,22.24,23.16,24.36,25.34];
+const flashes=[7.06,9.6,11.1,16.0,20.6,22.1,23.0,24.25];
+window.render=function(tv){const t=M(tv*K);
  // camera
  let z=1, sx=0, sy=0, rot=0;
  for(const pt of punches){const d=t-pt;if(d>=0&&d<.35){z+= .07*(1-eo(d/.35))}}
- if(t>3.8&&t<4.3){const k=1-p(t,3.8,4.3);sx=Math.sin(t*95)*28*k;sy=Math.cos(t*80)*22*k;rot=Math.sin(t*60)*1.2*k}
+ 
  if(t>7.06&&t<7.4){const k=1-p(t,7.06,7.4);sx+=Math.sin(t*90)*16*k;sy+=Math.cos(t*70)*12*k}
  $('cam').style.transform=`translate(${sx}px,${sy}px) rotate(${rot}deg) scale(${z})`;
- let fl=0;for(const f of flashes){const d=t-f;if(d>=0&&d<.18)fl=Math.max(fl,.75*(1-d/.18))}
+ let fl=0;for(const f of flashes){const d=t-f;if(d>=0&&d<.18)fl=Math.max(fl,.45*(1-d/.18))}
  $('flash').style.opacity=fl;
  $('prog').style.width=(1080*clamp(tv/DUR))+'px';
  $('grid').style.transform=`translate(${-(t*40)%90}px,${(t*60)%90}px)`;
@@ -243,14 +247,14 @@ window.render=function(tv){const t=tv*K;
  $('cap').style.top=capTop+'px';
  // ---------- HOOK 0-4.55
  { const w=win(t,-1,4.62,.01,.07); $('sH').style.opacity=w;
-   const bz=1.25-0.2*eo(p(t,0,4.5)); $('bottle').style.transform=`scale(${bz}) rotate(${-2+t*.4}deg)`;
-   $('bottle').style.filter=t>3.8?`saturate(.3) brightness(.55)`:`none`;
-   const sw=Math.sin(t*4.2)*10*Math.exp(-t*.5); const tk=el(p(t,.2,1.0));
+   const bz=1; $('bottle').style.transform=`translateY(${(1-eo(p(t,0,.35)))*120}px) scale(${bz}) rotate(0deg)`; $('halo').style.opacity=t>3.8?0:1; $('halo').style.transform=`scale(${1+.05*Math.sin(t*5)})`;
+   $('bottle').style.opacity=eo(p(t,-.2,.15)); $('bottle').style.filter=`saturate(${lerp(1,.35,p(t,3.8,4.1))}) brightness(${lerp(1,.6,p(t,3.8,4.1))})`;
+   const sw=Math.sin(t*4.2)*4*Math.exp(-t*.8); const tk=el(p(t,.2,1.0));
    $('tag').style.transform=`translateY(${(1-tk)*-700}px) rotate(${sw+(t>3.8?14*eo(p(t,3.8,4)):0)}deg)`; $('tag').style.opacity=t>.2?1:0;
    $('tagx').style.opacity=p(t,3.8,3.9);
    const ck=eb(p(t,3.8,4.05)); set('caro',p(t,3.8,3.86),CX+`scale(${lerp(3,1,ck)}) rotate(-6deg)`);
-   const ch=Math.sin(t*140)>0?1:-1; $('caro').style.textShadow=t<4.2&&t>3.8?`${8*ch}px 0 #00ffe1,${-8*ch}px 0 #ff00c8`:'none';
-   $('crack').style.opacity=p(t,3.8,3.85)*.9;
+   const ch=Math.sin(t*140)>0?1:-1; $('caro').style.textShadow='none';
+   $('crack').style.opacity=0;
  }
  // ---------- S2 4.55-9.6
  { const A=4.55,B=9.6; const w=win(t,A,B,.05,.12); $('s2').style.opacity=w;
@@ -279,10 +283,10 @@ window.render=function(tv){const t=tv*K;
    const ang=((t-A)*220)%360; $('sweep').style.transform=`rotate(${ang}deg)`;
    const elapsed=(t-A)*220;
    let lit=0;
-   blips.forEach((b,i)=>{const appear=(b.a+360*Math.floor(i/27))*1; const on=elapsed>appear&&t>A+.3; const since=on?(elapsed-appear)/220:0;
+   blips.forEach((b,i)=>{const appear=(b.a+360*Math.floor(i/37))*1; const on=elapsed>appear&&t>A+.3; const since=on?(elapsed-appear)/220:0;
      b.d.style.opacity=on?1:0; b.d.style.transform=`scale(${on?lerp(2.5,1,eo(clamp(since*3))):0})`; if(on)lit++;
      if(b.lab){b.lab.style.opacity=on&&since<1.4?clamp(since*5)*(1-p(since,1.0,1.4)):0}});
-   const rn=Math.min(50,Math.round(50*eo(p(t,12.0,13.4)))); $('rn').textContent=rn;
+   const rn=Math.min(200,Math.round(200*eo(p(t,12.3,13.6)))); $('rn').textContent=rn;
    set('rnum',p(t,A+.1,A+.3),CX+`scale(${eb(p(t,A+.1,A+.4))*(t>12.14&&t<12.5?1.08:1)})`);
    set('rsub',p(t,A+.3,A+.5),CX);
    set('h24',p(t,14.08,14.15),CX+`scale(${eb(p(t,14.08,14.4))})`);
@@ -303,6 +307,7 @@ window.render=function(tv){const t=tv*K;
  trio.forEach(([id,a,b])=>{const e=$(id); const vis=t>=a-.12&&t<b+.12; e.style.opacity=vis?1:0; if(!vis)return;
    const kin=eo(p(t,a-.12,a+.12)), kout=ei(p(t,b-.12,b+.12)); const x=lerp(1100,0,kin)+lerp(0,-1100,kout);
    e.style.transform=`translateX(${x}px)`; e.style.filter=`blur(${Math.abs(x)>20?Math.min(18,Math.abs(x)/40):0}px)`;
+   if(id=='t1'){const ck=eb(p(t,21.64,21.85));$('vchip').style.opacity=p(t,21.64,21.68);$('vchip').style.transform=`scale(${lerp(1.8,1,ck)})`}
    e.querySelector('.ic').style.transform=`scale(${eb(p(t,a,a+.3))}) rotate(${(1-eo(p(t,a,a+.3)))*-30}deg)`;});
  // ---------- S7 CTA 24.25-
  { const A=24.25; $('s7').style.opacity=p(t,A,A+.1);
