@@ -122,6 +122,7 @@ body:has(.lp){background:#0d0f12}
   background-size:56px 56px;
   mask-image:radial-gradient(70% 60% at 50% 40%,#000 0%,transparent 75%);
 }
+.lp-hero--so-texto .lp-hero__in{grid-template-columns:minmax(0,1fr);max-width:860px}
 .lp-hero__in{position:relative;z-index:1;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.85fr);gap:3rem;align-items:center}
 
 .lp-hero__status{
@@ -173,29 +174,29 @@ body:has(.lp){background:#0d0f12}
   background:var(--lima);color:var(--ink);font-family:var(--ff-d);font-size:.85rem;
 }
 .lp-celular__chat{
-  padding:1.1rem .8rem 1.3rem;
+  padding:1.1rem .9rem 1.3rem 1.3rem;
   background:#0b141a radial-gradient(circle at 1px 1px,rgba(255,255,255,.04) 1px,transparent 0) 0 0/14px 14px;
 }
-.lp-celular__balao{
-  position:relative;max-width:92%;padding:.3rem .3rem .5rem;border-radius:0 12px 12px 12px;background:#202c33;
-  font-family:var(--ff-b);color:#e9edef;font-size:.86rem;line-height:1.4;
+/* ---------- Balão do WhatsApp (o post real) ----------
+   Foto INTEIRA, sem corte: é a imagem que saiu no grupo, e cortar pra caber
+   num quadrado dava o zoom que o Arthur reprovou (23/11). As cores são as do
+   WhatsApp escuro, de propósito: aqui é "print", não componente do site. */
+.lp-wa{
+  position:relative;padding:.25rem .25rem .45rem;border-radius:0 12px 12px 12px;background:#202c33;
+  font-family:var(--ff-b);font-weight:400;color:#e9edef;font-size:.84rem;line-height:1.42;
+  box-shadow:0 1px 1px rgba(0,0,0,.25);
 }
-.lp-celular__foto{width:100%;aspect-ratio:1;object-fit:cover;border-radius:9px;background:var(--ink-3)}
-.lp-celular__balao p{padding-inline:.45rem}
-.lp-celular__manchete{margin-top:.55rem;font-weight:700}
-.lp-celular__nome{font-weight:700}
-.lp-celular__de{font-weight:400;color:#aebac1}
-.lp-celular__de s{color:var(--vermelho)}
-.lp-celular__por{font-weight:700;color:#25d366}
-.lp-celular__link{font-weight:400;color:#53bdeb;text-decoration:underline}
-.lp-celular__hora{display:block;text-align:right;padding-right:.45rem;font-size:.66rem;font-weight:400;color:#8696a0}
-
-/* foto ausente (exemplos do teste, sem mídia): bloco com o nome */
-.lp-celular__foto--vazia,.lp-oferta__foto--vazia{
-  display:grid;place-items:center;text-align:center;padding:1rem;
-  background:linear-gradient(135deg,var(--ink-3),var(--ink-2));
-  font-family:var(--ff-d);font-size:1.2rem;color:var(--mist-dim);
+.lp-wa::before{ /* biquinho do balão */
+  content:"";position:absolute;top:0;left:-7px;width:8px;height:13px;background:#202c33;
+  clip-path:polygon(0 0,100% 0,100% 100%);
 }
+.lp-wa__foto{width:100%;height:auto;max-height:460px;object-fit:contain;border-radius:9px;background:#111b21}
+.lp-wa__texto{padding:.55rem .45rem 0;white-space:pre-wrap;overflow-wrap:anywhere}
+.lp-wa__texto b{font-weight:700}
+.lp-wa__texto s{color:#aebac1}
+.lp-wa__texto code{font-family:var(--ff-m);font-size:.8em;background:#111b21;padding:.05rem .3rem;border-radius:4px}
+.lp-wa__link{color:#53bdeb;text-decoration:underline}
+.lp-wa__hora{display:block;text-align:right;padding:.15rem .45rem 0;font-size:.66rem;color:#8696a0}
 
 /* =====================================================================
    FAIXA — fita diagonal com as ofertas passando (a "faixa de cuidado"
@@ -235,33 +236,20 @@ body:has(.lp){background:#0d0f12}
 .lp-head p{margin-top:.7rem;font-family:var(--ff-m);color:var(--mist);font-size:.85rem;line-height:1.65}
 .lp-centro{display:flex;justify-content:center;margin-top:3rem}
 
-/* ---------- Vitrine de ofertas ---------- */
-.lp-ofertas{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rem}
-.lp-oferta{
-  display:flex;flex-direction:column;overflow:hidden;
-  border:1px solid var(--line);border-radius:var(--r);background:var(--ink-2);
-  transition:border-color .18s,background .18s,transform .18s;
+/* ---------- Vitrine: posts reais como chat ----------
+   Colunas (masonry) e não grade: cada post tem a altura da foto e do texto
+   dele, e numa grade as linhas ficariam com buracos. */
+.lp-chat{
+  columns:3 300px;column-gap:1.4rem;padding:1.6rem 1.4rem .4rem 1.9rem;border-radius:var(--r-lg);
+  border:1px solid var(--line);
+  background:#0b141a radial-gradient(circle at 1px 1px,rgba(255,255,255,.04) 1px,transparent 0) 0 0/14px 14px;
 }
-.lp-oferta:hover{border-color:var(--line-2);background:var(--ink-3);transform:translateY(-2px)}
-@media (hover:none){.lp-oferta:hover{border-color:var(--line);background:var(--ink-2);transform:none}}
-.lp-oferta__midia{position:relative}
-.lp-oferta__foto{width:100%;aspect-ratio:1;object-fit:cover;background:var(--ink-3)}
-.lp-oferta__pct{
-  position:absolute;top:.75rem;left:.75rem;padding:.25rem .55rem;border-radius:var(--r-pill);
-  background:var(--lima);color:var(--ink);font-family:var(--ff-m);font-size:.7rem;letter-spacing:.04em;
+.lp-chat__item{break-inside:avoid;margin-bottom:1.6rem}
+.lp-chat__meta{
+  display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .7rem;margin-bottom:.55rem;
+  font-family:var(--ff-m);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--mist-dim);
 }
-.lp-oferta__corpo{display:flex;flex-direction:column;flex:1;padding:1rem 1rem 1.1rem}
-.lp-oferta__nome{
-  font-family:var(--ff-b);font-size:.9rem;line-height:1.35;
-  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;min-height:2.7em;
-}
-.lp-oferta__precos{display:flex;align-items:baseline;flex-wrap:wrap;gap:.2rem .6rem;margin-top:.7rem;font-variant-numeric:tabular-nums}
-.lp-oferta__precos s{font-family:var(--ff-m);font-size:.74rem;color:var(--mist-dim)}
-.lp-oferta__precos b{font-family:var(--ff-d);font-weight:400;font-size:1.45rem;color:var(--lima)}
-.lp-oferta__meta{
-  margin-top:auto;padding-top:.8rem;
-  font-family:var(--ff-m);font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--mist-dim);
-}
+.lp-chat__selo{padding:.2rem .5rem;border-radius:var(--r-pill);background:rgba(182,255,26,.12);border:1px solid rgba(182,255,26,.35);color:var(--lima-3)}
 
 /* ---------- Cards de passo e de benefício (família .formato-card) ---------- */
 .lp-passos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.1rem}
@@ -333,7 +321,7 @@ body:has(.lp){background:#0d0f12}
 /* Animação que se repete desliga com movimento reduzido (regra da Supercopa). */
 @media (prefers-reduced-motion:reduce){
   .lp-hero__status-dot,.lp-faixa__trilho{animation:none}
-  .lp-faq__seta,.lp-btn,.lp-card,.lp-oferta{transition:none}
+  .lp-faq__seta,.lp-btn,.lp-card{transition:none}
 }
 
 /* =====================================================================
@@ -344,12 +332,12 @@ body:has(.lp){background:#0d0f12}
   .lp-hero__in{grid-template-columns:1fr;gap:3rem}
   .lp-hero__txt{text-align:center;display:flex;flex-direction:column;align-items:center}
   .lp-selos{justify-content:center}
-  .lp-ofertas{grid-template-columns:repeat(2,minmax(0,1fr))}
   .lp-beneficios{grid-template-columns:repeat(2,minmax(0,1fr))}
   .lp-numeros{grid-template-columns:repeat(2,minmax(0,1fr))}
   .lp-celular{transform:none}
 }
 @media (max-width:640px){
+  .lp-chat{padding:1.2rem .8rem .2rem 1.2rem;margin-inline:-.4rem}
   .lp-hero{padding-block:2.6rem 3rem}
   .lp-hero__status{margin-bottom:1.8rem;font-size:.6rem}
   .lp-hero__frase{margin-top:1.4rem;font-size:.84rem;line-height:1.65}
@@ -359,10 +347,6 @@ body:has(.lp){background:#0d0f12}
   .lp-hero__acoes,.lp-hero__acoes .lp-btn{width:100%}
   .lp-sec{padding-block:3.4rem}
   .lp-head{margin-bottom:1.6rem}
-  .lp-ofertas{gap:.7rem}
-  .lp-oferta__corpo{padding:.8rem .8rem .9rem}
-  .lp-oferta__nome{font-size:.82rem}
-  .lp-oferta__precos b{font-size:1.2rem}
   .lp-passos,.lp-beneficios{grid-template-columns:1fr}
   .lp-card{padding:1.3rem 1.15rem}
   .lp-final .lp-btn{width:100%}
@@ -383,5 +367,4 @@ body:has(.lp){background:#0d0f12}
 @media (max-width:380px){
   .lp-hero__titulo{font-size:2.15rem}
   .lp-btn{font-size:.72rem;padding:0 1rem}
-  .lp-ofertas{grid-template-columns:1fr 1fr;gap:.5rem}
 }

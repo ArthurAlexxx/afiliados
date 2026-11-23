@@ -47,8 +47,7 @@ export const viewport: Viewport = { themeColor: "#0d0f12" };
 const ENTRAR = "/grupo/entrar";
 const brl = (n: number) => n.toLocaleString("pt-BR", { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 });
 
-function haQuanto(iso: string | null) {
-  if (!iso) return null;
+function haQuanto(iso: string) {
   const min = Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
   if (min < 60) return `há ${min} min`;
   const h = Math.round(min / 60);
@@ -113,21 +112,44 @@ function Eyebrow({ nome, label }: { nome: string; label: string }) {
   );
 }
 
-function Foto({ o, className }: { o: Oferta; className: string }) {
-  if (o.id == null)
-    return (
-      <div className={`${className} ${className}--vazia`} aria-hidden="true">
-        <span>{o.nome.split(" ").slice(0, 2).join(" ")}</span>
-      </div>
-    );
-  // eslint-disable-next-line @next/next/no-img-element
-  return <img className={className} src={`/grupo/foto/${o.id}`} alt={o.nome} loading="lazy" decoding="async" />;
+/** Formatação do WhatsApp (*negrito*, _itálico_, ~riscado~, `mono`) em HTML. Escapa antes. */
+function waHtml(texto: string) {
+  const esc = texto.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return esc
+    .replace(/https?:\/\/\S+/g, (u) => `<span class="lp-wa__link">${u.length > 38 ? u.slice(0, 36) + "…" : u}</span>`)
+    .replace(/(^|[\s(])\*([^*\n]+)\*(?=[\s).,!?:]|$)/gm, "$1<b>$2</b>")
+    .replace(/(^|[\s(])_([^_\n]+)_(?=[\s).,!?:]|$)/gm, "$1<i>$2</i>")
+    .replace(/(^|[\s(])~([^~\n]+)~(?=[\s).,!?:]|$)/gm, "$1<s>$2</s>")
+    .replace(/`([^`\n]+)`/g, "<code>$1</code>");
+}
+
+const hora = (iso: string) =>
+  new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" });
+
+/** Um post do grupo exatamente como saiu: foto inteira (sem corte) + o texto do WhatsApp. */
+function Balao({ o, eager = false }: { o: Oferta; eager?: boolean }) {
+  return (
+    <div className="lp-wa">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        className="lp-wa__foto"
+        src={`/grupo/foto/${o.id}`}
+        alt={o.nome}
+        width={o.largura ?? undefined}
+        height={o.altura ?? undefined}
+        loading={eager ? "eager" : "lazy"}
+        decoding="async"
+      />
+      <p className="lp-wa__texto" dangerouslySetInnerHTML={{ __html: waHtml(o.texto) }} />
+      <span className="lp-wa__hora">{hora(o.quando)}</span>
+    </div>
+  );
 }
 
 /** O post como ele chega no WhatsApp: é a peça do hero (o "você vai receber assim"). */
 function Celular({ o }: { o: Oferta }) {
   return (
-    <div className="lp-celular" aria-label={`Exemplo de post do grupo: ${o.nome} por R$ ${brl(o.por)}`} role="img">
+    <figure className="lp-celular">
       <div className="lp-celular__topo">
         <span className="lp-celular__avatar" aria-hidden="true">2R</span>
         <span>
@@ -136,37 +158,26 @@ function Celular({ o }: { o: Oferta }) {
         </span>
       </div>
       <div className="lp-celular__chat">
-        <div className="lp-celular__balao">
-          <Foto o={o} className="lp-celular__foto" />
-          {o.pct ? <p className="lp-celular__manchete">📉 Baixou {o.pct}%</p> : null}
-          <p className="lp-celular__nome">{o.nome}</p>
-          {o.de ? (
-            <p className="lp-celular__de">
-              DE: <s>R$ {brl(o.de)}</s>
-            </p>
-          ) : null}
-          <p className="lp-celular__por">POR: R$ {brl(o.por)}</p>
-          <p className="lp-celular__link">mercadolivre.com/sec/…</p>
-          <span className="lp-celular__hora">{o.quando ? new Date(o.quando).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" }) : "09:12"}</span>
-        </div>
+        <Balao o={o} eager />
       </div>
-    </div>
+      <figcaption className="sr-only">Post real do grupo: {o.nome} por R$ {brl(o.por)}</figcaption>
+    </figure>
   );
 }
 
-export default function GrupoPage() {
-  const { grupos, ofertas24h, postsHoje, ofertas } = dadosLanding();
+export default async function GrupoPage() {
+  const { grupos, ofertas24h, postsHoje, ofertas } = await dadosLanding();
   const { metaPixelId } = getSettings();
   const membros = membrosDoGrupo();
 
   // O anúncio promete "mais de 200 grupos". O número real só aparece quando confirma isso.
   const gruposTxt = grupos && grupos >= 200 ? `${grupos}` : "200+";
   const maiorPct = Math.max(0, ...ofertas.map((o) => o.pct || 0));
-  const destaque = ofertas.find((o) => o.id != null && o.de) ?? ofertas[0];
+  const destaque = ofertas[0] ?? null; // o mais vendido no ML entre os que saíram
 
   return (
     <div className="lp">
-      <a className="lp-skip" href="#conteudo">Pular para o conteúdo</a>
+      <a className="lp-skip" href="#topo">Pular para o conteúdo</a>
       <GrupoPixel pixelId={metaPixelId} />
 
       <header className="lp-topo">
@@ -180,7 +191,7 @@ export default function GrupoPage() {
 
       <main id="topo">
         {/* ---------- HERO ---------- */}
-        <section className="lp-hero">
+        <section className={`lp-hero${destaque ? "" : " lp-hero--so-texto"}`}>
           <div className="lp-wrap lp-hero__in">
             <div className="lp-hero__txt">
               <p className="lp-hero__status">
@@ -203,63 +214,67 @@ export default function GrupoPage() {
                 <li>Sai quando quiser</li>
               </ul>
             </div>
-            <div className="lp-hero__vitrine">
-              <Celular o={destaque} />
-              <p className="lp-hero__legenda" aria-hidden="true">
-                ↑ é assim que chega no seu WhatsApp
-              </p>
-            </div>
+            {destaque ? (
+              <div className="lp-hero__vitrine">
+                <Celular o={destaque} />
+                <p className="lp-hero__legenda" aria-hidden="true">
+                  ↑ post real do grupo, do jeito que chega
+                </p>
+              </div>
+            ) : null}
           </div>
         </section>
 
-        {/* ---------- FAIXA ---------- */}
-        <div className="lp-faixa" aria-hidden="true">
-          <div className="lp-faixa__trilho">
-            {[0, 1].map((k) => (
-              <span className="lp-faixa__grupo" key={k}>
-                {ofertas.map((o, i) => (
-                  <span className="lp-faixa__item" key={i}>
-                    {o.nome.split(" ").slice(0, 4).join(" ")}
-                    {o.pct ? <b>−{o.pct}%</b> : null}
-                    <i>R$ {brl(o.por)}</i>
+        {ofertas.length ? (
+          <>
+            {/* ---------- FAIXA ---------- */}
+            <div className="lp-faixa" aria-hidden="true">
+              <div className="lp-faixa__trilho">
+                {[0, 1].map((k) => (
+                  <span className="lp-faixa__grupo" key={k}>
+                    {ofertas.map((o, i) => (
+                      <span className="lp-faixa__item" key={i}>
+                        {o.nome.split(" ").slice(0, 4).join(" ")}
+                        {o.pct ? <b>−{o.pct}%</b> : null}
+                        <i>R$ {brl(o.por)}</i>
+                      </span>
+                    ))}
                   </span>
                 ))}
-              </span>
-            ))}
-          </div>
-        </div>
+              </div>
+            </div>
 
-        {/* ---------- VITRINE ---------- */}
-        <section className="lp-sec" id="conteudo">
-          <div className="lp-wrap">
-            <Eyebrow nome="Vitrine" label={ofertas.some((o) => o.quando) ? "Últimos 7 dias" : "Saiu no grupo"} />
-            <div className="lp-head">
-              <h2>Olha o que saiu no grupo</h2>
-              <p>Posts de verdade, com o preço do momento em que saíram. Promoção de perfume acaba rápido: quem está no grupo vê primeiro.</p>
-            </div>
-            <ul className="lp-ofertas">
-              {ofertas.map((o, i) => (
-                <li className="lp-oferta" key={i}>
-                  <div className="lp-oferta__midia">
-                    <Foto o={o} className="lp-oferta__foto" />
-                    {o.pct ? <span className="lp-oferta__pct">−{o.pct}%</span> : null}
-                  </div>
-                  <div className="lp-oferta__corpo">
-                    <h3 className="lp-oferta__nome">{o.nome}</h3>
-                    <p className="lp-oferta__precos">
-                      {o.de ? <s>R$ {brl(o.de)}</s> : null}
-                      <b>R$ {brl(o.por)}</b>
-                    </p>
-                    <p className="lp-oferta__meta">{haQuanto(o.quando) ?? "Mercado Livre"}</p>
-                  </div>
-                </li>
-              ))}
-            </ul>
-            <div className="lp-centro">
-              <BotaoEntrar>Quero receber as próximas</BotaoEntrar>
-            </div>
-          </div>
-        </section>
+            {/* ---------- VITRINE ----------
+                Os posts como saíram no grupo (foto inteira + texto do WhatsApp),
+                os que mais vendem no ML primeiro (RadarHub). */}
+            <section className="lp-sec" id="conteudo">
+              <div className="lp-wrap">
+                <Eyebrow nome="Vitrine" label="Posts reais do grupo" />
+                <div className="lp-head">
+                  <h2>Olha o que saiu no grupo</h2>
+                  <p>
+                    Os perfumes que mais vendem no Mercado Livre, do jeito que chegaram no WhatsApp, com o preço daquele
+                    momento. Promoção acaba rápido: quem está no grupo vê primeiro.
+                  </p>
+                </div>
+                <ul className="lp-chat">
+                  {ofertas.map((o) => (
+                    <li className="lp-chat__item" key={o.id}>
+                      <p className="lp-chat__meta">
+                        {o.vendas ? <span className="lp-chat__selo">🔥 {o.vendas}</span> : null}
+                        <span>{haQuanto(o.quando)}</span>
+                      </p>
+                      <Balao o={o} />
+                    </li>
+                  ))}
+                </ul>
+                <div className="lp-centro">
+                  <BotaoEntrar>Quero receber as próximas</BotaoEntrar>
+                </div>
+              </div>
+            </section>
+          </>
+        ) : null}
 
         {/* ---------- COMO FUNCIONA ---------- */}
         <section className="lp-sec">
