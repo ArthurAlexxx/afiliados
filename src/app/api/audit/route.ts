@@ -21,6 +21,8 @@ export async function GET(req: Request) {
        WHERE q.status = 'sent' AND q.sent_at >= ? AND q.sent_at < ? ORDER BY q.sent_at`,
     )
     .all(since, until) as { id: number; sent_at: string; dest: string | null; origin: string; source_name: string; data_json: string; product_id: number | null; product: string | null; dest_name: string | null }[];
+  if (q.get("retry")) for (const [k, v] of titles) if (!v) titles.delete(k);
+  const errs = new Map<string, string>();
   const out: { sent_at: string; [k: string]: unknown }[] = [];
   const queue = [...rows];
   const work = async () => {
@@ -32,7 +34,13 @@ export async function GET(req: Request) {
       if (!listing && conv?.canonical) {
         if (!titles.has(conv.canonical)) {
           let t: string | null = null;
-          try { t = findOgTitle(await fetchHtml(conv.canonical, 10000)); } catch { t = null; }
+          for (let a = 0; a < 2 && !t; a++) {
+            const html = await fetchHtml(conv.canonical, 15000);
+            t = findOgTitle(html) || html.match(/<title>([^<]+)<\/title>/i)?.[1]?.trim() || null;
+            if (t && /mercado livre$/i.test(t) && t.length < 20) t = null;
+            if (!t) errs.set(conv.canonical, `${html.length} bytes: ${html.replace(/\s+/g, " ").slice(0, 120)}`);
+            if (!t) await new Promise((x) => setTimeout(x, 1500));
+          }
           titles.set(conv.canonical, t);
         }
         listing = titles.get(conv.canonical) ?? null;
@@ -43,11 +51,11 @@ export async function GET(req: Request) {
       const vsPhoto = listing && r.product ? sameListing(listing, r.product) : null;
       out.push({
         id: r.id, sent_at: r.sent_at, group: r.dest_name || r.source_name, origin: r.origin, titulo, product: r.product, image: j.curation?.image || null,
-        link: conv?.canonical || null, listing, titleOk: vsTitle?.ok ?? null, titleScore: vsTitle?.score ?? null, photoOk: vsPhoto?.ok ?? null, photoScore: vsPhoto?.score ?? null,
+        link: conv?.canonical || null, listing, titleOk: vsTitle?.ok ?? null, titleScore: vsTitle?.score ?? null, photoOk: vsPhoto?.ok ?? null, photoScore: vsPhoto?.score ?? null, err: conv?.canonical ? errs.get(conv.canonical) : undefined,
       });
     }
   };
-  await Promise.all([work(), work(), work(), work()]);
+  await Promise.all([work(), work()]);
   out.sort((a, b) => a.sent_at.localeCompare(b.sent_at));
   return Response.json({ since, total: out.length, posts: out });
 }
