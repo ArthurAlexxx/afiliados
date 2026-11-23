@@ -21,8 +21,9 @@ const GOOD = /(amazon|sephora|mercadolivre|mlstatic|belezanaweb|epocacosmeticos|
 // versão do perfume: se está no título da loja e não no nosso nome, é outro produto (Salvo ≠ Salvo Intense)
 const VARIANTS = new Set("intense intenso elixir extrait absolu absolute noir black gold silver platin platinum night nocturno sport rose red blue white extreme legacy oud privé prive reserve limited supreme exclusivo".split(" "));
 function extraVariant(title: string, name: string) {
-  const have = new Set(norm(name).split(/[^a-z0-9]+/));
-  return norm(title).split(/[^a-z0-9]+/).some((w) => VARIANTS.has(w) && !have.has(w));
+  const a = new Set(norm(name).split(/[^a-z0-9]+/)), b = new Set(norm(title).split(/[^a-z0-9]+/));
+  // nos dois sentidos: Club de Nuit Intense ≠ Club de Nuit
+  return [...b].some((w) => VARIANTS.has(w) && !a.has(w)) || [...a].some((w) => VARIANTS.has(w) && !b.has(w));
 }
 
 /** Amazon serve a mesma foto em vários tamanhos: pede a de 1500px. */
@@ -68,11 +69,11 @@ async function runSearch(q: string, productId?: number): Promise<Item[]> {
 
 /** Melhor foto de loja do perfume pelo nome real (como veio da fonte). Guarda a escolha por nome. */
 export async function googlePhoto(realName: string, opts: { productId?: number; listing?: string } = {}): Promise<{ buf: Buffer; url: string; label: string } | null> {
-  db().exec("CREATE TABLE IF NOT EXISTS google_photos2 (key TEXT PRIMARY KEY, url TEXT, label TEXT, at TEXT NOT NULL DEFAULT (datetime('now')))");
+  db().exec("CREATE TABLE IF NOT EXISTS google_photos3 (key TEXT PRIMARY KEY, url TEXT, label TEXT, at TEXT NOT NULL DEFAULT (datetime('now')))");
   const name = realName.replace(/R\$\s*[\d.,]+/gi, " ").replace(/\b(por|reais|apenas|só|so)\b/gi, " ").replace(/[^\p{L}\p{N}'&.\s-]/gu, " ").replace(/\s+/g, " ").trim();
   const key = norm(name);
   if (!key) return null;
-  const row = db().prepare("SELECT url, label, at FROM google_photos2 WHERE key = ?").get(key) as { url: string | null; label: string | null; at: string } | undefined;
+  const row = db().prepare("SELECT url, label, at FROM google_photos3 WHERE key = ?").get(key) as { url: string | null; label: string | null; at: string } | undefined;
   const fresh = row && Date.now() - new Date(row.at.replace(" ", "T") + "Z").getTime() < 3 * 86400e3;
   if (row?.url) {
     const buf = await download(row.url);
@@ -105,7 +106,7 @@ export async function googlePhoto(realName: string, opts: { productId?: number; 
     if (!best || score > best.score) best = { buf, url: c.url, label: `${c.domain || ""}: ${(c.title || "").slice(0, 80)}`, score };
     if (wb > 0.85 && c.good) break;
   }
-  db().prepare("INSERT OR REPLACE INTO google_photos2 (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, best?.url ?? null, best?.label ?? null);
+  db().prepare("INSERT OR REPLACE INTO google_photos3 (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, best?.url ?? null, best?.label ?? null);
   log("info", best ? `Google Imagens: "${name.slice(0, 60)}" → ${best.label}` : `Google Imagens: nenhuma foto boa de loja para "${name.slice(0, 60)}" (${items.length} resultado(s))`);
   return best ? { buf: best.buf, url: best.url, label: best.label } : null;
 }
