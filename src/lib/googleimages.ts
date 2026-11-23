@@ -69,11 +69,11 @@ async function runSearch(q: string, productId?: number): Promise<Item[]> {
 
 /** Melhor foto de loja do perfume pelo nome real (como veio da fonte). Guarda a escolha por nome. */
 export async function googlePhoto(realName: string, opts: { productId?: number; listing?: string } = {}): Promise<{ buf: Buffer; url: string; label: string } | null> {
-  db().exec("CREATE TABLE IF NOT EXISTS google_photos3 (key TEXT PRIMARY KEY, url TEXT, label TEXT, at TEXT NOT NULL DEFAULT (datetime('now')))");
+  db().exec("CREATE TABLE IF NOT EXISTS google_photos4 (key TEXT PRIMARY KEY, url TEXT, label TEXT, at TEXT NOT NULL DEFAULT (datetime('now')))");
   const name = realName.replace(/R\$\s*[\d.,]+/gi, " ").replace(/\b(por|reais|apenas|só|so)\b/gi, " ").replace(/[^\p{L}\p{N}'&.\s-]/gu, " ").replace(/\s+/g, " ").trim();
   const key = norm(name);
   if (!key) return null;
-  const row = db().prepare("SELECT url, label, at FROM google_photos3 WHERE key = ?").get(key) as { url: string | null; label: string | null; at: string } | undefined;
+  const row = db().prepare("SELECT url, label, at FROM google_photos4 WHERE key = ?").get(key) as { url: string | null; label: string | null; at: string } | undefined;
   const fresh = row && Date.now() - new Date(row.at.replace(" ", "T") + "Z").getTime() < 3 * 86400e3;
   if (row?.url) {
     const buf = await download(row.url);
@@ -101,12 +101,14 @@ export async function googlePhoto(realName: string, opts: { productId?: number; 
     const side = Math.min(m?.width || 0, m?.height || 0);
     if (side < 700) continue;
     const wb = await whiteBorder(buf).catch(() => 0);
+    // só foto de produto em fundo claro: arte de loja (fundo cinza, logo, texto) tem marca de quem fez
+    if (wb < 0.55) continue;
     // fundo branco (foto de produto) pesa mais; depois loja conhecida; depois tamanho
     const score = wb * 3 + (c.good ? 1 : 0) + Math.min(side, 1500) / 1500;
     if (!best || score > best.score) best = { buf, url: c.url, label: `${c.domain || ""}: ${(c.title || "").slice(0, 80)}`, score };
     if (wb > 0.85 && c.good) break;
   }
-  db().prepare("INSERT OR REPLACE INTO google_photos3 (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, best?.url ?? null, best?.label ?? null);
+  db().prepare("INSERT OR REPLACE INTO google_photos4 (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, best?.url ?? null, best?.label ?? null);
   log("info", best ? `Google Imagens: "${name.slice(0, 60)}" → ${best.label}` : `Google Imagens: nenhuma foto boa de loja para "${name.slice(0, 60)}" (${items.length} resultado(s))`);
   return best ? { buf: best.buf, url: best.url, label: best.label } : null;
 }
