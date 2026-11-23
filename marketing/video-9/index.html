@@ -1,0 +1,299 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<style>
+@font-face{font-family:Pop;font-weight:600;src:url(fonts/p600.woff2)}
+@font-face{font-family:Pop;font-weight:800;src:url(fonts/p800.woff2)}
+@font-face{font-family:Pop;font-weight:900;src:url(fonts/p900.woff2)}
+@font-face{font-family:Cin;font-weight:700 900;src:url(fonts/cinzel.woff2)}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:1080px;height:1920px;overflow:hidden;background:#0b0a08}
+#stage{position:absolute;inset:0;overflow:hidden;font-family:Pop}
+.abs{position:absolute}
+.cx{left:50%;transform:translateX(-50%)}
+#bg{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 38%,#2a241a 0%,#15120d 45%,#070605 100%)}
+#bggreen{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 40%,#123d22 0%,#0a1f12 50%,#040a06 100%);opacity:0}
+#rays{position:absolute;left:50%;top:38%;width:3200px;height:3200px;margin:-1600px 0 0 -1600px;
+  background:repeating-conic-gradient(from 0deg,rgba(255,235,190,.045) 0deg 7deg,transparent 7deg 15deg);
+  -webkit-mask:radial-gradient(circle,#000 0%,#000 25%,transparent 60%);mask:radial-gradient(circle,#000 0%,#000 25%,transparent 60%)}
+#ring{position:absolute;left:50%;top:38%;width:960px;height:960px;margin:-480px 0 0 -480px;border-radius:50%;border:2px solid rgba(255,230,180,.06)}
+#vig{position:absolute;inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 50%,rgba(0,0,0,.7) 100%)}
+.dust{position:absolute;width:4px;height:4px;border-radius:50%;background:#f5d58a}
+#chip{top:70px;padding:14px 38px;border-radius:40px;background:linear-gradient(#f3ead6,#cfc2a3);color:#2a2116;font:900 30px Cin;letter-spacing:3px;box-shadow:0 6px 20px rgba(0,0,0,.5)}
+/* captions */
+#cap{position:absolute;left:0;right:0;top:1450px;display:flex;justify-content:center;flex-wrap:wrap;gap:0 22px;padding:0 60px}
+.w{font:900 68px Pop;color:#fff;text-transform:uppercase;letter-spacing:1px;text-shadow:0 4px 18px rgba(0,0,0,.8);display:inline-block}
+.w.hl{background:#f6c419;color:#1b1406;padding:0 18px;border-radius:12px;text-shadow:none;box-shadow:0 6px 0 #b48b00}
+/* scene 1-2 */
+#card{top:220px;width:560px;height:510px;border-radius:34px;overflow:hidden;border:6px solid #efe3c7;box-shadow:0 30px 70px rgba(0,0,0,.7)}
+#card img{width:100%;height:100%;object-fit:cover}
+#old{top:770px;font:900 230px Cin;color:transparent;background:linear-gradient(#f4f4f4,#8d8d8d 55%,#cfcfcf);-webkit-background-clip:text;background-clip:text;white-space:nowrap;filter:drop-shadow(0 10px 20px rgba(0,0,0,.6))}
+#strike{top:900px;height:16px;width:0;background:#e4312b;border-radius:8px;transform:translateX(-50%) rotate(-6deg);box-shadow:0 4px 12px rgba(0,0,0,.5)}
+#lab1{top:1060px;font:800 44px Pop;color:#bdb4a2;letter-spacing:2px;white-space:nowrap}
+#por{top:830px;font:800 50px Pop;color:#fff;letter-spacing:4px;white-space:nowrap}
+#new{top:880px;font:900 210px Pop;color:#2bea6b;white-space:nowrap;text-shadow:0 0 40px rgba(43,234,107,.55),0 10px 0 #0e6a2c}
+#off{top:150px;left:810px;width:190px;height:190px;border-radius:50%;background:#f6c419;color:#1b1406;font:900 62px Pop;display:flex;align-items:center;justify-content:center;box-shadow:0 10px 30px rgba(0,0,0,.5)}
+#phone{top:1990px;width:470px;height:880px;border-radius:60px;background:#111;border:10px solid #2b2b2b;box-shadow:0 30px 80px rgba(0,0,0,.8);overflow:hidden}
+#phone .bar{height:110px;background:#1f2c33;display:flex;align-items:center;gap:16px;padding:30px 26px 0}
+#phone .av{width:58px;height:58px;border-radius:50%;background:#f6c419;font:900 22px Pop;color:#1b1406;display:flex;align-items:center;justify-content:center}
+#phone .nm{font:800 26px Pop;color:#fff;line-height:1.1}
+#phone .nm small{display:block;font:600 18px Pop;color:#8aa0a8}
+#phone .chat{position:absolute;top:110px;bottom:0;left:0;right:0;background:#0b141a}
+#bubble{position:absolute;top:40px;left:22px;right:22px;background:#202c33;border-radius:20px;padding:12px;color:#e9edef;font:600 21px Pop;line-height:1.45}
+#bubble img{width:100%;border-radius:12px;display:block;margin-bottom:10px}
+#bubble s{color:#ff7b72}
+#bubble b{color:#2bea6b}
+#wapill{top:1450px;padding:20px 40px;border-radius:50px;background:#25d366;color:#fff;font:900 38px Pop;white-space:nowrap;box-shadow:0 0 0 8px rgba(37,211,102,.25),0 12px 30px rgba(0,0,0,.5)}
+/* scene 3 groups */
+#s3title{top:200px;font:900 64px Cin;color:#f1cf7a;white-space:nowrap;letter-spacing:2px}
+#bignum{top:300px;font:900 330px Cin;line-height:1;color:transparent;background:linear-gradient(#fff3d1,#d9a945 60%,#9c6d1c);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 12px 25px rgba(0,0,0,.7))}
+#bigsub{top:660px;padding:10px 28px;background:#f6c419;color:#1b1406;font:900 46px Pop;border-radius:12px;white-space:nowrap}
+#bigsub2{top:750px;font:600 36px Pop;color:#cfc6b4;white-space:nowrap}
+.grp{position:absolute;padding:14px 22px;border-radius:18px;background:#1d1a15;border:2px solid #3b3326;color:#e8dcc2;font:800 26px Pop;white-space:nowrap;box-shadow:0 8px 20px rgba(0,0,0,.5)}
+.grp i{display:inline-block;width:14px;height:14px;border-radius:50%;background:#25d366;margin-right:12px;vertical-align:middle}
+#robot{top:1180px;width:200px;height:200px;border-radius:44px;background:linear-gradient(#2b2519,#17140e);border:3px solid #f1cf7a;box-shadow:0 0 50px rgba(241,207,122,.35)}
+#robot .eye{position:absolute;top:70px;width:38px;height:38px;border-radius:50%;background:#2bea6b;box-shadow:0 0 22px #2bea6b}
+#robot .mouth{position:absolute;bottom:42px;left:50px;width:100px;height:12px;border-radius:6px;background:#f1cf7a}
+#robot .ant{position:absolute;top:-40px;left:92px;width:16px;height:40px;background:#f1cf7a;border-radius:8px}
+/* scene 4 bank */
+#s4title{top:180px;font:900 84px Cin;color:#f1cf7a;text-align:center;line-height:1.05;white-space:nowrap}
+#stats{top:420px;display:flex;gap:30px}
+.stat{width:400px;padding:30px 0;border-radius:28px;background:#17140f;border:2px solid #3b3326;text-align:center}
+.stat b{display:block;font:900 96px Cin;color:#fff}
+.stat span{font:800 26px Pop;color:#a99f8c;letter-spacing:3px}
+#chart{top:720px;width:830px;height:520px;border-radius:28px;background:#14110d;border:2px solid #3b3326;padding:30px}
+#chart .t{font:800 30px Pop;color:#fff}
+#chart .t small{font:600 24px Pop;color:#8b8272;margin-left:10px}
+#bars{position:absolute;left:30px;right:30px;bottom:30px;height:340px;display:flex;align-items:flex-end;gap:9px}
+#bars div{flex:1;border-radius:6px 6px 0 0;background:linear-gradient(#e9e2d0,#6f6857)}
+#bars div.low{background:linear-gradient(#5dffa0,#16a34a)}
+#tag30{top:1020px;left:760px;padding:8px 16px;border-radius:10px;background:#2bea6b;color:#06210f;font:900 26px Pop;white-space:nowrap}
+/* scene 5 checks */
+.chk{position:absolute;left:50%;width:880px;margin-left:-440px;padding:34px 40px;border-radius:30px;background:#17140f;border:3px solid #f1cf7a;display:flex;align-items:center;gap:30px;box-shadow:0 14px 40px rgba(0,0,0,.6)}
+.chk .ic{flex:none;width:90px;height:90px;border-radius:50%;background:#2bea6b;color:#06210f;font:900 58px Pop;display:flex;align-items:center;justify-content:center}
+.chk .tx{font:900 50px Pop;color:#fff;line-height:1.1}
+.chk .tx small{display:block;font:600 30px Pop;color:#b3a993;margin-top:6px}
+#s5title{top:190px;font:900 70px Cin;color:#f1cf7a;white-space:nowrap}
+/* scene 6 stamps */
+.stamp{position:absolute;left:50%;padding:20px 60px;border:10px solid currentColor;border-radius:24px;font:900 150px Cin;white-space:nowrap;letter-spacing:6px}
+#st1{top:480px;color:#f1cf7a}
+#st2{top:830px;color:#2bea6b}
+/* scene 7 CTA */
+#logo{top:330px;width:330px;height:330px;border-radius:44px;background:linear-gradient(#fbf6ea,#d8ccb0);box-shadow:0 30px 80px rgba(0,0,0,.6);text-align:center;color:#231a10}
+#logo b{display:block;font:900 150px Cin;line-height:1;margin-top:52px}
+#logo span{font:900 40px Cin;letter-spacing:6px}
+#tagline{top:720px;font:700 32px Cin;color:#d9d0bb;letter-spacing:3px;white-space:nowrap}
+#btn{top:850px;padding:34px 70px;border-radius:70px;background:#25d366;color:#fff;font:900 62px Pop;white-space:nowrap;box-shadow:0 14px 0 #128c3f,0 20px 50px rgba(0,0,0,.5)}
+#halo{top:850px;width:760px;height:150px;border-radius:80px;border:6px solid #25d366}
+#hand{top:960px;left:720px;font-size:130px;filter:drop-shadow(0 10px 14px rgba(0,0,0,.6))}
+#arrows{top:1120px;font:900 100px Pop;color:#f6c419;letter-spacing:30px;white-space:nowrap}
+#disc{top:1780px;font:600 26px Pop;color:#7f776a;white-space:nowrap}
+
+#phone{top:1990px;width:640px;height:1180px;border-radius:70px;background:#0b141a;border:12px solid #2b2b2b;box-shadow:0 30px 80px rgba(0,0,0,.8),0 0 0 3px #555 inset;overflow:hidden}
+#phone .status{height:44px;background:#1f2c33;color:#e9edef;font:600 20px Pop;display:flex;justify-content:space-between;padding:10px 34px 0}
+#phone .bar{height:100px;background:#1f2c33;display:flex;align-items:center;gap:16px;padding:0 22px}
+#phone .back{color:#e9edef;font:600 34px Pop}
+#phone .av{width:62px;height:62px;border-radius:50%;background:#111;overflow:hidden;flex:none}
+#phone .av img{width:100%;height:100%;object-fit:cover;object-position:76% 6%;transform:scale(3.2);transform-origin:84% 8%}
+#phone .nm{font:600 28px Pop;color:#e9edef;line-height:1.15}
+#phone .nm small{display:block;font:400 19px Pop;color:#8696a0}
+#phone .chat{position:absolute;top:144px;bottom:0;left:0;right:0;background:#0b141a;background-image:radial-gradient(circle at 1px 1px,rgba(255,255,255,.035) 1px,transparent 0);background-size:18px 18px;overflow:hidden}
+#scroll{position:absolute;left:0;right:0;top:0}
+#bubble{position:relative;margin:26px 26px 0 22px;background:#202c33;border-radius:0 18px 18px 18px;padding:6px;color:#e9edef;font:400 25px "Segoe UI",Pop,sans-serif;line-height:1.42;width:auto}
+#bubble img{width:100%;border-radius:13px;display:block}
+#bubble .tx{padding:10px 12px 4px;white-space:pre-wrap;word-break:break-word}
+#bubble .tx b{font-weight:700;color:inherit}
+#bubble .tx s{opacity:.9;color:inherit}
+#bubble .tx a{color:#53bdeb}
+#bubble .tm{text-align:right;font-size:17px;color:#8696a0;padding:0 12px 6px}
+#bubble .who{padding:6px 12px 6px;font:600 21px Pop;color:#f6c419}
+#avg{top:1990px}
+.cmp{position:absolute;left:50%;width:880px;margin-left:-440px;border-radius:30px;background:#17140f;border:3px solid #3b3326;padding:30px 40px}
+.cmp .lb{font:800 30px Pop;color:#b3a993;letter-spacing:2px}
+.cmp .vl{font:900 110px Cin;color:#d9d0bb;line-height:1.05}
+.cmp.win{border-color:#2bea6b;box-shadow:0 0 50px rgba(43,234,107,.25)}
+.cmp.win .vl{color:#2bea6b;font-family:Pop}
+.cmp.win .lb{color:#7df0a8}
+#pct{top:1150px;padding:14px 34px;border-radius:16px;background:#f6c419;color:#1b1406;font:900 48px Pop;white-space:nowrap}
+#src{top:1265px;font:600 26px Pop;color:#8b8272;white-space:nowrap}
+</style></head>
+<body><div id="stage">
+<div id="bg"></div><div id="bggreen"></div><div id="rays"></div><div id="ring"></div><div id="dustbox"></div><div id="vig"></div>
+
+<div id="card" class="abs cx"><img src="asad.jpg"></div>
+<div id="old" class="abs cx">R$399</div>
+<div id="strike" class="abs cx"></div>
+<div id="lab1" class="abs cx">PREÇO ANUNCIADO NA LOJA</div>
+<div id="por" class="abs cx">SAIU NO GRUPO POR</div>
+<div id="new" class="abs cx">R$178</div>
+<div id="off" class="abs">-55%</div>
+<div id="phone" class="abs cx"><div class="status"><span>01:49</span><span>●●● 5G ▮</span></div><div class="bar"><span class="back">←</span><div class="av" style="background:#f6c419;display:flex;align-items:center;justify-content:center;font:900 24px Pop;color:#1b1406">2R</div><div class="nm">2R PROMOS<small>grupo de ofertas</small></div></div>
+ <div class="chat"><div id="scroll"><div id="bubble"><img src="asad.jpg"><div class="tx">🏆 <b>MENOR PREÇO DA SEMANA</b> · Baixou 55%
+
+<b>Lattafa Asad Elixir 100ml</b>
+
+❌ <s>DE: R$399,00</s>
+✅ POR: R$178,00 (frete grátis)
+
+🛒 LOJA: <b>WATHIQ PARFUMS</b>
+
+🔖Utilize o cupom: <b>R$ 40 OFF</b> (Resgatar cupom agora para utilizar a partir das 00:00)
+❗️Selecione o vendedor: <b>Loja Oficial WATHIQ PARFUMS</b>
+
+📉 Ótima oferta: a média de promoção dos outros grupos é de R$ 224,29. Aqui está 21% mais barato
+
+📎 LINK DO PRODUTO ➡️
+<a>https://meli.la/1S8XwSj</a></div><div class="tm">01:49</div></div></div></div></div>
+<div id="wapill" class="abs cx">● POST REAL DO GRUPO</div>
+
+<div id="s3title" class="abs cx">TODO DIA, O ROBÔ LÊ</div>
+<div id="bignum" class="abs cx">19</div>
+<div id="bigsub" class="abs cx">GRUPOS DE OFERTAS</div>
+<div id="grpbox"></div>
+<div id="robot" class="abs cx"><div class="ant"></div><div class="eye" style="left:44px"></div><div class="eye" style="right:44px"></div><div class="mouth"></div></div>
+
+<div id="s4title" class="abs cx">BANCO DE<br>PREÇOS</div>
+<div id="stats" class="abs cx"><div class="stat"><b id="n1">0</b><span>PREÇOS GUARDADOS</span></div><div class="stat"><b id="n2">0</b><span>PERFUMES</span></div></div>
+<div id="chart" class="abs cx"><div class="t">Lattafa Asad Elixir 100ml<small>preços nos grupos</small></div><div id="bars"></div></div>
+
+<div id="s5title" class="abs cx">SÓ POSTA O MENOR PREÇO</div>
+<div id="m1" class="cmp" style="top:380px"><div class="lb">MÉDIA NOS OUTROS GRUPOS</div><div class="vl">R$ 224,29</div></div>
+<div id="m2" class="cmp win" style="top:700px"><div class="lb">NO 2R PROMOS</div><div class="vl">R$ 178,00</div></div>
+<div id="pct" class="abs cx">21% MAIS BARATO</div>
+<div id="src" class="abs cx">Asad Elixir · post de 23/11/2026</div>
+
+<div id="s6title" class="abs cx" style="top:250px;font:900 70px Cin;color:#f1cf7a;white-space:nowrap">E VOCÊ COMPRA COM</div>
+<div id="c2" class="chk" style="top:470px"><div class="ic">✓</div><div class="tx">Link do Mercado Livre<small>você compra direto no Mercado Livre</small></div></div>
+<div id="c3" class="chk" style="top:760px"><div class="ic">✓</div><div class="tx">Compra Garantida<small>seu dinheiro protegido pelo Mercado Livre</small></div></div>
+
+<div id="st1" class="stamp">SEM SPAM</div>
+<div id="st2" class="stamp">GRÁTIS</div>
+
+<div id="logo" class="abs cx"><b>2R</b><span>PROMOS</span></div>
+<div id="tagline" class="abs cx">SÓ O MENOR PREÇO DOS GRUPOS</div>
+<div id="halo" class="abs cx"></div>
+<div id="btn" class="abs cx">● ENTRAR NO GRUPO</div>
+<div id="hand" class="abs">👆</div>
+<div id="arrows" class="abs cx">↓↓↓</div>
+
+<div id="chip" class="abs cx">2R PROMOS</div>
+<div id="cap"></div>
+<div id="disc" class="abs cx">Preços de um post real do grupo em 23/11/2026. Ofertas mudam todo dia.</div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+const clamp=(x,a=0,b=1)=>Math.min(b,Math.max(a,x));
+const p=(t,a,b)=>clamp((t-a)/(b-a));
+const eo=x=>1-Math.pow(1-x,3);
+const eio=x=>x<.5?4*x*x*x:1-Math.pow(-2*x+2,3)/2;
+const eb=x=>{const c1=1.9,c3=c1+1;return 1+c3*Math.pow(x-1,3)+c1*Math.pow(x-1,2)};
+const ei=x=>x*x*x;
+const lerp=(a,b,x)=>a+(b-a)*x;
+function win(t,a,b,fi=.25,fo=.25){return Math.min(p(t,a,a+fi),1-p(t,b-fo,b))}
+function set(el,o,tf){el=typeof el=='string'?$(el):el;el.style.opacity=o;el.style.transform=tf}
+const CX='translateX(-50%) ';
+const dust=[];for(let i=0;i<46;i++){const d=document.createElement('div');d.className='dust';$('dustbox').appendChild(d);
+ const r=Math.sin(i*99.1)*43758.5453;const f=r-Math.floor(r);const r2=Math.sin(i*12.9)*9758.5;const g=r2-Math.floor(r2);
+ dust.push({el:d,x:f*1080,y:g*1920,s:.5+((f*7)%1)*1.6,v:10+g*30,ph:f*6})}
+const names=['Shark Perfumes','MD Links','RP Promos','Clube do Perfume','Promos Cheirosas','PT Fragrâncias','Achados Árabes','Perfume Barato','Ofertas Imp.','Top Fragrance','Cheiro Bom','Promo Diária','Árabes BR','Decants & Cia','Oferta Relâmpago','Perfumaria VIP','Desconto Já','Imports Promo','Achadinhos'];
+const grps=names.map((n,i)=>{const d=document.createElement('div');d.className='grp';d.innerHTML='<i></i>'+n;$('grpbox').appendChild(d);
+ const col=i%3,row=Math.floor(i/3);return {el:d,x:[70,390,710][col]+((row%2)?40:-10),i}});
+const bh=[62,70,58,75,66,80,72,64,78,69,74,60,83,71,67,77,63,73,68,79,65,76,61,70,30];
+bh.forEach((h,i)=>{const d=document.createElement('div');if(i==bh.length-1)d.className='low';$('bars').appendChild(d)});
+const bars=[...$('bars').children];
+const caps=[
+ [0.0,4.1,['ESSE','ASAD','ELIXIR','ANUNCIADO','A','R$ 399'],[5],[0,.32,.62,1.44,1.96,2.06]],
+ [4.1,7.45,['NO','NOSSO','GRUPO','SAIU','POR','R$ 178'],[5],[4.22,4.58,4.8,5.42,5.68,5.82]],
+ [7.45,8.4,['COMO?'],[0],[7.54]],
+ [8.4,11.8,['UM','ROBÔ','LÊ','19 GRUPOS','DE','OFERTAS','O','DIA','TODO'],[3],[8.48,8.66,9.04,9.28,10.22,10.38,10.78,10.96,11.22]],
+ [11.8,14.2,['COMPARA','COM','+7 MIL','PREÇOS'],[2],[11.9,12.3,12.82,13.44]],
+ [14.2,17.15,['E','SÓ','POSTA','O','MENOR PREÇO','DE','TODOS','OS GRUPOS'],[4,7],[13.9,14.3,14.54,15.0,15.04,15.7,15.9,16.26]],
+ [17.15,20.2,['LINK','DO','MERCADO LIVRE','COM','COMPRA GARANTIDA'],[2,4],[17.28,17.56,17.72,18.46,18.74]],
+ [20.2,22.35,['SEM SPAM','E','É','GRÁTIS'],[0,3],[20.32,20.88,21.34,21.42]],
+ [22.35,25.0,['TOCA','AQUI','E','ENTRA','AGORA'],[4],[22.44,22.64,22.88,23.18,23.38]],
+];
+const capEls=caps.map(c=>{const box=document.createElement('div');box.style.cssText='position:absolute;inset:0;display:flex;justify-content:center;align-items:flex-start;flex-wrap:wrap;gap:14px 22px;padding:0 60px';
+ const ws=c[2].map((w,i)=>{const s=document.createElement('span');s.className='w'+(c[3].includes(i)?' hl':'');s.textContent=w;box.appendChild(s);return s});$('cap').appendChild(box);return {c,box,ws}});
+window.render=function(t){
+ $('rays').style.transform=`rotate(${t*6}deg)`;
+ $('bggreen').style.opacity=Math.max(win(t,4.1,8.4,.3,.3),win(t,14.2,17.15,.3,.3)*.7,p(t,22.1,22.6));
+ dust.forEach(d=>{const y=(d.y-t*d.v+1920*5)%1920;d.el.style.transform=`translate(${d.x+Math.sin(t+d.ph)*10}px,${y}px) scale(${d.s})`;d.el.style.opacity=.25+.35*Math.sin(t*2+d.ph)**2});
+ capEls.forEach(({c,box,ws})=>{const [a,b]=c;const vis=t>=a&&t<b;box.style.display=vis?'flex':'none';if(!vis)return;
+  ws.forEach((w,i)=>{const st=Math.max(a,c[4][i]-.05);const k=p(t,st,st+.16);w.style.opacity=k;w.style.transform=`scale(${lerp(1.6,1,eb(k))}) translateY(${(1-k)*20}px)`})});
+ set('chip',1,CX);
+ $('disc').style.opacity=win(t,22.4,25.2)*0.9+win(t,14.4,17.15)*0.0;
+ // S1 0-4.1 / S2
+ { const T=4.1; const a=win(t,0,5.7,.01,.3); const k=eb(p(t,0,.5));
+   let cs=lerp(.6,1,k)*(1+t*.01), ctop=220;
+   if(t>T){const m=eo(p(t,T,T+.5));cs=lerp(1.04,.72,m);ctop=220-100*m}
+   $('card').style.top=ctop+'px'; set('card',a*clamp(k*2),CX+`scale(${cs}) rotate(-2deg)`);
+   const k2=eb(p(t,1.9,2.35)); const oo=win(t,1.9,5.7,.01,.3);
+   let ty=0,sc=lerp(2.2,1,k2); if(t>T){const m=eo(p(t,T,T+.5));sc=lerp(1,.55,m);ty=lerp(0,-200,m)}
+   set('old',oo*clamp(k2*3),CX+`translateY(${ty}px) scale(${sc})`);
+   $('strike').style.width=(eo(p(t,T,T+.35))*350)+'px';
+   $('strike').style.opacity=win(t,T,5.7,.01,.3); $('strike').style.top=(900-200*eo(p(t,T,T+.5)))+'px';
+   set('lab1',win(t,2.4,4.2,.3,.2),CX+`translateY(${(1-eo(p(t,2.4,2.8)))*30}px)`);
+   const kn=eb(p(t,5.75,6.2));
+   set('por',win(t,5.4,7.0,.2,.2),CX+`translateY(${(1-eo(p(t,5.4,5.7)))*30}px)`);
+   set('new',clamp(kn*3)*(1-p(t,6.8,7.1)),CX+`scale(${lerp(2.4,1,kn)})`);
+   set('off',win(t,6.0,7.0,.1,.2),`scale(${eb(p(t,6.0,6.35))}) rotate(${lerp(-40,12,eo(p(t,6.0,6.35)))}deg)`);
+   const pk=eo(p(t,6.8,7.4)); $('phone').style.top=lerp(1990,170,pk)+'px'; set('phone',win(t,6.8,8.55,.05,.25),CX+`rotate(${lerp(8,0,pk)}deg)`);
+   $('scroll').style.transform=`translateY(${-lerp(0,520,eio(p(t,7.5,8.4)))}px)`;
+   set('wapill',win(t,7.2,8.55,.15,.25),CX+`scale(${eb(p(t,7.2,7.5))})`); $('wapill').style.top='60px';
+   $('chip').style.opacity=1-win(t,7.1,8.55,.15,.25);
+ }
+ // S3 8.4-11.8
+ { const A=8.4,B=11.8; const w=win(t,A,B,.2,.3);
+   set('s3title',w,CX+`translateY(${(1-eo(p(t,A,A+.4)))*-30}px)`);
+   const n=Math.round(19*eo(p(t,A+.4,A+1.2)));$('bignum').textContent=n;
+   set('bignum',w*clamp(p(t,A+.2,A+.4)),CX+`scale(${lerp(1.5,1,eb(p(t,A+.2,A+.6)))})`);
+   set('bigsub',w*p(t,A+.5,A+.7),CX+`scale(${eb(p(t,A+.5,A+.8))})`);
+   grps.forEach(g=>{const d=A+.9+g.i*.09; const sx=g.i%2?1250:-400, ex=430, ey=1250; const midy=800+((g.i*97)%300);
+     const k1=eo(p(t,d,d+.35)), k2=ei(p(t,d+.5,d+1.0)); let x=lerp(sx,g.x,k1),y=midy,s=1;
+     if(k2>0){x=lerp(g.x,ex,k2);y=lerp(midy,ey,k2);s=lerp(1,.2,k2)}
+     g.el.style.opacity=((k1>0&&k2<1)?1:0)*win(t,A,B,.01,.3); g.el.style.transform=`translate(${x}px,${y}px) scale(${s})`});
+   const rk=eb(p(t,A+.7,A+1.1)); set('robot',w*clamp(rk*2),CX+`scale(${rk*(1+.06*Math.sin(t*16)*p(t,A+1.4,A+1.6)*(1-p(t,B-.6,B)))})`);
+ }
+ // S4 11.8-14.2
+ { const A=11.8,B=14.2; const w=win(t,A,B,.2,.3);
+   set('s4title',w,CX+`translateY(${(1-eo(p(t,A,A+.4)))*-30}px)`);
+   set('stats',w*p(t,A+.1,A+.4),CX+`translateY(${(1-eo(p(t,A+.1,A+.5)))*40}px)`);
+   const c=eo(p(t,A+.2,A+1.6)); $('n1').textContent=Math.round(7494*c).toLocaleString('pt-BR'); $('n2').textContent=Math.round(1049*c).toLocaleString('pt-BR');
+   set('chart',w*p(t,A+.3,A+.6),CX+`translateY(${(1-eo(p(t,A+.3,A+.7)))*60}px)`);
+   bars.forEach((b,i)=>{const k=eo(p(t,A+.4+i*.04,A+.8+i*.04));b.style.height=(bh[i]*k)+'%'});
+ }
+ // S5 14.2-17.15
+ { const A=14.2,B=17.15; const w=win(t,A,B,.2,.3);
+   set('s5title',w,CX);
+   const k1=eb(p(t,A+.2,A+.55)),k2=eb(p(t,A+.9,A+1.3));
+   set('m1',w*clamp(k1*2),`translateX(${(1-k1)*-200}px)`);
+   set('m2',w*clamp(k2*2),`translateX(${(1-k2)*200}px) scale(${1+.03*Math.sin(t*8)*p(t,A+1.3,A+1.5)})`);
+   set('pct',w*clamp(eb(p(t,A+1.7,A+2.0))*2),CX+`scale(${eb(p(t,A+1.7,A+2.0))}) rotate(-3deg)`);
+   set('src',w*p(t,A+1.9,A+2.2),CX);
+ }
+ // S6 17.15-20.2
+ { const A=17.15,B=20.2; const w=win(t,A,B,.2,.3);
+   set('s6title',w,CX);
+   [['c2',A+.15],['c3',A+1.55]].forEach(([id,d])=>{const k=eb(p(t,d,d+.4));set(id,w*clamp(k*2),`translateX(${(1-k)*-200}px) scale(${lerp(.8,1,k)})`)});
+ }
+ // S7 20.2-22.35
+ { const A=20.2,B=22.35; const w=win(t,A,B,.05,.25);
+   const k1=eb(p(t,A+.1,A+.4)),k2=eb(p(t,A+1.15,A+1.45));
+   set('st1',w*clamp(k1*3),CX+`rotate(-6deg) scale(${lerp(2.2,1,k1)})`);
+   set('st2',w*clamp(k2*3),CX+`rotate(5deg) scale(${lerp(2.2,1,k2)})`);
+   const sh=(t>A+.4&&t<A+.55)||(t>A+1.45&&t<A+1.6)?Math.sin(t*120)*10:0;
+   $('stage').style.transform=`translate(${sh}px,${sh*.6}px)`;
+ }
+ // S8 22.35-25
+ { const A=22.35; const w=p(t,A,A+.2);
+   const k=eb(p(t,A,A+.45)); set('logo',w,CX+`scale(${lerp(.5,1,k)})`);
+   set('tagline',p(t,A+.3,A+.6),CX);
+   const kb=eb(p(t,A+.3,A+.7)); const pulse=1+.05*Math.sin((t-A)*7)*p(t,A+.7,A+.9);
+   set('btn',clamp(kb*2),CX+`scale(${kb*pulse})`);
+   const hp=((t-A-.7)%1.0+1)%1.0; set('halo',t>A+.7?(1-hp)*.8:0,CX+`scale(${1+hp*.25})`);
+   const hk=eo(p(t,A+.6,A+1.0)); const tap=t>A+1.0?Math.max(0,Math.sin((t-A-1.0)*7))*18:0;
+   set('hand',hk,`translate(${(1-hk)*200}px,${(1-hk)*300+tap}px) scale(${1-tap/200})`);
+   set('arrows',p(t,A+1.0,A+1.3),CX+`translateY(${Math.abs(Math.sin(t*5))*18}px)`);
+ }
+};
+window.render(0);
+</script></body></html>
