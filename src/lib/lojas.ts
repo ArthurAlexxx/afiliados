@@ -7,14 +7,20 @@ import sharp from "sharp";
 import { db, log } from "./db.ts";
 import { norm, sameListing } from "./perfume.ts";
 
+// lojas em VTEX que responderam no teste (23/nov); as que não respondem são ignoradas sozinhas
 const STORES = [
   "www.epocacosmeticos.com.br",
-  "www.sephora.com.br",
   "www.cea.com.br",
-  "www.lojasrenner.com.br",
   "www.drogariasaopaulo.com.br",
-  "www.drogasil.com.br",
+  "www.drogariaspacheco.com.br",
+  "www.paguemenos.com.br",
+  "www.ikesaki.com.br",
+  "www.boticario.com.br",
+  "www.eudora.com.br",
   "www.perfumariasumire.com.br",
+  "www.belezanaweb.com.br",
+  "www.amoedo.com.br",
+  "www.lojasrede.com.br",
 ];
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124 Safari/537.36";
 
