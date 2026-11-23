@@ -31,7 +31,7 @@ export async function GET(req: Request) {
       try { j = JSON.parse(r.data_json || "{}"); } catch { /* */ }
       const conv = (j.conversions || []).find((c) => c.ok) || (j.conversions || [])[0];
       let listing = conv?.title || null;
-      if (!listing && conv?.canonical) {
+      if (!listing && conv?.canonical && q.get("fetch")) {
         if (!titles.has(conv.canonical)) {
           let t: string | null = null;
           for (let a = 0; a < 2 && !t; a++) {
