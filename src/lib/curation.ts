@@ -787,18 +787,22 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   const parsed = parsePromo(item.best.text);
   // Arthur (23/nov): "colocamos uma imagem e, no link, é outro perfume"
   const listing = (built.conversions.find((c) => c.ok)?.title || "").replace(/\s*\|\s*Mercado\s*Livre.*$/i, "").trim();
-  if (listing) {
-    const vsProduct = sameListing(listing, item.name);
-    if (!vsProduct.ok) {
-      const vsSource = sameListing(listing, parsed.titulo || item.name);
-      // a foto do banco é do perfume que achamos, não do anúncio: usa a foto do próprio anúncio
-      if (bankPath) log("info", `Foto: anúncio "${listing.slice(0, 70)}" não bate com "${item.name}" — usei a foto do anúncio`);
-      bankPath = null;
-      if (vsProduct.score === 0 && vsSource.score === 0) {
-        built.status = "skipped";
-        built.reason = `o link leva a outro perfume no ML ("${listing.slice(0, 80)}")`;
-      }
-    }
+  // Arthur (23/nov): o nome real é o do post, como veio da fonte; a foto tem que ser desse nome, não do perfume que achamos
+  const realName = (SOURCE_TITLE ? parsed.titulo : "") || listing || item.name;
+  if (listing && sameListing(listing, realName).score === 0 && sameListing(listing, item.name).score === 0) {
+    built.status = "skipped";
+    built.reason = `o link leva a outro perfume no ML ("${listing.slice(0, 80)}")`;
+  }
+  // foto do banco (ou escolhida) só vale se o perfume do banco for o mesmo do nome real e do anúncio
+  if (bankPath && (!sameListing(realName, item.name).ok || (listing && !sameListing(listing, item.name).ok))) {
+    log("info", `Foto: "${realName.slice(0, 70)}"${listing ? ` / anúncio "${listing.slice(0, 60)}"` : ""} não bate com o perfume do banco "${item.name}" — procurando pelo nome real`);
+    bankPath = null;
+  }
+  // sem foto do banco: procura o nome real no Fragrantica (busca completa) e usa a foto de lá
+  let fragPhoto: { buf: Buffer; fragUrl: string; label: string } | null = null;
+  if (!bankPath && built.status !== "skipped" && built.status !== "duplicate") {
+    const { photoByRealName } = await import("./fragrantica.ts");
+    fragPhoto = await photoByRealName(realName, { productId: item.productId, listing }).catch((e) => (log("warn", `Foto pelo nome real: ${(e as Error).message}`), null));
   }
   const discount = item.declaredPct && item.declaredPct > 0 ? item.declaredPct : item.pctVsMedian && item.pctVsMedian > 0.05 ? Math.round(item.pctVsMedian * 100) : null;
   const data = {
@@ -823,7 +827,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
 
   let mediaPath: string | null = null;
   try {
-    let raw: Buffer | null = bankPath ? await readPostPhoto(bankPath) : null;
+    let raw: Buffer | null = bankPath ? await readPostPhoto(bankPath) : fragPhoto ? fragPhoto.buf : null;
     // Arthur (nov/2026): sem foto boa no banco não usa a foto do anúncio; o post espera ele escolher
     if (!raw && built.productImage && !WAIT_FOR_PHOTO) {
       const r = await fetch(built.productImage, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(15000) });
@@ -884,7 +888,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
         conversions: built.conversions,
         curation: {
           score: item.score, groups: item.groups, posts: item.posts, bestPrice: item.bestPrice,
-          medianPrice: item.medianPrice, discount, origin: item.origin, real: item.real, image: bankPath ? "banco" : mediaPath ? "anúncio" : "sem foto",
+          medianPrice: item.medianPrice, discount, origin: item.origin, real: item.real, image: bankPath ? "banco" : fragPhoto && mediaPath ? `fragrantica: ${fragPhoto.label}` : mediaPath ? "anúncio" : "sem foto", realName,
         },
         agent: decision,
       }),

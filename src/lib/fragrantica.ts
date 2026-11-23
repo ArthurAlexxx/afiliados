@@ -8,7 +8,7 @@
  */
 import { db, log } from "./db.ts";
 import { apifyFail, checkApify, overDailyBudget, priceTable, recordCall, refreshTier, tracked } from "./apify.ts";
-import { BRAND_WORDS, FLANKERS, NOISE, STOP, dist, isBrand, norm, notPerfume, stripDescriptors } from "./perfume.ts";
+import { BRAND_WORDS, FLANKERS, NOISE, STOP, dist, isBrand, norm, notPerfume, sameListing, stripDescriptors } from "./perfume.ts";
 
 const ACTOR = "unfenced-group~fragrantica-perfume-scraper";
 type Hit = { name: string; brand: string; url: string; ratingCount?: number; year?: number };
@@ -550,4 +550,72 @@ export async function fragranticaStep(max = 10) {
   } finally {
     g.__fragBusy = false;
   }
+}
+
+/**
+ * Arthur (23/nov): "a gente divulga um produto, clica no link e é outro; a foto está errada".
+ * A foto passa a vir do nome real do post, como veio da fonte, sem mexer nele: busca completa no Fragrantica
+ * (nome inteiro → nome sem palavras de anúncio → Google só no Fragrantica), confere com o anúncio do ML
+ * e usa uma foto da página do perfume achado. Guarda o resultado por nome, para não pagar a mesma busca de novo.
+ */
+export async function photoByRealName(realName: string, opts: { productId?: number; listing?: string } = {}): Promise<{ buf: Buffer; fragUrl: string; label: string } | null> {
+  if (!process.env.APIFY_TOKEN || process.env.FRAGRANTICA === "0" || !realName.trim()) return null;
+  db().exec("CREATE TABLE IF NOT EXISTS frag_names (key TEXT PRIMARY KEY, url TEXT, label TEXT, at TEXT NOT NULL DEFAULT (datetime('now')))");
+  const key = norm(realName.replace(/\b\d{2,4}\s*ml\b/gi, " ")).replace(/\s+/g, " ").trim();
+  if (!key) return null;
+  let row = db().prepare("SELECT url, label, at FROM frag_names WHERE key = ?").get(key) as { url: string | null; label: string | null; at: string } | undefined;
+  // não achado: tenta de novo só depois de 3 dias
+  if (row && !row.url && Date.now() - new Date(row.at.replace(" ", "T") + "Z").getTime() < 3 * 86400e3) return null;
+  if (!row?.url) {
+    await refreshTier().catch(() => {});
+    if (overDailyBudget()) return null;
+    const okWithListing = (h: Hit) => !opts.listing || sameListing(opts.listing, `${h.brand} ${h.name}`).ok;
+    const tryHits = (hits: Hit[]) => {
+      const h = pick(realName, hits);
+      return h && okWithListing(h) ? h : null;
+    };
+    let h: Hit | null = null;
+    const full = realName.replace(/\s+/g, " ").trim();
+    const short = core(realName).join(" ");
+    try {
+      h = tryHits(await search(full, opts.productId));
+      if (!h && short && short !== norm(full)) h = tryHits(await search(short, opts.productId));
+      if (!h) h = tryHits(await searchGoogle(realName, opts.productId));
+    } catch (e) {
+      log("warn", `Fragrantica (nome real "${realName.slice(0, 60)}"): ${(e as Error).message}`);
+      return null;
+    }
+    db().prepare("INSERT OR REPLACE INTO frag_names (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, h?.url ?? null, h ? `${h.brand} ${h.name}` : null);
+    log("info", h ? `Fragrantica (nome real): "${realName.slice(0, 70)}" → ${h.brand} ${h.name}` : `Fragrantica (nome real): não achei com certeza "${realName.slice(0, 70)}"`);
+    if (!h) return null;
+    row = { url: h.url, label: `${h.brand} ${h.name}`, at: "" };
+  }
+  const url = row.url!;
+  // fotos da página (já lidas por outro post ou perfume: não paga de novo)
+  if (!db().prepare("SELECT 1 FROM frag_photos WHERE frag_url = ?").get(url)) {
+    fragNow().urls.add(url);
+    try {
+      await tracked("frag_photos", { productId: opts.productId, label: row.label || url }, () => fetchFragramRaw(url), (n) => ({ items: 1, result: `${n} foto(s)` }));
+    } catch (e) {
+      log("warn", `Fragram (nome real): ${(e as Error).message}`);
+    } finally {
+      fragNow().urls.delete(url);
+    }
+  }
+  // fotos dos usuários (1200px) primeiro; as oficiais (580px) se não tiver
+  const photos = (db().prepare("SELECT url FROM frag_photos WHERE frag_url = ? ORDER BY (url LIKE '%/photogram/%') DESC, id").all(url) as { url: string }[]).slice(0, 6);
+  const sharp = (await import("sharp")).default;
+  for (const p of photos) {
+    try {
+      const r = await fetch(p.url, { headers: { "user-agent": "Mozilla/5.0", accept: "image/*" }, signal: AbortSignal.timeout(15000) });
+      if (!r.ok) continue;
+      const buf = Buffer.from(await r.arrayBuffer());
+      const m = await sharp(buf).metadata();
+      if (Math.min(m.width || 0, m.height || 0) < 500) continue;
+      return { buf, fragUrl: url, label: row.label || url };
+    } catch {
+      /* próxima */
+    }
+  }
+  return null;
 }
