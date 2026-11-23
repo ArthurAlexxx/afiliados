@@ -51,6 +51,14 @@ Cada perfume tem um **preço real**: a mediana do "POR" que os grupos postam nos
 `POST /api/vendas` com cabeçalho `x-api-key` (`VENDAS_TOKEN` ou o token do webhook) e corpo `{ "tipo": "mais_vendidos" | "em_alta", "dados": <resposta da API do RadarHub> }`.
 Se o RadarHub estiver acessível pela internet, configure `RADARHUB_URL`, `RADARHUB_TOKEN` e `RADARHUB_CATEGORIAS` e o painel puxa a cada 6h.
 
+## Landing page do anúncio (/grupo)
+
+Página pública para onde os anúncios do Meta mandam as pessoas. Segue o padrão visual da Supercopa dos Streamers (fundo escuro, títulos em Epic Pro, rótulos em Roboto Mono, lima `#b6ff1a`).
+
+- A vitrine mostra os últimos posts que saíram no grupo (7 dias), com foto, DE/POR e há quanto tempo. Banco vazio: mostra os posts do teste de 17 e 18/11.
+- O botão passa por `/grupo/entrar`, que conta o clique e redireciona para o **link de convite** em Configurações → Página do anúncio (ou `GROUP_INVITE_URL`). Grupo lotou: troque só o link, os anúncios continuam iguais.
+- **Pixel do Meta** opcional (Configurações ou `META_PIXEL_ID`): PageView ao abrir, Lead no clique do botão.
+
 ## Rodando no seu computador
 
 Requisitos: **Node.js 22.13+** (usa o SQLite embutido do Node, sem instalar banco).

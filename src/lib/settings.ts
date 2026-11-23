@@ -59,6 +59,12 @@ export type Settings = {
   brandName: string; // vazio = nome do grupo de destino
   brandInstagram: string;
 
+  // Landing page do anúncio (/grupo)
+  /** link de convite do grupo; o botão da página passa por /grupo/entrar e cai aqui */
+  groupInviteUrl: string;
+  /** Pixel do Meta (só o número). Vazio = página sem pixel. */
+  metaPixelId: string;
+
   // IA opcional
   aiEnabled: boolean;
   anthropicApiKey: string;
@@ -129,6 +135,9 @@ export function defaults(): Settings {
     brandEnabled: true,
     brandName: env.BRAND_NAME || "",
     brandInstagram: env.BRAND_INSTAGRAM || "",
+
+    groupInviteUrl: env.GROUP_INVITE_URL || "",
+    metaPixelId: env.META_PIXEL_ID || "",
 
     aiEnabled: false,
     anthropicApiKey: env.ANTHROPIC_API_KEY || "",

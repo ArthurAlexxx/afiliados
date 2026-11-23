@@ -2,11 +2,15 @@ import { NextResponse, type NextRequest } from "next/server";
 import { isValidSession, SESSION_COOKIE } from "@/lib/auth";
 
 // Rotas públicas: login e o webhook (protegido pelo WEBHOOK_TOKEN).
-const PUBLIC = ["/manifest.webmanifest", "/sw.js", "/icons/", "/login", "/api/auth/login", "/api/webhook", "/api/health", "/api/fragram"];
+const PUBLIC = ["/manifest.webmanifest", "/sw.js", "/icons/", "/lp/", "/login", "/api/auth/login", "/api/webhook", "/api/health", "/api/fragram"];
+
+// Landing page do anúncio: /grupo e o que mora embaixo dela (/grupo/entrar, /grupo/foto/123).
+// Comparação exata, não startsWith("/grupo"): isso abriria também /grupos, que é do painel.
+const isLanding = (p: string) => p === "/grupo" || p.startsWith("/grupo/");
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (PUBLIC.some((p) => pathname.startsWith(p))) return NextResponse.next();
+  if (isLanding(pathname) || PUBLIC.some((p) => pathname.startsWith(p))) return NextResponse.next();
   const ok = await isValidSession(req.cookies.get(SESSION_COOKIE)?.value);
   if (ok) return NextResponse.next();
   if (pathname.startsWith("/api/")) return NextResponse.json({ error: "não autorizado" }, { status: 401 });

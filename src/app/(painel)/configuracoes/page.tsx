@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { toast } from "sonner";
-import { Save, Plug, Webhook, Copy, ShoppingBag, Link2, ShieldCheck, Sparkles, Info } from "lucide-react";
+import { Save, Plug, Webhook, Copy, ShoppingBag, Link2, ShieldCheck, Sparkles, Info, Megaphone } from "lucide-react";
 import { PageHeader } from "@/components/app-shell";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -165,6 +165,18 @@ export default function ConfigPage() {
               </Field>
             </>
           )}
+        </Section>
+
+        <Section icon={Megaphone} title="Página do anúncio" description="A landing page pública em /grupo, para onde o anúncio do Meta manda as pessoas.">
+          <Field label="Link de convite do grupo" className="sm:col-span-2" hint="O botão da página passa por /grupo/entrar e cai aqui. Grupo lotou? Troque só este link.">
+            <Input placeholder="https://chat.whatsapp.com/..." value={str("groupInviteUrl")} onChange={(e) => set("groupInviteUrl")(e.target.value)} />
+          </Field>
+          <Field label="Pixel do Meta (opcional)" hint="Só o número. Marca a visita (PageView) e o clique no botão (Lead).">
+            <Input inputMode="numeric" placeholder="123456789012345" value={str("metaPixelId")} onChange={(e) => set("metaPixelId")(e.target.value.replace(/\D/g, ""))} />
+          </Field>
+          <Field label="Ver a página">
+            <a href="/grupo" target="_blank" rel="noreferrer" className="inline-flex h-9 items-center text-[13px] font-medium text-accent hover:underline">Abrir /grupo ↗</a>
+          </Field>
         </Section>
 
         <Section icon={Link2} title="Encurtador" description="Usado na estratégia de parâmetros. O gerador oficial já devolve o link curto.">
