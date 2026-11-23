@@ -3,7 +3,7 @@ import path from "node:path";
 import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
-import { manchete, parsePromo, renderTemplate, formatPrice } from "./parser.ts";
+import { manchete, parsePromo, renderTemplate, formatPrice, withSourceNotes } from "./parser.ts";
 import { FLANKERS, nameQuality, norm, notPerfume, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { autoPhotoScore, featuresOf, type PhotoRow } from "./photoprefs.ts";
@@ -800,6 +800,8 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     await ensureFragData(item.productId);
   const rendered = renderTemplate(s.template, data);
   let formatted = withFragProfile(SOURCE_TITLE ? rendered : withFragTitle(rendered, item.productId, data.titulo), item.productId);
+  // condições da fonte (cupom de valor, vendedor, horário): sem elas o preço não bate no ML
+  formatted = withSourceNotes(formatted, item.best.text, data.cupom);
   // grupo de ofertas boas: linha com o preço normal, antes do link
   if (opts.extraLine) formatted = withLineBeforeLink(formatted, opts.extraLine);
 

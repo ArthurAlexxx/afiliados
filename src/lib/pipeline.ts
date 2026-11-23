@@ -4,7 +4,7 @@ import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { convertMeliLink, type ConvertResult } from "./affiliate.ts";
-import { manchete, parsePromo, renderTemplate, type PromoData } from "./parser.ts";
+import { manchete, parsePromo, renderTemplate, withSourceNotes, type PromoData } from "./parser.ts";
 import { aiExtract } from "./ai.ts";
 import { Evolution } from "./evolution.ts";
 import { evaluateInstant, recordOffer } from "./curation.ts";
@@ -100,7 +100,7 @@ export async function buildPost(
 
   data.manchete = manchete(data);
   return {
-    formatted: renderTemplate(s.template, data),
+    formatted: withSourceNotes(renderTemplate(s.template, data), text, data.cupom),
     data,
     conversions,
     productKey: first?.productKey || null,

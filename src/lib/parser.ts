@@ -294,3 +294,33 @@ export function renderTemplate(template: string, data: Partial<PromoData>): stri
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 }
+
+
+/**
+ * Arthur (22/nov): o preço do post às vezes só vale com cupom de valor ("R$ 40 OFF", resgatar), um vendedor
+ * específico ou a partir de um horário. Essas linhas da fonte vão junto, do jeito que vieram (sem links).
+ */
+const NOTE_RE = /(cupom|resgat|selecione\s+(o|a)\s+(vendedor|loja)|vendedor\s*:|a partir d[ae]s?\s*\d|\bno pix\b|aplicad[oa] no carrinho|ative o|ativar o|desconto no carrinho|pre[çc]o (cai|vai cair) no|leve \d|compre \d)/i;
+export function sourceNotes(text: string, cupom = ""): string[] {
+  const out: string[] = [];
+  for (const raw of text.split(/\r?\n/)) {
+    const l = raw.replace(/\bhttps?:\/\/\S+/gi, "").trim();
+    if (!l || !NOTE_RE.test(l)) continue;
+    // o cupom com código já aparece na linha do cupom do modelo
+    if (cupom && l.toUpperCase().includes(cupom.toUpperCase()) && !/resgat|a partir/i.test(l)) continue;
+    if (l.length > 160) continue;
+    if (!out.includes(l)) out.push(l);
+  }
+  return out.slice(0, 3);
+}
+
+/** Põe as linhas de condição da fonte antes do link. */
+export function withSourceNotes(formatted: string, text: string, cupom = ""): string {
+  const notes = sourceNotes(text, cupom).filter((n) => !formatted.includes(n));
+  if (!notes.length) return formatted;
+  const all = formatted.split("\n");
+  const at = all.findIndex((l) => /LINK DO PRODUTO|https?:\/\//i.test(l));
+  if (at < 0) return `${formatted.trimEnd()}\n\n${notes.join("\n")}`;
+  all.splice(at, 0, ...notes, "");
+  return all.join("\n");
+}
