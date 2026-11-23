@@ -802,22 +802,16 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     log("info", `Foto: "${realName.slice(0, 70)}"${listing ? ` / anúncio "${listing.slice(0, 60)}"` : ""} não bate com o perfume do banco "${item.name}" — procurando pelo nome real`);
     bankPath = null;
   }
-  // sem foto do banco: Google Imagens (foto de loja, sem marca d'água, grande) e, se não achar, Fragrantica
-  // (a foto automática do banco vem dos grupos: perde para a foto de loja do Google; a escolhida por você, não)
+  // Arthur (23/nov): sem Apify. Foto oficial direto do catálogo das lojas (grande, fundo branco, sem marca d'água);
+  // ganha da foto automática do banco (que vem dos grupos), mas não da que você escolheu
   let fragPhoto: { buf: Buffer; label: string } | null = null;
   const chosen = bankPath && bankPath === chosenImagePath(item.productId);
   if (!chosen && built.status !== "skipped" && built.status !== "duplicate") {
-    const { overDailyBudget } = await import("./apify.ts");
-    if (!overDailyBudget()) {
-      const { googlePhoto } = await import("./googleimages.ts");
-      const g = await googlePhoto(realName, { productId: item.productId, listing }).catch((e) => (log("warn", `Google Imagens: ${(e as Error).message}`), null));
-      if (g) (fragPhoto = { buf: g.buf, label: `google ${g.label}` }), (bankPath = null);
-    }
-    if (!fragPhoto && !bankPath) {
-      const { photoByRealName } = await import("./fragrantica.ts");
-      const f = await photoByRealName(realName, { productId: item.productId, listing }).catch((e) => (log("warn", `Foto pelo nome real: ${(e as Error).message}`), null));
-      if (f) fragPhoto = { buf: f.buf, label: `fragrantica ${f.label}` };
-    }
+    const { storePhoto } = await import("./lojas.ts");
+    // só entra no banco do perfume se o perfume do banco for mesmo o do post
+    const sameProduct = sameListing(realName, item.name).ok;
+    const sp = await storePhoto(realName, { productId: sameProduct ? item.productId : undefined, listing }).catch((e) => (log("warn", `Lojas: ${(e as Error).message}`), null));
+    if (sp) (fragPhoto = { buf: sp.buf, label: `loja ${sp.label}` }), (bankPath = null);
   }
   const discount = item.declaredPct && item.declaredPct > 0 ? item.declaredPct : item.pctVsMedian && item.pctVsMedian > 0.05 ? Math.round(item.pctVsMedian * 100) : null;
   const data = {
