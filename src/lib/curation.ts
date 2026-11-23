@@ -4,7 +4,7 @@ import { db, log, MEDIA_DIR } from "./db.ts";
 import { getSettings, getState, setState, type Settings } from "./settings.ts";
 import { extractUrls, isMeliUrl, UA } from "./links.ts";
 import { manchete, parsePromo, renderTemplate, formatPrice, withSourceNotes } from "./parser.ts";
-import { FLANKERS, nameQuality, norm, notPerfume, perfumeInfo, perfumeOrigin, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
+import { FLANKERS, nameQuality, norm, notPerfume, perfumeInfo, perfumeOrigin, sameListing, samePerfume, type Origin, type PerfumeInfo } from "./perfume.ts";
 import { analyzeImage, hammingHex, toJpeg } from "./images.ts";
 import { autoPhotoScore, featuresOf, type PhotoRow } from "./photoprefs.ts";
 import { brandImage, standardImage } from "./branding.ts";
@@ -781,9 +781,25 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
   adoptKnown(item.productId);
   // Arthur (17/nov): só posta direto com a foto que ele escolheu; sem foto escolhida, vai para "esperando foto"
   // automático: a foto escolhida, senão a melhor do banco pelo gosto aprendido, senão a foto do anúncio do ML
-  const bankPath = chosenImagePath(item.productId) || (WAIT_FOR_PHOTO ? null : bestImagePath(item.productId));
-  const built = await buildPost(item.best.text, s, { groupName: item.best.group_name, wantImage: !bankPath });
+  let bankPath = chosenImagePath(item.productId) || (WAIT_FOR_PHOTO ? null : bestImagePath(item.productId));
+  // sempre lê o anúncio do ML (nome e foto) para conferir se o link é mesmo desse perfume
+  const built = await buildPost(item.best.text, s, { groupName: item.best.group_name, wantImage: true });
   const parsed = parsePromo(item.best.text);
+  // Arthur (23/nov): "colocamos uma imagem e, no link, é outro perfume"
+  const listing = (built.conversions.find((c) => c.ok)?.title || "").replace(/\s*\|\s*Mercado\s*Livre.*$/i, "").trim();
+  if (listing) {
+    const vsProduct = sameListing(listing, item.name);
+    if (!vsProduct.ok) {
+      const vsSource = sameListing(listing, parsed.titulo || item.name);
+      // a foto do banco é do perfume que achamos, não do anúncio: usa a foto do próprio anúncio
+      if (bankPath) log("info", `Foto: anúncio "${listing.slice(0, 70)}" não bate com "${item.name}" — usei a foto do anúncio`);
+      bankPath = null;
+      if (vsProduct.score === 0 && vsSource.score === 0) {
+        built.status = "skipped";
+        built.reason = `o link leva a outro perfume no ML ("${listing.slice(0, 80)}")`;
+      }
+    }
+  }
   const discount = item.declaredPct && item.declaredPct > 0 ? item.declaredPct : item.pctVsMedian && item.pctVsMedian > 0.05 ? Math.round(item.pctVsMedian * 100) : null;
   const data = {
     ...built.data,

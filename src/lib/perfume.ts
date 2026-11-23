@@ -294,3 +294,31 @@ export function notPerfume(text: string): string | null {
   );
   return m ? m[0] : null;
 }
+
+
+/**
+ * Arthur (23/nov): a foto do banco às vezes é de outro perfume que o do link. Confere se o nome do anúncio do ML
+ * bate com o nome do perfume: as palavras que identificam (tirando marca genérica, "perfume", "edp", "masculino"...)
+ * precisam aparecer no anúncio, e o tamanho em ml, quando os dois têm, precisa ser igual.
+ */
+const GENERIC = new Set(
+  "perfume perfumes parfum eau de du la le el the for pour homme femme men women man woman masculino feminino unissex unisex edp edt edc extrait toilette cologne colonia colônia deo desodorante spray original importado importada lacrado lacrada novo nova ml com sem e da do das dos".split(" "),
+);
+const words = (t: string) =>
+  norm(t)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w.length >= 3 && !GENERIC.has(w) && !/^\d+$/.test(w) && !/^\d+ml$/.test(w));
+const mlOf = (t: string) => Number(norm(t).match(/(\d{2,4})\s*ml\b/)?.[1] || 0);
+
+export function sameListing(listingTitle: string, name: string): { ok: boolean; score: number } {
+  const want = [...new Set(words(name))];
+  if (!want.length || !listingTitle) return { ok: true, score: 1 };
+  const have = new Set(words(listingTitle));
+  const has = (w: string) => have.has(w) || [...have].some((h) => h.length >= 4 && w.length >= 4 && (h.startsWith(w) || w.startsWith(h)));
+  // a 1ª palavra costuma ser a marca: o que decide é o nome do perfume
+  const rest = want.length > 1 ? want.slice(1) : want;
+  const score = rest.filter(has).length / rest.length;
+  const a = mlOf(listingTitle), b = mlOf(name);
+  const sizeOk = !a || !b || a === b;
+  return { ok: sizeOk && score >= 0.5, score: Math.round(score * 100) / 100 };
+}
