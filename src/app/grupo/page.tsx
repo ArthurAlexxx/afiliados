@@ -4,6 +4,7 @@ import { getSettings } from "@/lib/settings";
 import { db } from "@/lib/db";
 import { GrupoPixel } from "./grupo-pixel";
 import { GrupoFixo } from "./grupo-fixo";
+import { GrupoCarrossel } from "./grupo-carrossel";
 import "./grupo.css";
 
 /* LANDING PAGE DO ANÚNCIO — /grupo
@@ -146,6 +147,13 @@ function Balao({ o, eager = false }: { o: Oferta; eager?: boolean }) {
   );
 }
 
+/** Foto real de um perfume que saiu no grupo, ao lado do título do card. */
+function Miniatura({ o }: { o?: Oferta }) {
+  if (!o) return null;
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img className="lp-card__foto" src={`/grupo/foto/${o.id}`} alt="" aria-hidden="true" loading="lazy" decoding="async" />;
+}
+
 /** O post como ele chega no WhatsApp: é a peça do hero (o "você vai receber assim"). */
 function Celular({ o }: { o: Oferta }) {
   return (
@@ -166,14 +174,15 @@ function Celular({ o }: { o: Oferta }) {
 }
 
 export default async function GrupoPage() {
-  const { grupos, ofertas24h, postsHoje, ofertas } = await dadosLanding();
+  const { grupos, ofertas24h, postsHoje, ofertas, destaque } = await dadosLanding();
   const { metaPixelId } = getSettings();
   const membros = membrosDoGrupo();
 
   // O anúncio promete "mais de 200 grupos". O número real só aparece quando confirma isso.
   const gruposTxt = grupos && grupos >= 200 ? `${grupos}` : "200+";
   const maiorPct = Math.max(0, ...ofertas.map((o) => o.pct || 0));
-  const destaque = ofertas[0] ?? null; // o mais vendido no ML entre os que saíram
+  // Foto real de perfume ao lado do título de cada benefício (no lugar dos ícones).
+  const fotos = ofertas.filter((o) => o.id !== destaque?.id);
 
   return (
     <div className="lp">
@@ -218,7 +227,7 @@ export default async function GrupoPage() {
               <div className="lp-hero__vitrine">
                 <Celular o={destaque} />
                 <p className="lp-hero__legenda" aria-hidden="true">
-                  ↑ post real do grupo, do jeito que chega
+                  ↑ post real do grupo{/club\s*de\s*nuit/i.test(destaque.nome) ? ", o mesmo perfume do anúncio" : ", do jeito que chega"}
                 </p>
               </div>
             ) : null}
@@ -249,15 +258,15 @@ export default async function GrupoPage() {
                 os que mais vendem no ML primeiro (RadarHub). */}
             <section className="lp-sec" id="conteudo">
               <div className="lp-wrap">
-                <Eyebrow nome="Vitrine" label="Posts reais do grupo" />
+                <Eyebrow nome="Vitrine" label="Melhores do dia" />
                 <div className="lp-head">
                   <h2>Olha o que saiu no grupo</h2>
                   <p>
-                    Os perfumes que mais vendem no Mercado Livre, do jeito que chegaram no WhatsApp, com o preço daquele
-                    momento. Promoção acaba rápido: quem está no grupo vê primeiro.
+                    As melhores promoções do dia, do jeito que chegaram no WhatsApp. Primeiro as que mais vendem no Mercado
+                    Livre. Promoção acaba rápido: quem está no grupo vê primeiro.
                   </p>
                 </div>
-                <ul className="lp-chat">
+                <GrupoCarrossel>
                   {ofertas.map((o) => (
                     <li className="lp-chat__item" key={o.id}>
                       <p className="lp-chat__meta">
@@ -267,7 +276,7 @@ export default async function GrupoPage() {
                       <Balao o={o} />
                     </li>
                   ))}
-                </ul>
+                </GrupoCarrossel>
                 <div className="lp-centro">
                   <BotaoEntrar>Quero receber as próximas</BotaoEntrar>
                 </div>
@@ -286,21 +295,27 @@ export default async function GrupoPage() {
             </div>
             <ol className="lp-passos">
               <li className="lp-card">
-                <span className="lp-card__n">01</span>
-                <h3>Vigia {gruposTxt} grupos</h3>
+                <div className="lp-card__topo">
+                  <span className="lp-card__n">01</span>
+                  <h3>Vigia {gruposTxt} grupos</h3>
+                </div>
                 <p>Lê cada promoção de perfume que cai nos maiores grupos de oferta do Brasil, 24 horas por dia.</p>
               </li>
               <li className="lp-card">
-                <span className="lp-card__n">02</span>
-                <h3>Compara e fica com o menor</h3>
+                <div className="lp-card__topo">
+                  <span className="lp-card__n">02</span>
+                  <h3>Compara e fica com o menor</h3>
+                </div>
                 <p>
                   O mesmo perfume saiu em 10 grupos? Ele compara e fica só com o <b>menor preço</b>. Desconto de mentira, com o
                   &quot;DE&quot; inflado, fica de fora.
                 </p>
               </li>
               <li className="lp-card">
-                <span className="lp-card__n">03</span>
-                <h3>Chega no seu WhatsApp</h3>
+                <div className="lp-card__topo">
+                  <span className="lp-card__n">03</span>
+                  <h3>Chega no seu WhatsApp</h3>
+                </div>
                 <p>Com foto, o DE e o POR, e o link oficial do Mercado Livre. É tocar e comprar.</p>
               </li>
             </ol>
@@ -317,31 +332,31 @@ export default async function GrupoPage() {
             </div>
             <ul className="lp-beneficios">
               <li className="lp-card">
-                <span className="lp-card__ico" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M3 17l6-6 4 4 8-8" /><path d="M14 7h7v7" /></svg>
-                </span>
-                <h3>Menor preço de todos os grupos</h3>
+                <div className="lp-card__topo">
+                  <Miniatura o={fotos[0]} />
+                  <h3>Menor preço de todos os grupos</h3>
+                </div>
                 <p>Não é a promoção de uma loja: é a melhor entre todas as que apareceram.</p>
               </li>
               <li className="lp-card">
-                <span className="lp-card__ico" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z" /><path d="M8.5 12l2.5 2.5 4.5-5" /></svg>
-                </span>
-                <h3>Link do Mercado Livre</h3>
+                <div className="lp-card__topo">
+                  <Miniatura o={fotos[1]} />
+                  <h3>Link do Mercado Livre</h3>
+                </div>
                 <p>A compra é no Mercado Livre, com Compra Garantida: não chegou ou veio errado, o dinheiro volta.</p>
               </li>
               <li className="lp-card">
-                <span className="lp-card__ico" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><circle cx="12" cy="9" r="5" /><path d="M8.5 13 7 21l5-2.5L17 21l-1.5-8" /></svg>
-                </span>
-                <h3>Original, vendedor verificado</h3>
+                <div className="lp-card__topo">
+                  <Miniatura o={fotos[2]} />
+                  <h3>Original, vendedor verificado</h3>
+                </div>
                 <p>Só loja oficial ou vendedor com reputação alta. Contratipo e réplica ficam de fora.</p>
               </li>
               <li className="lp-card">
-                <span className="lp-card__ico" aria-hidden="true">
-                  <svg viewBox="0 0 24 24"><path d="M4 5h16v11H8l-4 4V5z" /><path d="M9 10.5h6" /></svg>
-                </span>
-                <h3>Sem spam</h3>
+                <div className="lp-card__topo">
+                  <Miniatura o={fotos[3]} />
+                  <h3>Sem spam</h3>
+                </div>
                 <p>Só os admins postam, e só promoção de perfume. Nada de corrente nem conversa.</p>
               </li>
             </ul>

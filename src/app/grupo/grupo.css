@@ -236,20 +236,35 @@ body:has(.lp){background:#0d0f12}
 .lp-head p{margin-top:.7rem;font-family:var(--ff-m);color:var(--mist);font-size:.85rem;line-height:1.65}
 .lp-centro{display:flex;justify-content:center;margin-top:3rem}
 
-/* ---------- Vitrine: posts reais como chat ----------
-   Colunas (masonry) e não grade: cada post tem a altura da foto e do texto
-   dele, e numa grade as linhas ficariam com buracos. */
+/* ---------- Vitrine: carrossel de posts reais ----------
+   Rola pro lado (regra da Supercopa: "role pro lado, não empilhe"). Cada
+   post tem a largura fixa de um balão de WhatsApp e a altura dele mesmo;
+   align-items:start pra um post curto não esticar até o mais alto. */
+.lp-carrossel{position:relative}
 .lp-chat{
-  columns:3 300px;column-gap:1.4rem;padding:1.6rem 1.4rem .4rem 1.9rem;border-radius:var(--r-lg);
-  border:1px solid var(--line);
+  display:flex;align-items:flex-start;gap:1.25rem;overflow-x:auto;scroll-snap-type:x mandatory;
+  padding:1.6rem 1.4rem 1.4rem 1.9rem;border-radius:var(--r-lg);border:1px solid var(--line);
   background:#0b141a radial-gradient(circle at 1px 1px,rgba(255,255,255,.04) 1px,transparent 0) 0 0/14px 14px;
+  scrollbar-width:thin;scrollbar-color:var(--line-2) transparent;overscroll-behavior-x:contain;
 }
-.lp-chat__item{break-inside:avoid;margin-bottom:1.6rem}
+.lp-chat__item{flex:none;width:300px;scroll-snap-align:start;scroll-margin-left:1.9rem}
 .lp-chat__meta{
-  display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .7rem;margin-bottom:.55rem;
+  display:flex;flex-wrap:wrap;align-items:center;gap:.4rem .7rem;margin-bottom:.55rem;min-height:1.4rem;
   font-family:var(--ff-m);font-size:.62rem;letter-spacing:.1em;text-transform:uppercase;color:var(--mist-dim);
 }
 .lp-chat__selo{padding:.2rem .5rem;border-radius:var(--r-pill);background:rgba(182,255,26,.12);border:1px solid rgba(182,255,26,.35);color:var(--lima-3)}
+/* card mais "clean": foto com altura fixa contida e texto um pouco menor */
+.lp-chat .lp-wa__foto{height:240px;max-height:none;object-fit:contain}
+.lp-chat .lp-wa__texto{font-size:.8rem;line-height:1.38}
+
+.lp-carrossel__setas{display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem}
+.lp-carrossel__seta{
+  width:44px;height:44px;border-radius:50%;border:1px solid var(--line-2);background:var(--ink-2);color:var(--white);
+  font-family:var(--ff-m);font-size:1rem;cursor:pointer;transition:border-color .18s,background .18s;
+}
+.lp-carrossel__seta:hover:not(:disabled){border-color:var(--lima);background:rgba(182,255,26,.08)}
+.lp-carrossel__seta:disabled{opacity:.35;cursor:default}
+.lp-carrossel__seta:focus-visible{outline:2px solid var(--lima);outline-offset:2px}
 
 /* ---------- Cards de passo e de benefício (família .formato-card) ---------- */
 .lp-passos{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1.1rem}
@@ -269,7 +284,14 @@ body:has(.lp){background:#0d0f12}
   background:linear-gradient(135deg,rgba(182,255,26,.2),rgba(127,184,12,.06));border:1px solid rgba(182,255,26,.35);color:var(--lima-3);
 }
 .lp-card__ico svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
-.lp-card h3{font-family:var(--ff-d);font-weight:400;font-size:1.12rem;line-height:1.2;margin-bottom:.55rem}
+.lp-card h3{font-family:var(--ff-d);font-weight:400;font-size:1.12rem;line-height:1.2}
+/* Número (passos) ou foto real (benefícios) NA MESMA LINHA do título. */
+.lp-card__topo{display:flex;align-items:center;gap:.85rem;margin-bottom:.85rem}
+.lp-card__topo .lp-card__n{margin-bottom:0;flex:none}
+.lp-card__foto{
+  width:52px;height:52px;flex:none;border-radius:12px;object-fit:cover;background:var(--ink-3);
+  border:1px solid rgba(182,255,26,.35);
+}
 .lp-card h3::first-letter{font-size:1.3em}
 .lp-card p{font-family:var(--ff-m);font-size:.78rem;line-height:1.65;color:var(--mist)}
 .lp-card p b{color:var(--white)}
@@ -337,7 +359,9 @@ body:has(.lp){background:#0d0f12}
   .lp-celular{transform:none}
 }
 @media (max-width:640px){
-  .lp-chat{padding:1.2rem .8rem .2rem 1.2rem;margin-inline:-.4rem}
+  .lp-chat{padding:1.2rem 1rem 1rem 1.3rem;margin-inline:-1rem;border-radius:0;border-inline:0}
+  .lp-chat__item{width:min(280px,78vw);scroll-margin-left:1.3rem}
+  .lp-carrossel__setas{display:none}
   .lp-hero{padding-block:2.6rem 3rem}
   .lp-hero__status{margin-bottom:1.8rem;font-size:.6rem}
   .lp-hero__frase{margin-top:1.4rem;font-size:.84rem;line-height:1.65}
