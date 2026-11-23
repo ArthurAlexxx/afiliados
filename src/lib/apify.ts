@@ -19,7 +19,8 @@ export function checkApify() {
 /** Chame com a resposta que não deu ok. Se for falta de saldo, pausa o Apify por 1h. */
 export async function apifyFail(what: string, r: Response): Promise<Error> {
   const body = (await r.text().catch(() => "")).replace(/\s+/g, " ");
-  if ((r.status === 402 || r.status === 403) && /usage|actor-disabled|limit|plan/i.test(body)) {
+  // muitas execuções ao mesmo tempo (o plano deixa 5) não é falta de saldo: não pausa
+  if ((r.status === 402 || r.status === 403) && /usage|actor-disabled|limit|plan/i.test(body) && !/concurren|memory|parallel/i.test(body)) {
     const first = !apifyOff();
     P.until = Date.now() + 60 * 60 * 1000;
     P.reason = "Apify sem saldo neste mês: busca no Fragrantica pausada";
@@ -73,7 +74,7 @@ export function estimateCost(kind: CallKind, items: number): number {
     case "pinterest":
       return 0.00005 + items * p.pin;
     case "google_images":
-      return 0.00005 + items * (tier === "FREE" ? 0.0035 : tier === "BRONZE" ? 0.0029 : tier === "SILVER" ? 0.0024 : 0.0019);
+      return 0.00002 + items * 0.00011;
   }
 }
 

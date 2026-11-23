@@ -1,6 +1,6 @@
 /**
  * Arthur (23/nov): "buscar imagens boas no Fragrantica ou no Google, sem marca d'água e com qualidade boa".
- * Google Imagens pelo Apify (hooli/google-images-scraper, robô oficial do Apify, ~US$ 0,0035 por imagem).
+ * Google Imagens pelo Apify (johnvc/google-images-api, US$ 0,0001 por imagem: ~US$ 0,005 por busca de 50 imagens).
  * Fica só com foto de loja (Amazon, Sephora, ML, sites de perfume e das marcas), nunca de rede social ou grupo
  * (é onde vem marca d'água), cujo título da página é do mesmo perfume, grande (≥ 700px) e de preferência
  * em fundo branco (foto de produto).
@@ -10,8 +10,8 @@ import { db, log } from "./db.ts";
 import { apifyFail, checkApify, tracked } from "./apify.ts";
 import { norm, sameListing } from "./perfume.ts";
 
-const ACTOR = "hooli~google-images-scraper";
-type Item = { imageUrl?: string; imageWidth?: number; imageHeight?: number; origin?: string; contentUrl?: string; title?: string };
+const ACTOR = "johnvc~google-images-api";
+type Item = { imageUrl?: string; imageWidth?: number; imageHeight?: number; domain?: string; link?: string; title?: string };
 
 // redes sociais, bancos de imagem e agregadores: marca d'água, foto de pessoa, montagem
 const BLOCK = /(instagram|facebook|fbcdn|pinterest|pinimg|tiktok|youtube|ytimg|twitter|x\.com|threads|whatsapp|telegram|kwai|reddit|tumblr|shutterstock|istockphoto|gettyimages|dreamstime|alamy|depositphotos|freepik|123rf|vecteezy|canva|wallpaper|aliexpress|shopee|temu|olx|enjoei|promo|cupom|ofertas?|achadinhos|radar)/i;
@@ -53,10 +53,10 @@ async function runSearch(q: string, productId?: number): Promise<Item[]> {
     "google_images",
     { productId, label: q },
     async () => {
-      const r = await fetch(`https://api.apify.com/v2/acts/${ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=90&memory=1024`, {
+      const r = await fetch(`https://api.apify.com/v2/acts/${ACTOR}/run-sync-get-dataset-items?token=${token}&timeout=90&memory=256`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ queries: [q], maxResultsPerQuery: 12 }),
+        body: JSON.stringify({ queries: [q], maxResultsPerQuery: 30, gl: "br", hl: "pt-br" }),
         signal: AbortSignal.timeout(110_000),
       });
       if (!r.ok) throw await apifyFail("Google Imagens (Apify)", r);
@@ -86,12 +86,12 @@ export async function googlePhoto(realName: string, opts: { productId?: number; 
     return null;
   }
   const cands = items
-    .filter((i) => i.imageUrl && !BLOCK.test(`${i.origin || ""} ${i.contentUrl || ""} ${i.imageUrl}`))
+    .filter((i) => i.imageUrl && !BLOCK.test(`${i.domain || ""} ${i.link || ""} ${i.imageUrl}`))
     // título da página tem que ser do mesmo perfume (Fakhar ≠ Fakhar Black) e, se tiver, do anúncio do ML
     .filter((i) => sameListing(i.title || "", name).ok && !extraVariant(i.title || "", name) && (!opts.listing || sameListing(i.title || "", opts.listing).score >= 0.5))
-    .map((i) => ({ ...i, url: /amazon|media-amazon/.test(i.imageUrl!) ? upsize(i.imageUrl!) : i.imageUrl!, good: GOOD.test(`${i.origin} ${i.contentUrl}`) }))
+    .map((i) => ({ ...i, url: /amazon|media-amazon/.test(i.imageUrl!) ? upsize(i.imageUrl!) : i.imageUrl!, good: GOOD.test(`${i.domain} ${i.link}`) }))
     .sort((a, b) => Number(b.good) - Number(a.good) || Math.min(b.imageWidth || 0, b.imageHeight || 0) - Math.min(a.imageWidth || 0, a.imageHeight || 0))
-    .slice(0, 6);
+    .slice(0, 8);
   let best: { buf: Buffer; url: string; label: string; score: number } | null = null;
   for (const c of cands) {
     const buf = await download(c.url);
@@ -102,7 +102,7 @@ export async function googlePhoto(realName: string, opts: { productId?: number; 
     const wb = await whiteBorder(buf).catch(() => 0);
     // fundo branco (foto de produto) pesa mais; depois loja conhecida; depois tamanho
     const score = wb * 3 + (c.good ? 1 : 0) + Math.min(side, 1500) / 1500;
-    if (!best || score > best.score) best = { buf, url: c.url, label: `${c.origin || ""}: ${(c.title || "").slice(0, 80)}`, score };
+    if (!best || score > best.score) best = { buf, url: c.url, label: `${c.domain || ""}: ${(c.title || "").slice(0, 80)}`, score };
     if (wb > 0.85 && c.good) break;
   }
   db().prepare("INSERT OR REPLACE INTO google_photos2 (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, best?.url ?? null, best?.label ?? null);
