@@ -15,10 +15,6 @@ const STORES = [
   "www.drogariaspacheco.com.br",
   "www.paguemenos.com.br",
   "www.ikesaki.com.br",
-  "www.boticario.com.br",
-  "www.eudora.com.br",
-  "www.perfumariasumire.com.br",
-  "www.belezanaweb.com.br",
   "www.amoedo.com.br",
   "www.lojasrede.com.br",
 ];
