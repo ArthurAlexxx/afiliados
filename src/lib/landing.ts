@@ -29,12 +29,19 @@ export type DadosLanding = {
   ofertas24h: number | null; // promoções vistas nas últimas 24 h
   postsHoje: number | null;
   ofertas: Oferta[];
-  /** o post do celular do topo: o Club de Nuit, o mesmo perfume do anúncio */
+  /** o post do celular do topo: o Club de Nuit Intense Man, o mesmo perfume do anúncio */
   destaque: Oferta | null;
 };
 
-/** Perfume do anúncio: é ele que aparece no celular do topo, quando já saiu no grupo. */
-const PERFUME_DO_ANUNCIO = /club\s*de\s*nuit/i;
+/**
+ * Perfume do anúncio: é ele que aparece no celular do topo, quando já saiu no grupo.
+ * O anúncio aprovado é o Club de Nuit INTENSE MAN (R$ 209,90 por R$ 163). Casar só
+ * "club de nuit" pegava o Elite Cítrico de R$ 339, que é outro perfume e saiu
+ * depois (23/11). Sem o Intense Man nos 14 dias, cai pra qualquer Club de Nuit.
+ */
+const PERFUME_DO_ANUNCIO = /club\s*de\s*nuit\s+intense\s+man/i;
+const MESMA_LINHA = /club\s*de\s*nuit/i;
+export const ehPerfumeDoAnuncio = (nome: string) => PERFUME_DO_ANUNCIO.test(nome);
 
 /** Tira a linha do cupom do texto (o Arthur pediu a vitrine sem cupom por enquanto, 23/11). */
 function semCupom(texto: string) {
@@ -136,7 +143,8 @@ export async function dadosLanding(limite = 10): Promise<DadosLanding> {
     return o;
   };
   const ofertas = await Promise.all(melhores.map(comMedidas));
-  const anuncio = candidatas.find((c) => PERFUME_DO_ANUNCIO.test(c.nome)); // candidatas vem do mais recente
+  // candidatas vem do mais recente
+  const anuncio = candidatas.find((c) => PERFUME_DO_ANUNCIO.test(c.nome)) ?? candidatas.find((c) => MESMA_LINHA.test(c.nome));
   const destaque = anuncio ? await comMedidas(anuncio) : ofertas[0] ?? null;
   return { grupos, ofertas24h, postsHoje, ofertas, destaque };
 }

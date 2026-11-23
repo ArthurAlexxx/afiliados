@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { dadosLanding, type Oferta } from "@/lib/landing";
+import { dadosLanding, ehPerfumeDoAnuncio, type Oferta } from "@/lib/landing";
 import { getSettings } from "@/lib/settings";
 import { db } from "@/lib/db";
 import { GrupoPixel } from "./grupo-pixel";
@@ -227,7 +227,7 @@ export default async function GrupoPage() {
               <div className="lp-hero__vitrine">
                 <Celular o={destaque} />
                 <p className="lp-hero__legenda" aria-hidden="true">
-                  ↑ post real do grupo{/club\s*de\s*nuit/i.test(destaque.nome) ? ", o mesmo perfume do anúncio" : ", do jeito que chega"}
+                  ↑ post real do grupo{ehPerfumeDoAnuncio(destaque.nome) ? ", o mesmo perfume do anúncio" : ", do jeito que chega"}
                 </p>
               </div>
             ) : null}
