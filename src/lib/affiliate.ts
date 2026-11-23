@@ -38,6 +38,15 @@ export async function convertMeliLink(url: string, s: Settings, opts: { wantImag
     // Links de afiliado (páginas /social/...) não trazem o ID na URL: procura no HTML.
     if (!ref || opts.wantImage) {
       html = await fetchHtml(resolved);
+      // Arthur (23/nov): a página /social/ do afiliado mostra o produto do link no 1º card e, depois, recomendações.
+      // O 1º "/p/MLB" do HTML era uma recomendação (Nautica Voyage, secador...): o post saía com o link de outro produto.
+      if (!ref && /\/social\//.test(resolved)) {
+        ref = socialItem(html);
+        if (!ref) {
+          result.error = "Página de afiliado sem o produto em destaque: não dá para saber qual é o produto do link.";
+          return result;
+        }
+      }
       if (!ref) ref = findMeliId(html);
     }
     if (!ref) {
@@ -193,4 +202,12 @@ export async function learnFromSampleLink(url: string): Promise<{ tag: string; t
     return m ? m[1] : "";
   };
   return { tag: find("matt_word"), tool: find("matt_tool"), trail };
+}
+
+/** Produto em destaque na página /social/ do afiliado: o 1º card ("polycards") traz o id do anúncio. */
+export function socialItem(html: string): { id: string; kind: "item" | "catalog" } | null {
+  // sem o produto no título da página (perfil sem destaque, página de bloqueio): não chuta
+  if (!/<meta name="title" content="[^"]+"/.test(html)) return null;
+  const m = html.match(/"polycards":\[\{[^\]]{0,400}?"metadata":\{"id":"(MLB\d{6,})"/);
+  return m ? { id: m[1], kind: "item" } : null;
 }
