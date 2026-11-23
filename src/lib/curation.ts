@@ -802,11 +802,22 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
     log("info", `Foto: "${realName.slice(0, 70)}"${listing ? ` / anúncio "${listing.slice(0, 60)}"` : ""} não bate com o perfume do banco "${item.name}" — procurando pelo nome real`);
     bankPath = null;
   }
-  // sem foto do banco: procura o nome real no Fragrantica (busca completa) e usa a foto de lá
-  let fragPhoto: { buf: Buffer; fragUrl: string; label: string } | null = null;
-  if (!bankPath && built.status !== "skipped" && built.status !== "duplicate") {
-    const { photoByRealName } = await import("./fragrantica.ts");
-    fragPhoto = await photoByRealName(realName, { productId: item.productId, listing }).catch((e) => (log("warn", `Foto pelo nome real: ${(e as Error).message}`), null));
+  // sem foto do banco: Google Imagens (foto de loja, sem marca d'água, grande) e, se não achar, Fragrantica
+  // (a foto automática do banco vem dos grupos: perde para a foto de loja do Google; a escolhida por você, não)
+  let fragPhoto: { buf: Buffer; label: string } | null = null;
+  const chosen = bankPath && bankPath === chosenImagePath(item.productId);
+  if (!chosen && built.status !== "skipped" && built.status !== "duplicate") {
+    const { overDailyBudget } = await import("./apify.ts");
+    if (!overDailyBudget()) {
+      const { googlePhoto } = await import("./googleimages.ts");
+      const g = await googlePhoto(realName, { productId: item.productId, listing }).catch((e) => (log("warn", `Google Imagens: ${(e as Error).message}`), null));
+      if (g) (fragPhoto = { buf: g.buf, label: `google ${g.label}` }), (bankPath = null);
+    }
+    if (!fragPhoto && !bankPath) {
+      const { photoByRealName } = await import("./fragrantica.ts");
+      const f = await photoByRealName(realName, { productId: item.productId, listing }).catch((e) => (log("warn", `Foto pelo nome real: ${(e as Error).message}`), null));
+      if (f) fragPhoto = { buf: f.buf, label: `fragrantica ${f.label}` };
+    }
   }
   const discount = item.declaredPct && item.declaredPct > 0 ? item.declaredPct : item.pctVsMedian && item.pctVsMedian > 0.05 ? Math.round(item.pctVsMedian * 100) : null;
   const data = {
@@ -892,7 +903,7 @@ export async function createCuratedPost(item: RankItem, s: Settings = getSetting
         conversions: built.conversions,
         curation: {
           score: item.score, groups: item.groups, posts: item.posts, bestPrice: item.bestPrice,
-          medianPrice: item.medianPrice, discount, origin: item.origin, real: item.real, image: bankPath ? "banco" : fragPhoto && mediaPath ? `fragrantica: ${fragPhoto.label}` : mediaPath ? "anúncio" : "sem foto", realName,
+          medianPrice: item.medianPrice, discount, origin: item.origin, real: item.real, image: bankPath ? "banco" : fragPhoto && mediaPath ? fragPhoto.label : mediaPath ? "anúncio" : "sem foto", realName,
         },
         agent: decision,
       }),

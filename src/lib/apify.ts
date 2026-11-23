@@ -33,7 +33,7 @@ export async function apifyFail(what: string, r: Response): Promise<Error> {
  * Registro de cada puxada paga (página Scraping): tipo, perfume, itens, custo estimado, tempo e resultado.
  * O custo segue a tabela de preço de cada robô no Apify, conforme o plano da conta (FREE, BRONZE...).
  */
-export type CallKind = "frag_search" | "frag_google" | "frag_details" | "frag_photos" | "pinterest";
+export type CallKind = "frag_search" | "frag_google" | "frag_details" | "frag_photos" | "pinterest" | "google_images";
 
 export const KIND_LABEL: Record<CallKind, string> = {
   frag_search: "Busca do nome (Fragrantica)",
@@ -41,6 +41,7 @@ export const KIND_LABEL: Record<CallKind, string> = {
   frag_details: "Ficha do perfume (notas, acordes)",
   frag_photos: "Fotos do Fragrantica (página)",
   pinterest: "Pinterest (desligado)",
+  google_images: "Fotos do Google Imagens",
 };
 
 // preços dos robôs (US$), por nível do plano. FREE e BRONZE (Starter) são os que importam aqui.
@@ -71,6 +72,8 @@ export function estimateCost(kind: CallKind, items: number): number {
       return 0.00005 + p.fetch;
     case "pinterest":
       return 0.00005 + items * p.pin;
+    case "google_images":
+      return 0.00005 + items * (tier === "FREE" ? 0.0035 : tier === "BRONZE" ? 0.0029 : tier === "SILVER" ? 0.0024 : 0.0019);
   }
 }
 
