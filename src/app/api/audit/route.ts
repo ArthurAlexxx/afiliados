@@ -21,7 +21,7 @@ export async function GET(req: Request) {
        WHERE q.status = 'sent' AND q.sent_at >= ? AND q.sent_at < ? ORDER BY q.sent_at`,
     )
     .all(since, until) as { id: number; sent_at: string; dest: string | null; origin: string; source_name: string; data_json: string; product_id: number | null; product: string | null; dest_name: string | null }[];
-  const out = [];
+  const out: { sent_at: string; [k: string]: unknown }[] = [];
   const queue = [...rows];
   const work = async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
