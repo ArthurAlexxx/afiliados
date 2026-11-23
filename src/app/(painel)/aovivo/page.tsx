@@ -15,7 +15,7 @@ import { DropPhoto } from "../fotos/drop";
 type Item = {
   id: number; pid: number; name: string; group: string; price: number | null; old: number | null; url: string | null; at: string;
   ok: boolean; label: string | null; pct: number | null; ref: number | null; min: number | null; samples: number; groups: number; why: string;
-  post: { id: number; status: string } | null;
+  post: { id: number; status: string; eta?: number | null; etaAt?: number } | null;
 };
 type Top = { pid: number; name: string; price: number | null; ref: number | null; pct: number | null; label: string | null; group: string; url: string | null; at: string };
 type Stats = {
@@ -39,6 +39,17 @@ function adText(t: { name: string; price: number | null; ref: number | null; pct
 type Foto = { id: number; width: number; height: number; disabled: number; group_name: string; crop?: string | null };
 
 /** Fotos do perfume: escolher a que vai nos próximos posts ou mandar uma nova. */
+/** "entra no grupo em ~3 min", contando sozinho. */
+function EtaTag({ at }: { at: number }) {
+  const [, force] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => force((x) => x + 1), 10000);
+    return () => clearInterval(t);
+  }, []);
+  const sec = (at - Date.now()) / 1000;
+  return <span className="font-medium text-accent"> · entra no grupo {sec < 45 ? "agora" : `em ~${Math.max(1, Math.round(sec / 60))} min`}</span>;
+}
+
 function PhotoSheet({ pid, name, onClose }: { pid: number; name: string; onClose: () => void }) {
   const [data, setData] = React.useState<{ images: Foto[]; used: number | null; product: { main_image_id: number | null } } | null>(null);
   const [busy, setBusy] = React.useState(false);
@@ -159,10 +170,18 @@ export default function AoVivoPage() {
     tick.current++;
     const withStats = !last.current || tick.current % 10 === 0;
     try {
-      const r = await fetch(`/api/aovivo?after=${last.current}${withStats ? "&stats=1" : ""}`, { cache: "no-store" });
+      // a cada ~15s também atualiza os posts que já estão na tela (status e tempo para entrar no grupo)
+      const withPosts = !!last.current && tick.current % 5 === 0;
+      const r = await fetch(`/api/aovivo?after=${last.current}${withStats ? "&stats=1" : ""}${withPosts ? "&posts=1" : ""}`, { cache: "no-store" });
       if (r.status === 401) return void (window.location.href = "/login");
-      const j = (await r.json()) as { items: Item[]; stats: Stats | null };
+      const j = (await r.json()) as { items: Item[]; stats: Stats | null; posts?: Record<number, Item["post"]> | null };
+      const stamp = (p: Item["post"]) => (p && p.eta != null ? { ...p, etaAt: Date.now() + p.eta * 1000 } : p);
+      j.items = j.items.map((i) => ({ ...i, post: stamp(i.post) }));
       if (j.stats) setStats(j.stats);
+      if (j.posts) {
+        const ps = j.posts;
+        setItems((cur) => cur.map((i) => (i.id in ps ? { ...i, post: stamp(ps[i.id]) } : i)));
+      }
       if (j.items.length) {
         const first = !last.current;
         last.current = Math.max(last.current, ...j.items.map((i) => i.id));
@@ -297,6 +316,7 @@ export default function AoVivoPage() {
                     <div className="truncate text-[11.5px] text-muted-foreground">
                       {shortGroup(i.group)} · {i.why}
                       {i.post ? ` · post #${i.post.id} ${POST[i.post.status] || i.post.status}` : ""}
+                      {i.post?.status === "queued" && i.post.etaAt ? <EtaTag at={i.post.etaAt} /> : null}
                     </div>
                   </div>
                   <div className="flex flex-col items-end gap-1">
