@@ -142,7 +142,7 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
   const { inActiveWindow } = await import("./pipeline.ts");
   if (!inActiveWindow(s)) return `${p.name} R$ ${formatPrice(offer.price)}: boa, mas fora do horário`;
 
-  // não repete o perfume no dia, a não ser que caia mais 5%
+  // não repete o perfume em repeatHours, a não ser que o preço tenha caído
   const r = dealRules();
   const prev = db()
     .prepare(
@@ -155,8 +155,8 @@ export async function dealCheck(productId: number, messageId: string): Promise<s
     try {
       prevPrice = Number(JSON.parse(prev.data_json)?.curation?.bestPrice) || 0;
     } catch {}
-    const minutes = (Date.now() - new Date(prev.created_at.replace(" ", "T") + "Z").getTime()) / 60e3;
-    if (minutes < 30 || !prevPrice || offer.price > prevPrice * 0.95) return `${p.name}: já saiu no grupo de ofertas (#${prev.id})`;
+    // Arthur (22/nov): repete se o preço caiu (qualquer valor) ou depois de repeatHours (5h)
+    if (!prevPrice || offer.price > prevPrice - 1) return `${p.name}: já saiu no grupo de ofertas (#${prev.id}) por R$ ${formatPrice(prevPrice)}`;
   }
 
   const ml = v.ref!;

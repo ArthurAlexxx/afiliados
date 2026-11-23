@@ -63,14 +63,24 @@ export function GET(req: Request) {
     queued.forEach((q, i) => etaOf.set(q.id, Math.round(first + i * step)));
   }
   const lastPost = dg
-    ? db().prepare("SELECT id, created_at FROM posts WHERE dest = ? AND product_id = ? AND status IN ('queued','sending','sent') AND created_at < datetime(?, '-1 minutes') ORDER BY id DESC LIMIT 1")
+    ? db().prepare(
+        `SELECT id, created_at, data_json FROM posts WHERE dest = ? AND product_id = ? AND status IN ('queued','sending','sent')
+         AND created_at < datetime(?, '-1 minutes') AND created_at >= datetime(?, ?) ORDER BY id DESC LIMIT 1`,
+      )
     : null;
   const build = (r: Row) => {
     let e = evaluate(r);
     const post = postFor && e.ok ? (postFor.get(dg!.jid, r.product_id, r.created_at, r.created_at) as { id: number; status: string } | undefined) : undefined;
     if (e.ok && !post && lastPost) {
-      const prev = lastPost.get(dg!.jid, r.product_id, r.created_at) as { id: number; created_at: string } | undefined;
-      if (prev) e = { ...e, why: `${e.why} · já tinha saído no grupo (post #${prev.id})` };
+      const prev = lastPost.get(dg!.jid, r.product_id, r.created_at, r.created_at, `-${dealRules().repeatHours} hours`) as
+        | { id: number; created_at: string; data_json: string }
+        | undefined;
+      let prevPrice = 0;
+      try {
+        prevPrice = Number(JSON.parse(prev?.data_json || "{}")?.curation?.bestPrice) || 0;
+      } catch {}
+      if (prev && r.price && r.price > prevPrice - 1)
+        e = { ...e, why: `${e.why} · já saiu no grupo por R$ ${prevPrice.toFixed(2).replace(".", ",")} às ${hhmm(prev.created_at)} (post #${prev.id})` };
     }
     const p = post ? { ...post, eta: post.status === "queued" ? (etaOf.get(post.id) ?? null) : null } : null;
     return { id: r.id, pid: r.product_id, name: r.name, group: r.group_name, price: r.price, old: r.old_price, url: r.url, at: r.created_at, ...e, post: p };
@@ -118,6 +128,10 @@ export function GET(req: Request) {
     stats = { hour, byGroup, trending, top, passedHour, rules: dealRules(), dealsGroup: dg?.name || null };
   }
   return Response.json({ items, stats, posts, now: new Date().toISOString() });
+}
+
+function hhmm(sqlUtc: string) {
+  return new Date(sqlUtc.replace(" ", "T") + "Z").toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
 }
 
 function sqlAgo(min: number) {
