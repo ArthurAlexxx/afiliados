@@ -54,7 +54,7 @@ export function learnName(productId: number, title: string, meliId?: string | nu
       .run(meliId, productId, title.slice(0, 200));
 }
 
-function findOrCreateProduct(info: PerfumeInfo, title: string, meliId?: string | null): number {
+function findOrCreateProduct(info: PerfumeInfo, title: string, meliId?: string | null, byNameOnly = false): number {
   const pick = (id: number | undefined) => {
     if (!id) return 0;
     const p = db().prepare("SELECT id, ml, name, conc FROM products WHERE id = ?").get(id) as { id: number; ml: number; name: string; conc: string | null } | undefined;
@@ -63,12 +63,12 @@ function findOrCreateProduct(info: PerfumeInfo, title: string, meliId?: string |
     return p.id;
   };
   // 1) o mesmo anúncio do ML já foi visto com outro nome
-  if (meliId) {
+  if (meliId && !byNameOnly) {
     const id = pick((db().prepare("SELECT product_id FROM meli_refs WHERE meli_id = ?").get(meliId) as { product_id: number } | undefined)?.product_id);
     if (id) return id;
   }
   // 2) esse jeito de escrever o nome já é conhecido
-  {
+  if (!byNameOnly) {
     const id = pick((db().prepare("SELECT product_id FROM name_aliases WHERE alias = ?").get(aliasKey(title)) as { product_id: number } | undefined)?.product_id);
     if (id) return id;
   }
@@ -149,7 +149,11 @@ async function meliIdOf(url: string): Promise<string | null> {
         const { fetchHtml } = await import("./links.ts");
         const html = await fetchHtml(final, 8000);
         const canon = html.match(/<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)/i)?.[1] || html.match(/property=["']og:url["'][^>]+content=["']([^"']+)/i)?.[1] || "";
-        id = findMeliId(canon)?.id || findMeliId(html.slice(0, 200000))?.id || null;
+        // página /social/ do afiliado: o produto é o do 1º card; o resto do HTML são recomendações (Nautica Voyage...)
+        if (/\/social\//.test(final)) {
+          const { socialItem } = await import("./affiliate.ts");
+          id = socialItem(html)?.id || null;
+        } else id = findMeliId(canon)?.id || findMeliId(html.slice(0, 200000))?.id || null;
       }
     } catch {
       id = null;
@@ -1615,4 +1619,33 @@ export function mergeDuplicateProducts(): number {
   for (const x of infos)
     if (!gone.has(x.r.id) && !(x.r as FR).frag_url && x.b && x.b.ml === x.r.ml && JSON.stringify(x.b.tokens) !== x.r.tokens) up.run(JSON.stringify(x.b.tokens), x.r.id);
   return merged;
+}
+
+/**
+ * Arthur (23/nov): link de afiliado /social/ caía na 1ª recomendação da página (Nautica Voyage, secador...) e esse código
+ * do ML juntava perfumes diferentes num cadastro só (foto e preço de outro perfume). Esquece os códigos aprendidos
+ * e devolve cada oferta (e a foto dela) ao perfume do próprio título.
+ */
+export function repairMeliMixups(days = 14): { moved: number; refs: number } {
+  const refs = Number(db().prepare("DELETE FROM meli_refs").run().changes);
+  const rows = db()
+    .prepare(`SELECT o.id, o.message_id, o.title, o.product_id, p.name FROM offers o JOIN products p ON p.id = o.product_id WHERE o.created_at >= datetime('now', ?) AND o.title != ''`)
+    .all(`-${days} days`) as { id: number; message_id: string | null; title: string; product_id: number; name: string }[];
+  let moved = 0;
+  const upOffer = db().prepare("UPDATE offers SET product_id = ? WHERE id = ?");
+  const upImg = db().prepare("UPDATE images SET product_id = ? WHERE message_id = ? AND product_id = ?");
+  const upAlias = db().prepare("UPDATE name_aliases SET product_id = ? WHERE alias = ?");
+  for (const r of rows) {
+    if (sameListing(r.title, r.name).score > 0 || sameListing(r.name, r.title).score > 0) continue;
+    const info = perfumeInfo(r.title);
+    if (!info) continue;
+    const to = findOrCreateProduct(info, r.title, null, true);
+    if (!to || to === r.product_id) continue;
+    upOffer.run(to, r.id);
+    if (r.message_id) upImg.run(to, r.message_id, r.product_id);
+    upAlias.run(to, aliasKey(r.title));
+    moved++;
+  }
+  log("info", `Conserto dos links /social/: ${refs} código(s) do ML esquecidos, ${moved} oferta(s) devolvidas ao perfume certo`);
+  return { moved, refs };
 }

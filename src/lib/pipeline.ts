@@ -522,6 +522,11 @@ export function startWorker() {
             .catch((e) => log("warn", `Refazer post #${old.id}: ${(e as Error).message}`));
         }, 30_000);
     }
+    // Arthur (23/nov): links /social/ juntavam perfumes diferentes pelo código errado do ML
+    if (getState("meliMixFixV1") !== "1") {
+      setState("meliMixFixV1", "1");
+      import("./curation.ts").then((m) => m.repairMeliMixups()).catch((e) => log("warn", `Conserto /social/: ${(e as Error).message}`));
+    }
     // Fragrantica: tenta de novo os que não foram achados antes da correção do apóstrofo
     if (getState("fragRetryV1") !== "1") {
       setState("fragRetryV1", "1");
