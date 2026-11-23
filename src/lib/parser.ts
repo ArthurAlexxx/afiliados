@@ -300,23 +300,32 @@ export function renderTemplate(template: string, data: Partial<PromoData>): stri
  * Arthur (22/nov): o preço do post às vezes só vale com cupom de valor ("R$ 40 OFF", resgatar), um vendedor
  * específico ou a partir de um horário. Essas linhas da fonte vão junto, do jeito que vieram (sem links).
  */
-const NOTE_RE = /(cupom|resgat|selecione\s+(o|a)\s+(vendedor|loja)|vendedor\s*:|a partir d[ae]s?\s*\d|\bno pix\b|aplicad[oa] no carrinho|ative o|ativar o|desconto no carrinho|pre[çc]o (cai|vai cair) no|leve \d|compre \d)/i;
+const NOTE_RE =
+  /(cupo[mn]|resgat|selecione|vendedor|vendido por|\bloja\b|oficial|a partir d[ae]s?\s*\d|\bat[ée] (às|as|\d)|\bpix\b|boleto|carrinho|ative|ativar|aplicad[oa]|desconto|cashback|mercado pago|meli\+|\bcart[ãa]o\b|parcel|sem juros|\d+\s*x\s*(de\s*)?R\$|primeira compra|assinante|\bleve\b|compre \d|\bkit\b|unidades?|limite|estoque|esgota|pre[çc]o (cai|vai cair|pode)|\bfull\b|\bvari[aá]ve|tamanho|cor:|voltag|amostra|brinde|frete)/i;
+// nunca traz propaganda/convite de outro grupo
+const NOT_NOTE = /(grupo|whats|chat\.|instagram|@\w|canal|entre no|entra no|siga|compartilhe|indique|link na bio|^\s*(de|por)\s*:?\s*R\$|^\s*R\$)/i;
 export function sourceNotes(text: string, cupom = ""): string[] {
   const out: string[] = [];
   for (const raw of text.split(/\r?\n/)) {
     const l = raw.replace(/\bhttps?:\/\/\S+/gi, "").trim();
-    if (!l || !NOTE_RE.test(l)) continue;
+    if (!l || !NOTE_RE.test(l) || NOT_NOTE.test(l)) continue;
+    // linha de preço ("Por R$ 167 (Frete Grátis)") já está no post; só vem se tiver condição (Pix, cupom, carrinho...)
+    const bare = l.replace(/[*_~]/g, "").replace(/^[^A-Za-zÀ-ÿ0-9]+/, "");
+    if (/^(de|por|apenas|só|somente)?\s*:?\s*R\$\s*[\d.,]+/i.test(bare) && !/pix|boleto|cupo|carrinho|cart[ãa]o|a partir|at[ée]/i.test(bare)) continue;
+    // só "Frete grátis" já sai na linha do preço
+    if (/^[^a-z0-9]*frete gr[áa]tis[^a-z0-9]*$/i.test(l.replace(/[*_~]/g, ""))) continue;
     // o cupom com código já aparece na linha do cupom do modelo
     if (cupom && l.toUpperCase().includes(cupom.toUpperCase()) && !/resgat|a partir/i.test(l)) continue;
     if (l.length > 160) continue;
     if (!out.includes(l)) out.push(l);
   }
-  return out.slice(0, 3);
+  return out.slice(0, 6);
 }
 
 /** Põe as linhas de condição da fonte antes do link. */
 export function withSourceNotes(formatted: string, text: string, cupom = ""): string {
-  const notes = sourceNotes(text, cupom).filter((n) => !formatted.includes(n));
+  const hasLoja = /LOJA:|Vendido por|Loja oficial/i.test(formatted);
+  const notes = sourceNotes(text, cupom).filter((n) => !formatted.includes(n) && !(hasLoja && /\bloja\b|vendido por/i.test(n) && !/selecione/i.test(n)));
   if (!notes.length) return formatted;
   const all = formatted.split("\n");
   const at = all.findIndex((l) => /LINK DO PRODUTO|https?:\/\//i.test(l));
