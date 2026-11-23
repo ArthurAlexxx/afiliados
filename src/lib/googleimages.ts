@@ -18,6 +18,13 @@ const BLOCK = /(instagram|facebook|fbcdn|pinterest|pinimg|tiktok|youtube|ytimg|t
 // lojas e sites que costumam ter foto limpa do frasco
 const GOOD = /(amazon|sephora|mercadolivre|mlstatic|belezanaweb|epocacosmeticos|notino|fragrancenet|fragrancex|perfumesclub|douglas|boots|macys|nordstrom|ulta|myntra|noon|lattafa|armaf|afnan|rasasi|alhambra|natura|boticario|magazineluiza|magalu|americanas|carrefour|drogasil|drogaraia|paguemenos|giovannaperfumaria|lojasrenner|perfumaria|parfum|perfume)/i;
 
+// versão do perfume: se está no título da loja e não no nosso nome, é outro produto (Salvo ≠ Salvo Intense)
+const VARIANTS = new Set("intense intenso elixir extrait absolu absolute noir black gold silver platin platinum night nocturno sport rose red blue white extreme legacy oud privé prive reserve limited supreme exclusivo".split(" "));
+function extraVariant(title: string, name: string) {
+  const have = new Set(norm(name).split(/[^a-z0-9]+/));
+  return norm(title).split(/[^a-z0-9]+/).some((w) => VARIANTS.has(w) && !have.has(w));
+}
+
 /** Amazon serve a mesma foto em vários tamanhos: pede a de 1500px. */
 function upsize(u: string) {
   return u.replace(/\._[A-Z]{2}[^/]*_\.(jpg|jpeg|png|webp)$/i, "._AC_SL1500_.$1");
@@ -61,11 +68,11 @@ async function runSearch(q: string, productId?: number): Promise<Item[]> {
 
 /** Melhor foto de loja do perfume pelo nome real (como veio da fonte). Guarda a escolha por nome. */
 export async function googlePhoto(realName: string, opts: { productId?: number; listing?: string } = {}): Promise<{ buf: Buffer; url: string; label: string } | null> {
-  db().exec("CREATE TABLE IF NOT EXISTS google_photos (key TEXT PRIMARY KEY, url TEXT, label TEXT, at TEXT NOT NULL DEFAULT (datetime('now')))");
+  db().exec("CREATE TABLE IF NOT EXISTS google_photos2 (key TEXT PRIMARY KEY, url TEXT, label TEXT, at TEXT NOT NULL DEFAULT (datetime('now')))");
   const name = realName.replace(/R\$\s*[\d.,]+/gi, " ").replace(/\b(por|reais|apenas|só|so)\b/gi, " ").replace(/[^\p{L}\p{N}'&.\s-]/gu, " ").replace(/\s+/g, " ").trim();
   const key = norm(name);
   if (!key) return null;
-  const row = db().prepare("SELECT url, label, at FROM google_photos WHERE key = ?").get(key) as { url: string | null; label: string | null; at: string } | undefined;
+  const row = db().prepare("SELECT url, label, at FROM google_photos2 WHERE key = ?").get(key) as { url: string | null; label: string | null; at: string } | undefined;
   const fresh = row && Date.now() - new Date(row.at.replace(" ", "T") + "Z").getTime() < 3 * 86400e3;
   if (row?.url) {
     const buf = await download(row.url);
@@ -81,7 +88,7 @@ export async function googlePhoto(realName: string, opts: { productId?: number; 
   const cands = items
     .filter((i) => i.imageUrl && !BLOCK.test(`${i.origin || ""} ${i.contentUrl || ""} ${i.imageUrl}`))
     // título da página tem que ser do mesmo perfume (Fakhar ≠ Fakhar Black) e, se tiver, do anúncio do ML
-    .filter((i) => sameListing(i.title || "", name).ok && (!opts.listing || sameListing(i.title || "", opts.listing).score >= 0.5))
+    .filter((i) => sameListing(i.title || "", name).ok && !extraVariant(i.title || "", name) && (!opts.listing || sameListing(i.title || "", opts.listing).score >= 0.5))
     .map((i) => ({ ...i, url: /amazon|media-amazon/.test(i.imageUrl!) ? upsize(i.imageUrl!) : i.imageUrl!, good: GOOD.test(`${i.origin} ${i.contentUrl}`) }))
     .sort((a, b) => Number(b.good) - Number(a.good) || Math.min(b.imageWidth || 0, b.imageHeight || 0) - Math.min(a.imageWidth || 0, a.imageHeight || 0))
     .slice(0, 6);
@@ -98,7 +105,7 @@ export async function googlePhoto(realName: string, opts: { productId?: number; 
     if (!best || score > best.score) best = { buf, url: c.url, label: `${c.origin || ""}: ${(c.title || "").slice(0, 80)}`, score };
     if (wb > 0.85 && c.good) break;
   }
-  db().prepare("INSERT OR REPLACE INTO google_photos (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, best?.url ?? null, best?.label ?? null);
+  db().prepare("INSERT OR REPLACE INTO google_photos2 (key, url, label, at) VALUES (?, ?, ?, datetime('now'))").run(key, best?.url ?? null, best?.label ?? null);
   log("info", best ? `Google Imagens: "${name.slice(0, 60)}" → ${best.label}` : `Google Imagens: nenhuma foto boa de loja para "${name.slice(0, 60)}" (${items.length} resultado(s))`);
   return best ? { buf: best.buf, url: best.url, label: best.label } : null;
 }
