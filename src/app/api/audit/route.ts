@@ -16,18 +16,18 @@ export async function GET(req: Request) {
   const until = q.get("until") || "9999";
   const rows = db()
     .prepare(
-      `SELECT q.id, q.sent_at, q.dest, q.origin, q.source_name, q.data_json, q.product_id, p.name product, g.name dest_name
+      `SELECT q.id, q.sent_at, q.dest, q.origin, q.source_name, q.data_json, q.original_text, q.product_id, p.name product, g.name dest_name
        FROM posts q LEFT JOIN products p ON p.id = q.product_id LEFT JOIN groups g ON g.jid = q.dest
        WHERE q.status = 'sent' AND q.sent_at >= ? AND q.sent_at < ? ORDER BY q.sent_at`,
     )
-    .all(since, until) as { id: number; sent_at: string; dest: string | null; origin: string; source_name: string; data_json: string; product_id: number | null; product: string | null; dest_name: string | null }[];
+    .all(since, until) as { id: number; sent_at: string; dest: string | null; origin: string; source_name: string; data_json: string; original_text: string; product_id: number | null; product: string | null; dest_name: string | null }[];
   if (q.get("retry")) for (const [k, v] of titles) if (!v) titles.delete(k);
   const errs = new Map<string, string>();
   const out: { sent_at: string; [k: string]: unknown }[] = [];
   const queue = [...rows];
   const work = async () => {
     for (let r = queue.shift(); r; r = queue.shift()) {
-      let j: { data?: Record<string, string>; conversions?: { ok: boolean; title?: string | null; canonical?: string }[]; curation?: { image?: string } } = {};
+      let j: { data?: Record<string, string>; conversions?: { ok: boolean; title?: string | null; canonical?: string; original?: string; resolved?: string }[]; curation?: { image?: string } } = {};
       try { j = JSON.parse(r.data_json || "{}"); } catch { /* */ }
       const conv = (j.conversions || []).find((c) => c.ok) || (j.conversions || [])[0];
       let listing = conv?.title || null;
@@ -51,7 +51,7 @@ export async function GET(req: Request) {
       const vsPhoto = listing && r.product ? sameListing(listing, r.product) : null;
       out.push({
         id: r.id, sent_at: r.sent_at, group: r.dest_name || r.source_name, origin: r.origin, titulo, product: r.product, image: j.curation?.image || null,
-        link: conv?.canonical || null, listing, titleOk: vsTitle?.ok ?? null, titleScore: vsTitle?.score ?? null, photoOk: vsPhoto?.ok ?? null, photoScore: vsPhoto?.score ?? null, err: conv?.canonical ? errs.get(conv.canonical) : undefined,
+        link: conv?.canonical || null, listing, titleOk: vsTitle?.ok ?? null, titleScore: vsTitle?.score ?? null, photoOk: vsPhoto?.ok ?? null, photoScore: vsPhoto?.score ?? null, err: conv?.canonical ? errs.get(conv.canonical) : undefined, original: conv?.original, resolved: conv?.resolved, sourceLinks: (r.original_text || "").match(/https?:\/\/\S+/g) || [],
       });
     }
   };
