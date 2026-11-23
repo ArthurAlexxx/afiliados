@@ -29,7 +29,25 @@ export type DadosLanding = {
   ofertas24h: number | null; // promoções vistas nas últimas 24 h
   postsHoje: number | null;
   ofertas: Oferta[];
+  /** o post do celular do topo: o Club de Nuit, o mesmo perfume do anúncio */
+  destaque: Oferta | null;
 };
+
+/** Perfume do anúncio: é ele que aparece no celular do topo, quando já saiu no grupo. */
+const PERFUME_DO_ANUNCIO = /club\s*de\s*nuit/i;
+
+/** Tira a linha do cupom do texto (o Arthur pediu a vitrine sem cupom por enquanto, 23/11). */
+function semCupom(texto: string) {
+  return texto
+    .split("\n")
+    .filter((l) => !/cupom/i.test(l))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+const hojeSP = () => new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10);
+const diaSP = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10);
 
 /** "1.200,00" | "1200" | 1200 → 1200 */
 function num(v: unknown): number | null {
@@ -54,7 +72,7 @@ function contar(sql: string): number | null {
  * RadarHub (mesmo bônus que a curadoria usa), depois o maior desconto, depois o
  * mais recente. Banco sem post enviado = vitrine vazia, e a página esconde a seção.
  */
-export async function dadosLanding(limite = 6): Promise<DadosLanding> {
+export async function dadosLanding(limite = 10): Promise<DadosLanding> {
   const grupos = contar("SELECT COUNT(*) n FROM groups WHERE role = 'source'");
   const ofertas24h = contar("SELECT COUNT(*) n FROM offers WHERE created_at >= datetime('now', '-1 day')");
   const postsHoje = contar(
@@ -93,23 +111,34 @@ export async function dadosLanding(limite = 6): Promise<DadosLanding> {
       } catch {}
       candidatas.push({
         id: r.id, nome, por, de, pct: pct && pct >= 5 ? Math.round(pct) : null,
-        quando: r.sent_at.replace(" ", "T") + "Z", texto: r.formatted_text.trim(),
+        quando: r.sent_at.replace(" ", "T") + "Z", texto: semCupom(r.formatted_text),
         vendas: vendas?.note ?? null, boost: vendas?.boost ?? 0, largura: null, altura: null, path: r.media_path,
       });
     }
   } catch {}
 
-  candidatas.sort((a, b) => b.boost - a.boost || (b.pct ?? 0) - (a.pct ?? 0) || b.quando.localeCompare(a.quando));
-  const ofertas: Oferta[] = [];
-  for (const { boost: _b, path, ...o } of candidatas.slice(0, limite)) {
+  // "As melhores promoções do dia": só o que saiu hoje; se hoje ainda tem pouco
+  // (madrugada), completa com as 48 h anteriores.
+  const hoje = hojeSP();
+  const doDia = candidatas.filter((c) => diaSP(c.quando) === hoje);
+  const ate48h = candidatas.filter((c) => Date.now() - new Date(c.quando).getTime() <= 48 * 3600_000);
+  const base = doDia.length >= 4 ? doDia : ate48h.length >= 4 ? ate48h : candidatas;
+  const melhores = [...base]
+    .sort((a, b) => b.boost - a.boost || (b.pct ?? 0) - (a.pct ?? 0) || b.quando.localeCompare(a.quando))
+    .slice(0, limite);
+
+  const comMedidas = async ({ boost: _b, path, ...o }: Oferta & { boost: number; path: string }): Promise<Oferta> => {
     try {
       const m = await sharp(path).metadata();
       o.largura = m.width ?? null;
       o.altura = m.height ?? null;
     } catch {}
-    ofertas.push(o);
-  }
-  return { grupos, ofertas24h, postsHoje, ofertas };
+    return o;
+  };
+  const ofertas = await Promise.all(melhores.map(comMedidas));
+  const anuncio = candidatas.find((c) => PERFUME_DO_ANUNCIO.test(c.nome)); // candidatas vem do mais recente
+  const destaque = anuncio ? await comMedidas(anuncio) : ofertas[0] ?? null;
+  return { grupos, ofertas24h, postsHoje, ofertas, destaque };
 }
 
 /** Mídia de um post para a página pública: só de post que JÁ SAIU no grupo. */
